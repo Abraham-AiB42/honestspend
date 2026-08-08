@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="LedgerRing_WinUI.Pages.CreditPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="960">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Credit &amp; debts" />
+                    <TextBlock Opacity="0.7" Text="Fiscal #1 · opportunity cost · educational score (not bureau official)" />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
+            </Grid>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="6">
+                    <TextBlock Opacity="0.7" Text="Educational credit health" />
+                    <TextBlock x:Name="ScoreText" FontSize="40" FontWeight="SemiBold" Text="—" />
+                    <TextBlock x:Name="BandText" Opacity="0.8" TextWrapping="Wrap" />
+                    <TextBlock x:Name="UtilText" Opacity="0.7" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DisclaimerText" Opacity="0.6" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock x:Name="BureauNote" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Your credit history (self-entered)" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="Bureaus/CK have no consumer API. Enter what you know — model re-scores instantly. Not tax advice; not a FICO." />
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <NumberBox x:Name="OnTimeBox" Header="On-time rate (0–1)" Minimum="0" Maximum="1"
+                                   SmallChange="0.01" Value="1" Grid.Row="0" Grid.Column="0" />
+                        <NumberBox x:Name="ReportedBox" Header="Your reported Vantage (optional)" Minimum="300" Maximum="850"
+                                   PlaceholderText="from CK/app" Grid.Row="0" Grid.Column="1" />
+                        <NumberBox x:Name="Late30Box" Header="Late 30 days (12 mo)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="0" />
+                        <NumberBox x:Name="Late60Box" Header="Late 60 days (12 mo)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="1" />
+                        <NumberBox x:Name="Late90Box" Header="Late 90+ days (12 mo)" Minimum="0" Value="0"
+                                   Grid.Row="2" Grid.Column="0" />
+                        <NumberBox x:Name="HardBox" Header="Hard inquiries (12 mo)" Minimum="0" Value="0"
+                                   Grid.Row="2" Grid.Column="1" />
+                        <NumberBox x:Name="NewAcctBox" Header="New accounts (12 mo)" Minimum="0" Value="0"
+                                   Grid.Row="3" Grid.Column="0" />
+                    </Grid>
+                    <Button Content="Save history &amp; re-score" Click="SaveHistory_Click" Style="{StaticResource AccentButtonStyle}" />
+                    <TextBlock x:Name="HistoryMsg" Opacity="0.8" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Score factors" />
+                    <ItemsControl x:Name="FactorList" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Suggestions" Margin="0,8,0,0" />
+                    <ItemsControl x:Name="SuggestionList" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="What-if" Margin="0,8,0,0" />
+                    <ItemsControl x:Name="WhatIfList" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Payoff plan" />
+                    <ComboBox x:Name="StrategyBox" Header="Strategy" SelectedIndex="0" MinWidth="320">
+                        <ComboBoxItem Content="Avalanche (highest APR)" Tag="avalanche" />
+                        <ComboBoxItem Content="Snowball (smallest balance)" Tag="snowball" />
+                        <ComboBoxItem Content="Promo guard" Tag="promo_guard" />
+                        <ComboBoxItem Content="Utilization first" Tag="utilization" />
+                        <ComboBoxItem Content="Custom rank" Tag="custom" />
+                    </ComboBox>
+                    <NumberBox x:Name="ExtraBox" Header="Extra $/month after mins" Value="0" Minimum="0" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Run plan" Click="RunPlan_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Compare strategies" Click="Compare_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="PlanSummary" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="OppBanner" Opacity="0.75" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="DebtOrder" />
+                    <ItemsControl x:Name="InvestVs" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Strategy compare" Margin="0,8,0,0" />
+                    <ItemsControl x:Name="CompareList" />
+                </StackPanel>
+            </Border>
+
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

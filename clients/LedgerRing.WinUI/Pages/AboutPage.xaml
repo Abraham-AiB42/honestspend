@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="LedgerRing_WinUI.Pages.AboutPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="12" MaxWidth="640">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="LedgerRing" />
+            <TextBlock x:Name="VersionText" Opacity="0.8" Text="Connecting…" />
+            <TextBlock TextWrapping="Wrap" FontSize="16">
+                Open-source freeware multi-entity budgeting / liquidity OS.
+            </TextBlock>
+            <TextBlock Opacity="0.8" TextWrapping="Wrap">
+                • Never go negative on checking&#x0a;
+                • Intentional 0% float when interest-free path exists&#x0a;
+                • No dumb fees / unnecessary interest&#x0a;
+                • Opportunity cost (don't prepay cheap debt vs yield)&#x0a;
+                • Fiscal soundness #1 · credit health #2&#x0a;
+                • Local data + backup · minimum user time
+            </TextBlock>
+            <TextBlock Opacity="0.7" TextWrapping="Wrap">
+                Native WinUI 3 client. Fiscal engine is the local Python API on port 7420 — not Electron/Tauri/WebView.
+            </TextBlock>
+            <TextBlock x:Name="PathsText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <TextBlock x:Name="LicenseText" Opacity="0.7" Text="MIT License · freeware" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="LedgerRing_WinUI.Pages.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="900">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Spendable Now" />
+                    <TextBlock x:Name="StatusText" Opacity="0.7" Text="Connecting to local engine…" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <ComboBox x:Name="ViewModeBox" MinWidth="110" SelectionChanged="ViewMode_Changed">
+                        <ComboBoxItem Content="Daily (2 min)" Tag="daily" IsSelected="True" />
+                        <ComboBoxItem Content="Full cockpit" Tag="full" />
+                    </ComboBox>
+                    <ComboBox x:Name="EntityBox" MinWidth="150" PlaceholderText="Entity"
+                              SelectionChanged="Scope_Changed" />
+                    <ComboBox x:Name="ScopeBox" MinWidth="120" SelectionChanged="Scope_Changed">
+                        <ComboBoxItem Content="Entity (silo)" Tag="entity" IsSelected="True" />
+                        <ComboBoxItem Content="Combined" Tag="group" />
+                    </ComboBox>
+                    <ComboBox x:Name="ModeBox" SelectedIndex="0" MinWidth="120">
+                        <ComboBoxItem Content="conservative" Tag="conservative" />
+                        <ComboBoxItem Content="expected" Tag="expected" />
+                    </ComboBox>
+                    <Button Content="Refresh" Click="Refresh_Click" />
+                </StackPanel>
+            </Grid>
+            <TextBlock x:Name="ScopeNote" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+
+            <!-- Always: Spendable card -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="20">
+                <StackPanel Spacing="8">
+                    <TextBlock Opacity="0.7" Text="Purchasing power (cash + interest-free float)" />
+                    <TextBlock x:Name="CombinedText" FontSize="42" FontWeight="SemiBold" Text="—" />
+                    <Grid ColumnSpacing="24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Opacity="0.7" Text="Cash spendable" />
+                            <TextBlock x:Name="CashText" FontSize="22" FontWeight="SemiBold" Text="—" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Opacity="0.7" Text="0% card float" />
+                            <TextBlock x:Name="FloatText" FontSize="22" FontWeight="SemiBold" Text="—" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Opacity="0.7" Text="Next red day" />
+                            <TextBlock x:Name="RedText" FontSize="22" FontWeight="SemiBold" Text="None" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock x:Name="MetaText" Opacity="0.6" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- Daily: top actions only -->
+            <Border x:Name="DailyPanel"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Today — top actions" />
+                    <TextBlock x:Name="DailyHeadline" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DailyReason" Opacity="0.8" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="DailyAlerts" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Mark done for now" Click="Done_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Show full cockpit" Click="Expand_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="DoneText" Opacity="0.75" />
+                </StackPanel>
+            </Border>
+
+            <!-- Full cockpit panels -->
+            <StackPanel x:Name="FullPanel" Spacing="16" Visibility="Collapsed">
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="20">
+                    <StackPanel Spacing="8">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Next $1 — capital desk" />
+                        <TextBlock x:Name="CdAction" Opacity="0.7" />
+                        <TextBlock x:Name="CdTitle" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="CdAmount" FontSize="16" TextWrapping="Wrap" />
+                        <TextBlock x:Name="CdReason" Opacity="0.75" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="CdAlts" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="20">
+                    <StackPanel Spacing="8">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Daily digest" />
+                        <TextBlock x:Name="DigestMsg" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="DigestAlerts" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="20">
+                    <StackPanel Spacing="8">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="0% promo death clock" />
+                        <ItemsControl x:Name="PromoList" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <NumberBox x:Name="PromoAcctBox" Header="Account id for sink bill" Minimum="1"
+                                       PlaceholderText="from list above" Width="180" />
+                            <Button Content="Create sink bill" Click="Sink_Click" VerticalAlignment="Bottom"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                        </StackPanel>
+                        <TextBlock x:Name="SinkMsg" Opacity="0.8" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="20">
+                    <StackPanel Spacing="8">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Fee scan (45 days)" />
+                        <TextBlock x:Name="FeeSummary" Opacity="0.85" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="FeeList" />
+                        <Button Content="Refresh fees" Click="Fees_Click" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

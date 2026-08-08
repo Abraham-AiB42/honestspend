@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="LedgerRing_WinUI.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="640">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Settings" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Connection" />
+            <TextBox
+                x:Name="BaseUrlBox"
+                Header="API base URL"
+                Text="http://127.0.0.1:7420" />
+            <PasswordBox x:Name="ApiKeyBox" Header="Optional X-API-Key" />
+            <TextBox
+                x:Name="BackendRootBox"
+                Header="Backend root (folder with pyproject.toml + .venv)"
+                PlaceholderText="Auto-detect from repo or .\engine" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Data location" />
+            <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                Text="SQLite + backups. Use OneDrive for cloud-backed local files (not a multi-device concurrent DB)." />
+            <TextBox x:Name="DataDirBox" Header="FOS_DATA_DIR (empty = engine default ~/.financial-os)"
+                     PlaceholderText="C:\Users\…\OneDrive\LedgerRing\data" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Suggest OneDrive" Click="SuggestOneDrive_Click" />
+                <Button Content="Use default home" Click="DefaultDataDir_Click" />
+                <Button Content="Copy DB to path…" Click="CopyDataDir_Click" />
+            </StackPanel>
+            <TextBlock x:Name="PathsHintText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <TextBlock x:Name="EngineLogText" Opacity="0.6" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Startup" />
+            <CheckBox x:Name="TrayAutoBox" Content="Start system tray with app" />
+            <CheckBox x:Name="MinimizedBox" Content="Start minimized" />
+            <CheckBox x:Name="LoginBox" Content="Launch at Windows logon (tray-only: engine + tray, no big window)" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Save connection" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="Start / ping engine" Click="StartEngine_Click" />
+                <Button Content="Start tray now" Click="StartTray_Click" />
+                <Button Content="Stop tray" Click="StopTray_Click" />
+                <Button Content="Show window" Click="ShowWindow_Click" />
+            </StackPanel>
+            <TextBlock x:Name="StartupStatusText" Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                Text="CLI: LedgerRing.WinUI.exe --tray-only · --minimized · --tray" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Fiscal engine" />
+            <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                Text="Safety buffer, opportunity cost, debt strategy. Fiscal soundness first." />
+            <ComboBox x:Name="ModeBox" Header="Default IFPP mode" SelectedIndex="0">
+                <ComboBoxItem Content="conservative" Tag="conservative" />
+                <ComboBoxItem Content="expected" Tag="expected" />
+            </ComboBox>
+            <NumberBox x:Name="BufferBox" Header="Safety buffer ($)" Minimum="0" Value="1000" />
+            <ComboBox x:Name="ScopeBox" Header="Never-negative scope" SelectedIndex="0">
+                <ComboBoxItem Content="checking" Tag="checking" />
+                <ComboBoxItem Content="all_cash" Tag="all_cash" />
+            </ComboBox>
+            <NumberBox x:Name="HorizonBox" Header="Horizon days" Minimum="7" Maximum="365" Value="45" />
+            <NumberBox x:Name="OppRateBox" Header="Opportunity rate (e.g. 0.06 for X Money)" Minimum="0" Maximum="1"
+                       PlaceholderText="cash yield vs cheap debt" />
+            <CheckBox x:Name="OppAwareBox" Content="Opportunity-cost aware debt plan" IsChecked="True" />
+            <ComboBox x:Name="DebtBox" Header="Default debt strategy" SelectedIndex="0">
+                <ComboBoxItem Content="avalanche" Tag="avalanche" />
+                <ComboBoxItem Content="snowball" Tag="snowball" />
+                <ComboBoxItem Content="opportunity" Tag="opportunity" />
+            </ComboBox>
+            <NumberBox x:Name="ExtraBox" Header="Default extra monthly toward debt ($)" Minimum="0" Value="0" />
+            <CheckBox x:Name="AutoCatBox" Content="Auto-categorize on import" IsChecked="True" />
+            <CheckBox x:Name="ClearedOnlyBox" Content="IFPP prefers cleared balances (pending flagged in digest)" IsChecked="True" />
+            <ComboBox x:Name="IfppScopeDefaultBox" Header="Default Spendable scope" SelectedIndex="0">
+                <ComboBoxItem Content="entity (silo)" Tag="entity" />
+                <ComboBoxItem Content="group (combined)" Tag="group" />
+            </ComboBox>
+            <Button Content="Save fiscal settings" Click="SaveFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
+
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+
+            <TextBlock
+                Opacity="0.7"
+                TextWrapping="Wrap"
+                Text="WinUI is the native Windows UI. The fiscal engine stays Python. No Electron/Tauri wrapper." />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

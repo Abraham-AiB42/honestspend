@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="LedgerRing_WinUI.Pages.IntermixPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="640">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Entity intermix" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Reimburse, distributions, capital injects — paired transfers so personal/business books stay clean. Not tax advice." />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Playbooks" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Reimburse card from biz" Click="Play_Reimburse" />
+                <Button Content="Quarterly distribution" Click="Play_Dist" />
+                <Button Content="Capital inject" Click="Play_Inject" />
+            </StackPanel>
+            <TextBlock x:Name="PlaybookHint" Opacity="0.7" TextWrapping="Wrap" FontSize="12" />
+
+            <ComboBox x:Name="KindBox" Header="Type" SelectedIndex="0" MinWidth="320">
+                <ComboBoxItem Content="Reimburse (biz → personal)" Tag="reimburse" />
+                <ComboBoxItem Content="Distribution (biz → personal)" Tag="distribution" />
+                <ComboBoxItem Content="Capital inject (personal → biz)" Tag="capital_inject" />
+                <ComboBoxItem Content="Owner draw (biz → personal)" Tag="owner_draw" />
+            </ComboBox>
+
+            <NumberBox x:Name="AmtBox" Header="Amount ($)" Minimum="0.01" Value="100" />
+            <ComboBox x:Name="FromBox" Header="From account" HorizontalAlignment="Stretch" />
+            <ComboBox x:Name="ToBox" Header="To account" HorizontalAlignment="Stretch" />
+            <TextBox x:Name="MemoBox" Header="Memo" PlaceholderText="Optional" />
+
+            <Button Content="Record intermix" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
+            <TextBlock x:Name="ResultText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

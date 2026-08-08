@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LedgerRing — Spendable Now</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="banner" style="background:#2a3a4a;color:#e8f0f5;padding:0.6rem 1rem;font-size:0.9rem;">
+    <strong>Primary client is LedgerRing WinUI</strong> (native Windows).
+    This web UI is a limited fallback; Plaid Link lives at
+    <a href="/static/plaid-link.html" style="color:#7fd4c4">/static/plaid-link.html</a>.
+  </div>
+  <!-- Standalone product onboarding (no spreadsheet) -->
+  <div id="onboard" class="onboard hidden" aria-modal="true">
+    <div class="onboard-card">
+      <div class="brand onboard-brand">
+        <span class="ring">◎</span>
+        <div>
+          <h1>LedgerRing</h1>
+          <p class="tag">Your money OS — cash, credit float, books, tax maps</p>
+        </div>
+      </div>
+      <p class="onboard-lead">
+        One app for Personal, AP Agency, and AiB42. Answer:
+        <strong>what can I spend or charge right now without going negative or paying interest?</strong>
+      </p>
+      <ol class="onboard-steps">
+        <li>Add your primary cash account</li>
+        <li>Optionally add a credit card (due day + any 0% promo)</li>
+        <li>Connect banks or import CSV later — everything lives here</li>
+      </ol>
+      <form id="onboard-form" class="form">
+        <label>Cash account name
+          <input id="ob-cash-name" value="Primary checking" required />
+        </label>
+        <label>Balance today ($)
+          <input id="ob-cash-bal" type="number" step="0.01" value="0" required />
+        </label>
+        <label>Bank / institution
+          <input id="ob-cash-inst" placeholder="Chase, local CU…" />
+        </label>
+        <label>Safety buffer ($ — default 1000)
+          <input id="ob-buffer" type="number" step="0.01" value="1000" />
+        </label>
+        <label class="check wide">
+          <input id="ob-add-card" type="checkbox" /> Also add a credit card now
+        </label>
+        <div id="ob-card-fields" class="form wide hidden">
+          <label>Card name <input id="ob-card-name" placeholder="Amex / Discover" /></label>
+          <label>Balance owed <input id="ob-card-bal" type="number" step="0.01" value="0" /></label>
+          <label>Credit limit <input id="ob-card-limit" type="number" step="0.01" /></label>
+          <label>Payment due day <input id="ob-card-due" type="number" min="1" max="31" placeholder="28" /></label>
+          <label>Statement close day <input id="ob-card-close" type="number" min="1" max="31" /></label>
+          <label class="check"><input id="ob-card-promo" type="checkbox" /> 0% promo active</label>
+          <label>Promo end <input id="ob-card-promo-end" type="date" /></label>
+        </div>
+        <div class="form-actions wide">
+          <button type="submit" class="primary">Start LedgerRing</button>
+          <button type="button" id="ob-skip" class="ghost">Skip — I'll set up manually</button>
+        </div>
+      </form>
+      <p id="ob-msg" class="fine"></p>
+    </div>
+  </div>
+
+  <header class="top">
+    <div class="brand">
+      <span class="ring">◎</span>
+      <div>
+        <h1 id="product-title">LedgerRing</h1>
+        <p class="tag">Never neg checking · 0% float OK · No dumb fees/interest</p>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button type="button" data-tab="dash" class="active">Spendable</button>
+      <button type="button" data-tab="accounts">Accounts</button>
+      <button type="button" data-tab="schedule">Bills</button>
+      <button type="button" data-tab="review">Review</button>
+      <button type="button" data-tab="ledger">Ledger</button>
+      <button type="button" data-tab="credit">Credit &amp; Debts</button>
+      <button type="button" data-tab="connect">Connect</button>
+      <button type="button" data-tab="tax">Tax</button>
+      <button type="button" data-tab="settings">Settings</button>
+    </nav>
+    <div class="controls">
+      <label>
+        Mode
+        <select id="mode">
+          <option value="conservative">Conservative</option>
+          <option value="expected">Expected</option>
+        </select>
+      </label>
+      <button id="refresh" type="button">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- DASH -->
+    <section id="tab-dash" class="tab-panel active">
+      <div class="hero card">
+        <p class="label">Combined purchasing power — cash safe + intentional 0% float</p>
+        <p class="mega" id="combined">—</p>
+        <div class="split">
+          <div>
+            <p class="label">Cash spendable</p>
+            <p class="num" id="cash">—</p>
+          </div>
+          <div>
+            <p class="label">Card float (interest-free)</p>
+            <p class="num" id="float">—</p>
+          </div>
+          <div>
+            <p class="label">Next red day</p>
+            <p class="num" id="red">None</p>
+          </div>
+        </div>
+        <p class="meta" id="meta"></p>
+      </div>
+
+      <div class="card" id="digest-bar">
+        <div class="row-between">
+          <h2 style="margin:0">Daily digest</h2>
+          <span class="fine" id="digest-msg">—</span>
+        </div>
+        <ul id="digest-alerts" class="list warn"></ul>
+      </div>
+
+      <div class="card capital-desk" id="capital-desk">
+        <h2>Next $1 — capital desk</h2>
+        <p class="fine">Fiscal soundness first · options + reasoning · open-source freeware for SMB owners</p>
+        <div class="headline-box">
+          <p class="label" id="cd-action">—</p>
+          <p class="cd-title" id="cd-title">Loading…</p>
+          <p class="num" id="cd-amount" style="font-size:1.1rem">—</p>
+          <p class="fine" id="cd-reason"></p>
+          <ul id="cd-alts" class="list fine"></ul>
+        </div>
+        <ol id="cd-steps" class="cd-steps"></ol>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Can I buy this?</h2>
+          <form id="buy-form" class="form">
+            <label>Amount ($)
+              <input id="buy-amt" type="number" step="0.01" min="0.01" required placeholder="2400" />
+            </label>
+            <label>Prefer
+              <select id="buy-prefer">
+                <option value="auto">Auto (0% float if safe, else cash)</option>
+                <option value="cash">Cash first</option>
+                <option value="card">Card first</option>
+              </select>
+            </label>
+            <button type="submit" class="primary">Check</button>
+          </form>
+          <pre id="buy-result" class="mono"></pre>
+        </div>
+        <div class="card">
+          <h2>0% promo death clock</h2>
+          <div id="promo-clock"></div>
+        </div>
+        <div class="card">
+          <h2>Entities</h2>
+          <ul id="profiles" class="list"></ul>
+          <p class="fine">Personal · AP Agency · AiB42 — linked books in one product.</p>
+        </div>
+        <div class="card">
+          <h2>Cards — safe to charge &amp; payoff plan</h2>
+          <div id="cards"></div>
+        </div>
+        <div class="card">
+          <h2>Cash accounts</h2>
+          <ul id="accounts-dash" class="list"></ul>
+        </div>
+        <div class="card">
+          <h2>Warnings</h2>
+          <ul id="warnings" class="list warn"></ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Entity intermix</h2>
+        <p class="fine">Reimburse · distribution · capital inject — correct books when personal/business money crosses.</p>
+        <form id="intermix-form" class="form">
+          <label>Type
+            <select id="im-kind">
+              <option value="reimburse">Reimburse (biz → personal)</option>
+              <option value="distribution">Distribution (biz → personal)</option>
+              <option value="capital_inject">Capital inject (personal → biz)</option>
+              <option value="owner_draw">Owner draw (biz → personal)</option>
+            </select>
+          </label>
+          <label>Amount <input id="im-amt" type="number" step="0.01" min="0.01" required /></label>
+          <label>From account <select id="im-from" required></select></label>
+          <label>To account <select id="im-to" required></select></label>
+          <label class="wide">Memo <input id="im-memo" placeholder="Optional" /></label>
+          <button type="submit">Record intermix</button>
+        </form>
+        <pre id="im-result" class="mono"></pre>
+      </div>
+    </section>
+
+    <!-- ACCOUNTS (full in-app management) -->
+    <section id="tab-accounts" class="tab-panel">
+      <div class="card">
+        <div class="row-between">
+          <h2>Accounts &amp; cards</h2>
+          <button type="button" id="acct-new-btn" class="primary">+ Add account</button>
+        </div>
+        <p class="fine">All balances, due dates, and 0% promos are managed here. No external spreadsheet.</p>
+        <div class="table-wrap">
+          <table id="acct-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Entity</th>
+                <th>Type</th>
+                <th>Balance</th>
+                <th>IFPP</th>
+                <th>Due / promo</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="acct-form-card">
+        <h2 id="acct-form-title">Add account</h2>
+        <form id="acct-form" class="form">
+          <input type="hidden" id="acct-edit-id" value="" />
+          <label>Entity <select id="acct-profile" required></select></label>
+          <label>Kind
+            <select id="acct-kind">
+              <option value="checking">Checking</option>
+              <option value="savings">Savings</option>
+              <option value="credit">Credit card</option>
+              <option value="cash">Cash</option>
+              <option value="loan">Loan</option>
+            </select>
+          </label>
+          <label>Nickname <input id="acct-name" required placeholder="Primary checking" /></label>
+          <label>Institution <input id="acct-inst" placeholder="Chase, Amex…" /></label>
+          <label>Balance <input id="acct-bal" type="number" step="0.01" value="0" /></label>
+          <label class="check"><input id="acct-ifpp" type="checkbox" checked /> Count as Spendable cash</label>
+          <label>Credit limit <input id="acct-limit" type="number" step="0.01" /></label>
+          <label>Due day (1–31) <input id="acct-due" type="number" min="1" max="31" /></label>
+          <label>Statement close day <input id="acct-close" type="number" min="1" max="31" /></label>
+          <label>APR (e.g. 0.2299) <input id="acct-apr" type="number" step="0.0001" /></label>
+          <label>Promo APR <input id="acct-promo-apr" type="number" step="0.0001" placeholder="0 for 0%" /></label>
+          <label>Promo end <input id="acct-promo-end" type="date" /></label>
+          <label>Promo balance <input id="acct-promo-bal" type="number" step="0.01" /></label>
+          <label>Min payment <input id="acct-min" type="number" step="0.01" /></label>
+          <label>Opened date <input id="acct-opened" type="date" /></label>
+          <label>Custom pay rank (1=first)
+            <input id="acct-priority" type="number" value="100" min="1" />
+          </label>
+          <label>APY / yield (cash) e.g. 0.06 = 6%
+            <input id="acct-apy" type="number" step="0.0001" placeholder="0.06 for X Money" />
+          </label>
+          <div class="form-actions wide">
+            <button type="submit" id="acct-submit">Save account</button>
+            <button type="button" id="acct-cancel" class="ghost">Cancel</button>
+          </div>
+        </form>
+        <p id="acct-msg" class="fine"></p>
+      </div>
+    </section>
+
+    <!-- SCHEDULE -->
+    <section id="tab-schedule" class="tab-panel">
+      <div class="card">
+        <div class="row-between">
+          <h2>Recurring expenses &amp; income</h2>
+          <div class="row-actions">
+            <label class="check inline"><input id="sched-show-ended" type="checkbox" /> Show ended</label>
+            <button type="button" id="sched-new-btn" class="primary">+ Add recurring</button>
+          </div>
+        </div>
+        <p class="fine">Each expense must be tied to a <strong>card or account</strong> so Spendable knows where money hits. End a series when the bill stops.</p>
+        <div class="filter-row">
+          <label>Profile <select id="sched-filter-profile"><option value="">All</option></select></label>
+          <label>Type
+            <select id="sched-filter-kind">
+              <option value="">All</option>
+              <option value="expense">Expenses</option>
+              <option value="income">Income</option>
+            </select>
+          </label>
+        </div>
+        <div class="table-wrap">
+          <table id="sched-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Account / Card</th>
+                <th>Category</th>
+                <th>Next</th>
+                <th>Cadence</th>
+                <th>Ends</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="sched-form-card">
+        <h2 id="sched-form-title">Add recurring</h2>
+        <form id="sched-form" class="form">
+          <input type="hidden" id="sched-edit-id" value="" />
+          <label>Type
+            <select id="sched-kind">
+              <option value="expense">Expense / bill</option>
+              <option value="income">Income</option>
+            </select>
+          </label>
+          <label>Profile <select id="sched-profile" required></select></label>
+          <label>Name <input id="sched-name" required placeholder="Netflix, Housing, Paycheck…" /></label>
+          <label>Amount ($)
+            <input id="sched-amt" type="number" step="0.01" min="0" required placeholder="14.99" />
+          </label>
+          <label id="sched-account-label">Account / Card (required for expenses)
+            <select id="sched-account" required></select>
+          </label>
+          <label>Category
+            <select id="sched-category"><option value="">— optional —</option></select>
+          </label>
+          <label>Next date <input id="sched-date" type="date" required /></label>
+          <label>End date (optional)
+            <input id="sched-end-date" type="date" />
+          </label>
+          <label>Cadence
+            <select id="sched-cadence">
+              <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
+              <option value="semimonthly">Semimonthly (1st/15th)</option>
+              <option value="monthly" selected>Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+          </label>
+          <label>Certainty
+            <select id="sched-certainty">
+              <option value="fixed">Fixed (always count)</option>
+              <option value="expected">Expected</option>
+              <option value="historical_avg">Historical avg</option>
+            </select>
+          </label>
+          <label class="wide">Notes <input id="sched-notes" placeholder="Optional memo" /></label>
+          <div class="form-actions wide">
+            <button type="submit" id="sched-submit">Save recurring</button>
+            <button type="button" id="sched-cancel" class="ghost">Cancel edit</button>
+          </div>
+        </form>
+        <p id="sched-msg" class="fine"></p>
+      </div>
+    </section>
+
+    <!-- REVIEW -->
+    <section id="tab-review" class="tab-panel">
+      <div class="card">
+        <div class="row-between">
+          <h2>Uncategorized review queue</h2>
+          <span class="fine" id="cat-status">Rules offline · Grok optional</span>
+        </div>
+        <p class="fine">Rules match first. Grok fills gaps if <code>FOS_XAI_API_KEY</code> is set. Accepting teaches a merchant rule.</p>
+        <div class="form filter-row">
+          <label>Profile <select id="review-profile"><option value="">All</option></select></label>
+          <label class="check inline"><input id="review-use-grok" type="checkbox" checked /> Use Grok if available</label>
+          <button type="button" id="review-suggest">Suggest all</button>
+          <button type="button" id="review-apply-high" class="primary">Auto-apply high confidence (≥85%)</button>
+        </div>
+        <div id="review-list"></div>
+        <p id="review-msg" class="fine"></p>
+      </div>
+      <div class="card">
+        <h2>Category rules</h2>
+        <div class="table-wrap">
+          <table id="rules-table">
+            <thead>
+              <tr><th>Pattern</th><th>Match</th><th>Category</th><th>Priority</th><th>Source</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h2 style="margin-top:1rem">Add rule</h2>
+        <form id="rule-form" class="form">
+          <label>Pattern <input id="rule-pattern" required placeholder="SHELL" /></label>
+          <label>Match
+            <select id="rule-match">
+              <option value="contains">Contains</option>
+              <option value="starts_with">Starts with</option>
+              <option value="exact">Exact</option>
+            </select>
+          </label>
+          <label>Category <select id="rule-category" required></select></label>
+          <label>Priority <input id="rule-priority" type="number" value="100" /></label>
+          <button type="submit">Add rule</button>
+        </form>
+        <p id="rule-msg" class="fine"></p>
+      </div>
+    </section>
+
+    <!-- LEDGER -->
+    <section id="tab-ledger" class="tab-panel">
+      <div class="card">
+        <div class="row-between">
+          <h2>Transactions</h2>
+          <label class="check inline"><input id="uncat-only" type="checkbox" /> Uncategorized only</label>
+        </div>
+        <label class="inline-label">Profile filter
+          <select id="ledger-profile"><option value="">All</option></select>
+        </label>
+        <div class="table-wrap">
+          <table id="ledger-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Payee</th>
+                <th>Amount</th>
+                <th>Category (tax map)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Manual transaction</h2>
+        <form id="txn-form" class="form">
+          <label>Profile <select id="txn-profile" required></select></label>
+          <label>Account <select id="txn-account" required></select></label>
+          <label>Category <select id="txn-category"><option value="">Uncategorized</option></select></label>
+          <label>Date <input id="txn-date" type="date" required /></label>
+          <label>Amount <input id="txn-amt" type="number" step="0.01" required /></label>
+          <label>Payee <input id="txn-payee" placeholder="Merchant" /></label>
+          <button type="submit">Add transaction</button>
+        </form>
+        <p id="txn-msg" class="fine"></p>
+      </div>
+    </section>
+
+    <!-- CREDIT & DEBTS -->
+    <section id="tab-credit" class="tab-panel">
+      <div class="card">
+        <h2>Why no Credit Karma / bureau link?</h2>
+        <p class="fine" id="credit-api-msg">
+          Credit Karma and Equifax / Experian / TransUnion do not provide consumer APIs for apps like this.
+          LedgerRing builds payoff plans and an <strong>educational</strong> score from debts you track here
+          (balances, APR, 0% promos, limits, opened dates) plus history you enter.
+        </p>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Educational credit health</h2>
+          <p class="mega" id="credit-score">—</p>
+          <p class="label" id="credit-band"></p>
+          <p class="fine" id="credit-util"></p>
+          <div id="credit-factors"></div>
+          <p class="fine" id="credit-disclaimer" style="margin-top:0.75rem"></p>
+        </div>
+        <div class="card">
+          <h2>What-if &amp; suggestions</h2>
+          <ul id="credit-whatif" class="list"></ul>
+          <ul id="credit-tips" class="list warn"></ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Payoff strategy + opportunity cost</h2>
+        <p class="fine">
+          If <strong>X Money pays 6%</strong> and your <strong>mortgage is 2.625%</strong>, extra mortgage payments
+          usually lose money — keep cash earning. LedgerRing uses your highest cash APY (or a manual hurdle)
+          so cheap debt stays on <em>minimum only</em>; extra goes to high-APR debt or stays in yield.
+        </p>
+        <form id="debt-form" class="form">
+          <label>Strategy
+            <select id="debt-strategy">
+              <option value="avalanche">Avalanche — highest APR first (least interest)</option>
+              <option value="snowball">Snowball — smallest balance first</option>
+              <option value="promo_guard">Promo guard — expiring 0% first, then APR</option>
+              <option value="utilization">Utilization — highest util% first (score-oriented)</option>
+              <option value="custom">Custom — your pay rank on each debt</option>
+            </select>
+          </label>
+          <label>Extra $/month (after all mins)
+            <input id="debt-extra" type="number" step="0.01" value="0" min="0" />
+          </label>
+          <label class="check">
+            <input id="debt-opp-aware" type="checkbox" checked /> Opportunity-cost aware (recommended)
+          </label>
+          <label>Manual hurdle APY (optional)
+            <input id="debt-hurdle" type="number" step="0.0001" placeholder="blank = max cash APY" />
+          </label>
+          <label>Tax rate on yield (optional)
+            <input id="debt-tax" type="number" step="0.01" min="0" max="1" placeholder="e.g. 0.32" />
+          </label>
+          <button type="button" id="debt-run" class="primary">Run plan</button>
+          <button type="button" id="debt-compare">Compare strategies</button>
+          <label class="check"><input id="debt-save" type="checkbox" checked /> Save preferences</label>
+        </form>
+        <p class="fine" id="debt-opp-banner"></p>
+        <div id="debt-summary" class="split" style="margin-top:1rem"></div>
+        <div class="table-wrap" style="margin-top:1rem">
+          <table id="debt-order-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Debt</th>
+                <th>Balance</th>
+                <th>Eff. APR</th>
+                <th>vs yield</th>
+                <th>Action</th>
+                <th>Why</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <h2 style="margin-top:1rem">Invest vs prepay (per $1,000 for 1 year, simple)</h2>
+        <div id="invest-vs-debt" class="table-wrap"></div>
+        <pre id="debt-compare-out" class="mono"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Credit history inputs (you supply)</h2>
+        <p class="fine">Bureaus won't tell us this — enter what you know from Credit Karma/etc. for a better simulation.</p>
+        <form id="credit-hist-form" class="form">
+          <label>On-time rate (0–1)
+            <input id="ch-ontime" type="number" step="0.01" min="0" max="1" value="1" />
+          </label>
+          <label>30-day lates (12m) <input id="ch-30" type="number" min="0" value="0" /></label>
+          <label>60-day lates (12m) <input id="ch-60" type="number" min="0" value="0" /></label>
+          <label>90+ lates (12m) <input id="ch-90" type="number" min="0" value="0" /></label>
+          <label>Hard inquiries (12m) <input id="ch-inq" type="number" min="0" value="0" /></label>
+          <label>New accounts (12m) <input id="ch-new" type="number" min="0" value="0" /></label>
+          <label>Your CK/Vantage (optional)
+            <input id="ch-reported" type="number" min="300" max="850" placeholder="e.g. 720" />
+          </label>
+          <button type="submit">Save history inputs</button>
+        </form>
+        <p id="ch-msg" class="fine"></p>
+      </div>
+    </section>
+
+    <!-- CONNECT (primary data in) -->
+    <section id="tab-connect" class="tab-panel">
+      <div class="card">
+        <h2>Bring money data into LedgerRing</h2>
+        <p class="fine">This product is self-contained. Feed it via bank link or CSV — not a spreadsheet workflow.</p>
+      </div>
+      <div class="card">
+        <h2>Bank / card connections (Plaid)</h2>
+        <p class="fine" id="plaid-status">Checking Plaid…</p>
+        <div class="form filter-row">
+          <label>Profile for new links <select id="connect-profile"></select></label>
+          <button type="button" id="plaid-sandbox" class="primary">Link sandbox bank (test)</button>
+          <button type="button" id="plaid-link-token">Create Link token</button>
+        </div>
+        <pre id="plaid-token-out" class="mono"></pre>
+        <div id="plaid-items"></div>
+      </div>
+      <div class="card">
+        <h2>Import bank CSV</h2>
+        <p class="fine">Download CSV from your bank or card issuer. Auto-detects Date / Description / Amount.</p>
+        <form id="csv-form" class="form">
+          <label>Account <select id="csv-account" required></select></label>
+          <label>Amount sign
+            <select id="csv-sign">
+              <option value="bank">As in file</option>
+              <option value="invert">Invert signs</option>
+            </select>
+          </label>
+          <label class="wide">CSV file <input id="csv-file" type="file" accept=".csv,text/csv" required /></label>
+          <button type="submit">Import CSV</button>
+        </form>
+        <pre id="csv-result" class="mono"></pre>
+      </div>
+      <div class="card muted-card">
+        <h2>Legacy one-time migration</h2>
+        <p class="fine">Optional: if you have an old personal budget spreadsheet, you can migrate history once. Day-to-day use is entirely in LedgerRing.</p>
+        <details>
+          <summary>Show migration tools</summary>
+          <form id="import-path-form" class="form" style="margin-top:0.75rem">
+            <label class="wide">Path on this PC
+              <input id="import-path" placeholder="Optional path to old .xlsx" />
+            </label>
+            <label>Since (optional) <input id="import-since" type="date" /></label>
+            <label class="check"><input id="import-dry" type="checkbox" /> Dry run</label>
+            <button type="submit">Migrate from path</button>
+          </form>
+          <form id="import-upload-form" class="form">
+            <label class="wide">Upload old .xlsx <input id="import-file" type="file" accept=".xlsx" /></label>
+            <button type="submit">Upload &amp; migrate</button>
+          </form>
+          <pre id="import-result" class="mono"></pre>
+        </details>
+      </div>
+      <div class="card">
+        <h2>Windows tray</h2>
+        <p class="fine">Always-on Spendable number (server must be running):</p>
+        <pre class="mono">python -m financial_os.cli tray</pre>
+      </div>
+    </section>
+
+    <!-- TAX -->
+    <section id="tab-tax" class="tab-panel">
+      <div class="card">
+        <h2>Tax Packet</h2>
+        <p class="fine">Export by IRS form lines (1120-S / Sch A) for TurboTax or your CPA. Built from this app’s books.</p>
+        <form id="tax-form" class="form">
+          <label>Profile <select id="tax-profile" required></select></label>
+          <label>Year <input id="tax-year" type="number" value="2026" /></label>
+          <button type="button" id="tax-preview">Preview</button>
+          <button type="button" id="tax-download">Download ZIP</button>
+          <button type="button" id="tax-write">Write to disk</button>
+        </form>
+        <pre id="tax-result" class="mono"></pre>
+        <div id="coa-box">
+          <h2>Chart of accounts summary</h2>
+          <pre id="coa" class="mono"></pre>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Tax vault (reduces Spendable)</h2>
+        <p class="fine">Virtual reserve so April does not ambush checking. Cash stays in your bank; Spendable treats it as untouchable.</p>
+        <p class="num" id="tv-balance">$0</p>
+        <p class="fine" id="tv-note"></p>
+        <form id="tv-form" class="form">
+          <label class="check"><input id="tv-enabled" type="checkbox" checked /> Vault enabled</label>
+          <label>Vault balance ($)
+            <input id="tv-bal" type="number" step="0.01" min="0" value="0" />
+          </label>
+          <label>Auto set-aside rate (0–1)
+            <input id="tv-rate" type="number" step="0.01" min="0" max="1" placeholder="e.g. 0.25" />
+          </label>
+          <button type="submit">Save vault</button>
+        </form>
+        <form id="tv-adj-form" class="form">
+          <label>Adjust (+ set aside / − release)
+            <input id="tv-delta" type="number" step="0.01" required placeholder="500 or -200" />
+          </label>
+          <button type="submit">Apply delta</button>
+        </form>
+        <p id="tv-msg" class="fine"></p>
+      </div>
+      <div class="card">
+        <h2>Income cliffs (optional)</h2>
+        <p class="fine">Haircut expected/historical income in Spendable for bad commission months. Fixed income always full. Off by default.</p>
+        <form id="cliff-form" class="form">
+          <label class="check"><input id="cliff-on" type="checkbox" /> Enable cliffs</label>
+          <label>Factor (1 = full expected, 0.5 = half)
+            <input id="cliff-factor" type="number" step="0.05" min="0" max="1" value="1" />
+          </label>
+          <button type="submit">Save cliffs</button>
+        </form>
+        <p id="cliff-msg" class="fine"></p>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="tab-settings" class="tab-panel">
+      <div class="card">
+        <h2>Spendable settings</h2>
+        <form id="settings-form" class="form">
+          <label>Default mode
+            <select id="set-mode">
+              <option value="conservative">Conservative</option>
+              <option value="expected">Expected</option>
+            </select>
+          </label>
+          <label>Safety buffer ($) <input id="set-buffer" type="number" step="0.01" /></label>
+          <label>Horizon (days) <input id="set-horizon" type="number" min="7" max="365" /></label>
+          <label>Util soft % <input id="set-soft" type="number" min="1" max="100" /></label>
+          <label>Util hard % <input id="set-hard" type="number" min="1" max="100" /></label>
+          <button type="submit">Save</button>
+        </form>
+        <p id="set-msg" class="fine"></p>
+      </div>
+      <div class="card">
+        <h2>Product</h2>
+        <p class="fine">LedgerRing is open-source freeware. Data lives in local SQLite (<code id="data-path-hint">~/.financial-os</code>). Local backup only by default.</p>
+        <button type="button" id="reset-onboard" class="ghost">Show setup wizard again</button>
+      </div>
+      <div class="card">
+        <h2>Permission stack</h2>
+        <p class="fine" id="perm-me">—</p>
+        <pre id="perm-roles" class="mono"></pre>
+        <form id="perm-user-form" class="form">
+          <label>Username <input id="perm-user" required placeholder="cpa" /></label>
+          <label>Display name <input id="perm-name" required placeholder="CPA" /></label>
+          <label>Role
+            <select id="perm-role">
+              <option value="viewer">viewer</option>
+              <option value="cpa_viewer">cpa_viewer</option>
+              <option value="bookkeeper">bookkeeper</option>
+              <option value="owner">owner</option>
+            </select>
+          </label>
+          <button type="submit">Add user + issue token</button>
+        </form>
+        <p id="perm-msg" class="fine"></p>
+        <pre id="perm-token-out" class="mono"></pre>
+        <p class="fine">CLI: <code>python -m financial_os.cli token owner</code> · Clients: see docs/CLIENTS.md · Header <code>X-API-Key</code></p>
+        <label class="wide">Store API key in this browser (optional)
+          <input id="api-key-store" type="password" placeholder="lr_… paste for multi-client testing" autocomplete="off" />
+        </label>
+        <button type="button" id="api-key-save" class="ghost">Save key to localStorage</button>
+        <button type="button" id="api-key-clear" class="ghost">Clear key</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>LedgerRing · local · multi-entity · interest-free purchasing power</span>
+    <a href="/docs" target="_blank">API</a>
+  </footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>

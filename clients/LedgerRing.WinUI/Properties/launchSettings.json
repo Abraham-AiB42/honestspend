@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "LedgerRing.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "LedgerRing.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

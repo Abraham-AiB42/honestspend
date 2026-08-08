@@ -1,0 +1,24 @@
+services:
+  ledgerring:
+    build: .
+    ports:
+      - "7420:7420"
+    environment:
+      FOS_HOST: "0.0.0.0"
+      FOS_PORT: "7420"
+      FOS_DATA_DIR: "/data"
+      # Non-loopback: set a token + FOS_REQUIRE_API_KEY=1 in production.
+      # For lab only (open API on all interfaces):
+      FOS_ALLOW_NON_LOOPBACK: "1"
+      # Optional:
+      # FOS_REQUIRE_API_KEY: "1"
+      # FOS_XAI_API_KEY: ""
+      # FOS_PLAID_CLIENT_ID: ""
+      # FOS_PLAID_SECRET: ""
+      # FOS_PLAID_ENV: sandbox
+    volumes:
+      - ledgerring-data:/data
+    restart: unless-stopped
+
+volumes:
+  ledgerring-data:

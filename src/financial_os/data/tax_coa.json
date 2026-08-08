@@ -1,0 +1,700 @@
+{
+  "version": "1.0.0",
+  "sources": [
+    "IRS Form 1120-S (2025)",
+    "IRS Schedule C Form 1040 (2025)",
+    "IRS Schedule A Form 1040",
+    "IRC §162 ordinary and necessary"
+  ],
+  "disclaimer": "Category maps organize records for tax prep. Not tax advice.",
+  "profiles": [
+    {
+      "slug": "personal",
+      "display_name": "Personal",
+      "entity_type": "individual",
+      "tax_form_primary": "1040",
+      "is_default": true
+    },
+    {
+      "slug": "ap_agency",
+      "display_name": "AP Agency",
+      "entity_type": "s_corp",
+      "tax_form_primary": "1120S",
+      "is_default": false
+    },
+    {
+      "slug": "aib42",
+      "display_name": "AiB42",
+      "entity_type": "s_corp",
+      "tax_form_primary": "1120S",
+      "is_default": false
+    }
+  ],
+  "system_categories": [
+    {
+      "code": "SYS_UNCATEGORIZED",
+      "display_name": "Uncategorized",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "review"
+    },
+    {
+      "code": "SYS_TRANSFER",
+      "display_name": "Transfer",
+      "tax_form": "transfer",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "transfer",
+      "notes": "Never treat as income or expense"
+    },
+    {
+      "code": "SYS_CC_PAYMENT",
+      "display_name": "Credit card payment",
+      "tax_form": "transfer",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "transfer"
+    },
+    {
+      "code": "SYS_LOAN_PRINCIPAL",
+      "display_name": "Loan principal payment",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "debt",
+      "notes": "Principal is not deductible; interest may be"
+    },
+    {
+      "code": "SYS_OWNER_DISTRIBUTION",
+      "display_name": "Owner distribution",
+      "tax_form": "equity",
+      "tax_line": "AAA_distribution",
+      "deductibility": "none",
+      "budget_group": "owner",
+      "notes": "Not a business expense on 1120-S"
+    },
+    {
+      "code": "SYS_OWNER_CONTRIBUTION",
+      "display_name": "Owner contribution / capital inject",
+      "tax_form": "equity",
+      "tax_line": "capital_contribution",
+      "deductibility": "none",
+      "budget_group": "owner"
+    },
+    {
+      "code": "SYS_REIMBURSEMENT",
+      "display_name": "Reimbursement",
+      "tax_form": "transfer",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "intermix"
+    }
+  ],
+  "business_income": [
+    {
+      "code": "BIZ_GROSS_RECEIPTS",
+      "display_name": "Gross receipts / sales",
+      "tax_form": "1120S",
+      "tax_line": "1a",
+      "sch_c_line": "1",
+      "deductibility": "n/a",
+      "budget_group": "income",
+      "examples": ["Carrier commissions", "SaaS subscriptions", "Setup fees", "Renewals", "Overrides"]
+    },
+    {
+      "code": "BIZ_RETURNS",
+      "display_name": "Returns and allowances",
+      "tax_form": "1120S",
+      "tax_line": "1b",
+      "sch_c_line": "2",
+      "deductibility": "n/a",
+      "budget_group": "income"
+    },
+    {
+      "code": "BIZ_OTHER_INCOME",
+      "display_name": "Other business income",
+      "tax_form": "1120S",
+      "tax_line": "5",
+      "sch_c_line": "6",
+      "deductibility": "n/a",
+      "budget_group": "income"
+    }
+  ],
+  "business_expenses": [
+    {
+      "code": "BIZ_OFFICER_COMP",
+      "display_name": "Officer compensation",
+      "tax_form": "1120S",
+      "tax_line": "7",
+      "sch_c_line": null,
+      "deductibility": "full",
+      "budget_group": "payroll",
+      "notes": "Shareholder-employee W-2 salary; attach Form 1125-E when required"
+    },
+    {
+      "code": "BIZ_SALARIES",
+      "display_name": "Salaries and wages",
+      "tax_form": "1120S",
+      "tax_line": "8",
+      "sch_c_line": "26",
+      "deductibility": "full",
+      "budget_group": "payroll"
+    },
+    {
+      "code": "BIZ_REPAIRS",
+      "display_name": "Repairs and maintenance",
+      "tax_form": "1120S",
+      "tax_line": "9",
+      "sch_c_line": "21",
+      "deductibility": "full",
+      "budget_group": "ops"
+    },
+    {
+      "code": "BIZ_BAD_DEBTS",
+      "display_name": "Bad debts",
+      "tax_form": "1120S",
+      "tax_line": "10",
+      "sch_c_line": null,
+      "deductibility": "full",
+      "budget_group": "ops"
+    },
+    {
+      "code": "BIZ_RENT",
+      "display_name": "Rent",
+      "tax_form": "1120S",
+      "tax_line": "11",
+      "sch_c_line": "20b",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "examples": ["Office rent", "Equipment lease"]
+    },
+    {
+      "code": "BIZ_TAXES_LICENSES",
+      "display_name": "Taxes and licenses",
+      "tax_form": "1120S",
+      "tax_line": "12",
+      "sch_c_line": "23",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "examples": ["Employer payroll taxes", "Business licenses", "Property tax on business assets"]
+    },
+    {
+      "code": "BIZ_INTEREST",
+      "display_name": "Business interest",
+      "tax_form": "1120S",
+      "tax_line": "13",
+      "sch_c_line": "16b",
+      "deductibility": "full",
+      "budget_group": "debt",
+      "notes": "Business debt interest only; §163(j) may limit"
+    },
+    {
+      "code": "BIZ_DEPRECIATION",
+      "display_name": "Depreciation / Section 179",
+      "tax_form": "1120S",
+      "tax_line": "14",
+      "sch_c_line": "13",
+      "deductibility": "capital",
+      "budget_group": "assets",
+      "notes": "Form 4562; often separately stated for §179 on K-1"
+    },
+    {
+      "code": "BIZ_DEPLETION",
+      "display_name": "Depletion",
+      "tax_form": "1120S",
+      "tax_line": "15",
+      "sch_c_line": "12",
+      "deductibility": "full",
+      "budget_group": "ops"
+    },
+    {
+      "code": "BIZ_ADVERTISING",
+      "display_name": "Advertising",
+      "tax_form": "1120S",
+      "tax_line": "16",
+      "sch_c_line": "8",
+      "deductibility": "full",
+      "budget_group": "marketing",
+      "examples": ["Digital ads", "Lead gen", "Business cards", "Promotional materials"]
+    },
+    {
+      "code": "BIZ_PENSION",
+      "display_name": "Pension / profit-sharing plans",
+      "tax_form": "1120S",
+      "tax_line": "17",
+      "sch_c_line": "19",
+      "deductibility": "full",
+      "budget_group": "payroll"
+    },
+    {
+      "code": "BIZ_EMPLOYEE_BENEFITS",
+      "display_name": "Employee benefit programs",
+      "tax_form": "1120S",
+      "tax_line": "18",
+      "sch_c_line": "14",
+      "deductibility": "full",
+      "budget_group": "payroll"
+    },
+    {
+      "code": "BIZ_ENERGY_BLDGS",
+      "display_name": "Energy efficient commercial buildings",
+      "tax_form": "1120S",
+      "tax_line": "19",
+      "sch_c_line": "27a",
+      "deductibility": "full",
+      "budget_group": "ops"
+    },
+    {
+      "code": "BIZ_OTHER_LEGAL",
+      "display_name": "Legal and professional services",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "17",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["CPA", "Attorney", "Bookkeeping", "Tax prep for entity"]
+    },
+    {
+      "code": "BIZ_OTHER_OFFICE",
+      "display_name": "Office expense",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "18",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true
+    },
+    {
+      "code": "BIZ_OTHER_SUPPLIES",
+      "display_name": "Supplies",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "22",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true
+    },
+    {
+      "code": "BIZ_OTHER_UTILITIES",
+      "display_name": "Utilities (business)",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "25",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Business phone/internet portion only"
+    },
+    {
+      "code": "BIZ_OTHER_INSURANCE",
+      "display_name": "Insurance (other than health)",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "15",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["E&O", "General liability", "Cyber", "Business property"]
+    },
+    {
+      "code": "BIZ_OTHER_CONTRACT",
+      "display_name": "Contract labor",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "11",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Track for 1099-NEC"
+    },
+    {
+      "code": "BIZ_OTHER_COMMISSIONS",
+      "display_name": "Commissions and fees paid",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "10",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["Referral fees", "Payment processing if not COGS"]
+    },
+    {
+      "code": "BIZ_OTHER_TRAVEL",
+      "display_name": "Travel",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "24a",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true
+    },
+    {
+      "code": "BIZ_OTHER_MEALS",
+      "display_name": "Business meals",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "24b",
+      "deductibility": "partial",
+      "partial_rule": "meals_50",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Generally 50% deductible; document business purpose"
+    },
+    {
+      "code": "BIZ_OTHER_VEHICLE",
+      "display_name": "Car and truck (business)",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "9",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Standard mileage or actual; business-use %"
+    },
+    {
+      "code": "BIZ_OTHER_SOFTWARE",
+      "display_name": "Software / SaaS / cloud",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "18",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["Azure", "Grok API", "CRM tools", "Hosting"]
+    },
+    {
+      "code": "BIZ_OTHER_EDUCATION",
+      "display_name": "Education / CE",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "27b",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["Insurance CE", "License-required training"]
+    },
+    {
+      "code": "BIZ_OTHER_BANK_FEES",
+      "display_name": "Bank and merchant fees",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "27b",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["Stripe fees", "Business bank fees"]
+    },
+    {
+      "code": "BIZ_OTHER_DUES",
+      "display_name": "Dues and subscriptions (professional)",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "27b",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true
+    },
+    {
+      "code": "BIZ_STARTUP",
+      "display_name": "Startup costs",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "27b",
+      "deductibility": "special",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Amortization / first-year election rules apply"
+    },
+    {
+      "code": "BIZ_COGS",
+      "display_name": "Cost of goods sold",
+      "tax_form": "1120S",
+      "tax_line": "2",
+      "sch_c_line": "4",
+      "deductibility": "n/a",
+      "budget_group": "cogs",
+      "notes": "Form 1125-A; rare for pure service/SaaS"
+    }
+  ],
+  "separately_stated": [
+    {
+      "code": "BIZ_SEP_CHARITY",
+      "display_name": "Charitable contributions (entity)",
+      "tax_form": "K1",
+      "tax_line": "separately_stated_charity",
+      "deductibility": "separately_stated",
+      "budget_group": "tax_special"
+    },
+    {
+      "code": "BIZ_SEP_179",
+      "display_name": "Section 179 (shareholder)",
+      "tax_form": "K1",
+      "tax_line": "separately_stated_179",
+      "deductibility": "separately_stated",
+      "budget_group": "tax_special"
+    },
+    {
+      "code": "BIZ_SEP_PORTFOLIO_INT",
+      "display_name": "Portfolio interest income",
+      "tax_form": "K1",
+      "tax_line": "box_4",
+      "deductibility": "separately_stated",
+      "budget_group": "tax_special"
+    },
+    {
+      "code": "BIZ_NONDEDUCTIBLE",
+      "display_name": "Nondeductible expenses",
+      "tax_form": "1120S",
+      "tax_line": "nondeductible",
+      "deductibility": "none",
+      "budget_group": "tax_special",
+      "examples": ["Penalties", "Political", "Personal mixed incorrectly"]
+    }
+  ],
+  "personal_budget": [
+    {
+      "code": "PER_GROCERIES",
+      "display_name": "Groceries",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "food",
+      "legacy_excel": "Food"
+    },
+    {
+      "code": "PER_DINING",
+      "display_name": "Restaurants / dining",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "food"
+    },
+    {
+      "code": "PER_SHOPPING",
+      "display_name": "Shopping / purchases",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle",
+      "legacy_excel": "Purch"
+    },
+    {
+      "code": "PER_GAS",
+      "display_name": "Gas (personal)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "transport",
+      "legacy_excel": "Gas"
+    },
+    {
+      "code": "PER_AUTO",
+      "display_name": "Auto (personal maintenance, insurance)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "transport"
+    },
+    {
+      "code": "PER_HOUSING",
+      "display_name": "Housing / rent / mortgage principal",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "home",
+      "legacy_excel": "Home",
+      "notes": "Mortgage interest may be Sch A separately"
+    },
+    {
+      "code": "PER_UTILITIES",
+      "display_name": "Utilities (home)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "home",
+      "legacy_excel": "Util"
+    },
+    {
+      "code": "PER_CELL",
+      "display_name": "Cell / internet (personal)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "home",
+      "legacy_excel": "Cell"
+    },
+    {
+      "code": "PER_INSURANCE",
+      "display_name": "Insurance (personal)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "protection",
+      "legacy_excel": "Ins"
+    },
+    {
+      "code": "PER_ENTERTAINMENT",
+      "display_name": "Entertainment",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle"
+    },
+    {
+      "code": "PER_SUBSCRIPTIONS",
+      "display_name": "Subscriptions (personal)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle"
+    },
+    {
+      "code": "PER_KIDS",
+      "display_name": "Kids / family support",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "family",
+      "notes": "Alex mental balance tracking lives here if used"
+    },
+    {
+      "code": "PER_VACATION",
+      "display_name": "Vacation / travel (personal)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle"
+    },
+    {
+      "code": "PER_GIFTS",
+      "display_name": "Gifts (non-charity)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle"
+    },
+    {
+      "code": "PER_CC_INTEREST",
+      "display_name": "Credit card interest (personal)",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "debt",
+      "notes": "Track for credit game; generally not deductible"
+    },
+    {
+      "code": "PER_FEES",
+      "display_name": "Bank / late / overdraft fees",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "fees"
+    },
+    {
+      "code": "PER_INCOME_WAGES",
+      "display_name": "Wages (W-2)",
+      "tax_form": "1040",
+      "tax_line": "w2",
+      "deductibility": "n/a",
+      "budget_group": "income"
+    },
+    {
+      "code": "PER_INCOME_K1",
+      "display_name": "K-1 income (pass-through)",
+      "tax_form": "1040",
+      "tax_line": "schedule_e",
+      "deductibility": "n/a",
+      "budget_group": "income"
+    },
+    {
+      "code": "PER_INCOME_OTHER",
+      "display_name": "Other personal income",
+      "tax_form": "1040",
+      "tax_line": "other_income",
+      "deductibility": "n/a",
+      "budget_group": "income"
+    }
+  ],
+  "personal_itemized": [
+    {
+      "code": "PER_SCHA_MEDICAL",
+      "display_name": "Medical and dental (itemized)",
+      "tax_form": "SchA",
+      "tax_line": "medical",
+      "deductibility": "partial",
+      "partial_rule": "medical_agi_75",
+      "budget_group": "tax_itemized",
+      "notes": "Only amount over 7.5% of AGI if itemizing"
+    },
+    {
+      "code": "PER_SCHA_SALT_INCOME",
+      "display_name": "State and local income or sales tax",
+      "tax_form": "SchA",
+      "tax_line": "salt",
+      "deductibility": "partial",
+      "partial_rule": "salt_cap",
+      "budget_group": "tax_itemized"
+    },
+    {
+      "code": "PER_SCHA_REAL_ESTATE",
+      "display_name": "Real estate taxes",
+      "tax_form": "SchA",
+      "tax_line": "salt_property",
+      "deductibility": "partial",
+      "partial_rule": "salt_cap",
+      "budget_group": "tax_itemized"
+    },
+    {
+      "code": "PER_SCHA_MORTGAGE_INT",
+      "display_name": "Home mortgage interest",
+      "tax_form": "SchA",
+      "tax_line": "mortgage_interest",
+      "deductibility": "full",
+      "budget_group": "tax_itemized"
+    },
+    {
+      "code": "PER_SCHA_CHARITY",
+      "display_name": "Charitable contributions",
+      "tax_form": "SchA",
+      "tax_line": "charity",
+      "deductibility": "full",
+      "budget_group": "tax_itemized"
+    }
+  ],
+  "personal_adjustments": [
+    {
+      "code": "PER_ADJ_HSA",
+      "display_name": "HSA contribution",
+      "tax_form": "1040",
+      "tax_line": "adjustment_hsa",
+      "deductibility": "full",
+      "budget_group": "tax_adjustment"
+    },
+    {
+      "code": "PER_ADJ_STUDENT_LOAN",
+      "display_name": "Student loan interest",
+      "tax_form": "1040",
+      "tax_line": "adjustment_student_loan",
+      "deductibility": "partial",
+      "budget_group": "tax_adjustment"
+    },
+    {
+      "code": "PER_ADJ_IRA",
+      "display_name": "IRA contribution",
+      "tax_form": "1040",
+      "tax_line": "adjustment_ira",
+      "deductibility": "full",
+      "budget_group": "tax_adjustment"
+    },
+    {
+      "code": "PER_EST_TAX",
+      "display_name": "Estimated tax payment",
+      "tax_form": "1040",
+      "tax_line": "payments",
+      "deductibility": "n/a",
+      "budget_group": "tax_payment"
+    }
+  ]
+}

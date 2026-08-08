@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LedgerRing · Connect bank (Plaid)</title>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+  <style>
+    :root { color-scheme: dark light; font-family: system-ui, Segoe UI, sans-serif; }
+    body { max-width: 36rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.45; }
+    h1 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+    .muted { opacity: 0.75; font-size: 0.95rem; }
+    button {
+      margin-top: 1rem; padding: 0.65rem 1.1rem; font-size: 1rem; border-radius: 8px;
+      border: none; background: #2db4a0; color: #0b0f14; font-weight: 600; cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #log {
+      margin-top: 1.25rem; padding: 0.85rem; border-radius: 8px;
+      background: color-mix(in srgb, Canvas 92%, CanvasText 8%);
+      white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem;
+    }
+    label { display: block; margin-top: 1rem; font-weight: 600; }
+    select { width: 100%; padding: 0.45rem; margin-top: 0.35rem; }
+  </style>
+</head>
+<body>
+  <h1>Connect a bank (Plaid Link)</h1>
+  <p class="muted">
+    Browser handoff for LedgerRing. After success, return to the WinUI app and sync if needed.
+    CSV import works without Plaid.
+  </p>
+
+  <label for="profile">Entity profile id
+    <select id="profile"></select>
+  </label>
+
+  <button id="connect" disabled>Open Plaid Link</button>
+  <div id="log">Loading…</div>
+
+  <script>
+    const API = location.origin;
+    const logEl = document.getElementById("log");
+    const btn = document.getElementById("connect");
+    const profileSel = document.getElementById("profile");
+    const qs = new URLSearchParams(location.search);
+    const presetProfile = qs.get("profile_id");
+
+    function log(msg) {
+      logEl.textContent = typeof msg === "string" ? msg : JSON.stringify(msg, null, 2);
+    }
+
+    async function jfetch(path, opts) {
+      const r = await fetch(API + path, opts);
+      const text = await r.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!r.ok) throw new Error((data && data.detail) || text || r.statusText);
+      return data;
+    }
+
+    async function init() {
+      try {
+        const st = await jfetch("/api/plaid/status");
+        if (!st.enabled) {
+          log("Plaid is off. Set FOS_PLAID_CLIENT_ID and FOS_PLAID_SECRET, then restart the engine.\n" + (st.hint || ""));
+          return;
+        }
+        const profiles = await jfetch("/api/profiles");
+        profileSel.innerHTML = "";
+        for (const p of profiles) {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = `${p.display_name} (${p.slug}) · #${p.id}`;
+          profileSel.appendChild(o);
+        }
+        if (presetProfile) profileSel.value = presetProfile;
+        if (!profiles.length) {
+          log("No profiles. Seed/init the database first.");
+          return;
+        }
+        log(`Plaid env: ${st.env}\nReady. Click Open Plaid Link.`);
+        btn.disabled = false;
+      } catch (e) {
+        log(String(e.message || e));
+      }
+    }
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        log("Creating link token…");
+        const tok = await jfetch("/api/plaid/link-token", { method: "POST" });
+        const linkToken = tok.link_token;
+        if (!linkToken) throw new Error("No link_token from API");
+
+        const handler = Plaid.create({
+          token: linkToken,
+          onSuccess: async (public_token, metadata) => {
+            try {
+              log("Exchanging public token…");
+              const profile_id = Number(profileSel.value);
+              const body = {
+                public_token,
+                profile_id,
+                institution_name: metadata?.institution?.name || null,
+                institution_id: metadata?.institution?.institution_id || null,
+              };
+              const res = await jfetch("/api/plaid/exchange", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              });
+              log("Connected.\n" + JSON.stringify(res, null, 2) + "\n\nYou can close this tab and return to LedgerRing.");
+            } catch (e) {
+              log("Exchange failed: " + (e.message || e));
+            } finally {
+              btn.disabled = false;
+            }
+          },
+          onExit: (err) => {
+            if (err) log("Link exit: " + JSON.stringify(err));
+            else log("Link closed without connecting.");
+            btn.disabled = false;
+          },
+        });
+        handler.open();
+      } catch (e) {
+        log(String(e.message || e));
+        btn.disabled = false;
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

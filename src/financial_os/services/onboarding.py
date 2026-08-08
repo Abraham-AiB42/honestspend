@@ -1,0 +1,137 @@
+"""First-run product setup — fully in-app, no spreadsheet required."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from financial_os.db import Account, AppSettings, Profile, ScheduledItem
+
+
+@dataclass
+class OnboardingStatus:
+    complete: bool
+    has_cash_account: bool
+    has_credit_account: bool
+    has_recurring: bool
+    account_count: int
+    product_name: str
+
+
+def get_onboarding_status(session: Session) -> OnboardingStatus:
+    settings = session.get(AppSettings, 1) or AppSettings(id=1)
+    accounts = session.query(Account).all()
+    cash = any(a.is_cash_for_ifpp or a.kind in ("checking", "savings", "cash") for a in accounts)
+    credit = any(a.kind == "credit" for a in accounts)
+    recurring = session.query(ScheduledItem).filter(ScheduledItem.active.is_(True)).count() > 0
+    return OnboardingStatus(
+        complete=bool(getattr(settings, "onboarding_complete", False)),
+        has_cash_account=cash,
+        has_credit_account=credit,
+        has_recurring=recurring,
+        account_count=len(accounts),
+        product_name=getattr(settings, "product_name", None) or "LedgerRing",
+    )
+
+
+def complete_onboarding(session: Session) -> AppSettings:
+    settings = session.get(AppSettings, 1)
+    if not settings:
+        settings = AppSettings(id=1)
+        session.add(settings)
+    settings.onboarding_complete = True
+    session.flush()
+    try:
+        from financial_os.services.backup import create_backup
+
+        create_backup(as_zip=True, note="post-setup-skip")
+    except Exception:
+        pass
+    return settings
+
+
+def apply_quick_setup(
+    session: Session,
+    *,
+    profile_slug: str = "personal",
+    cash_name: str = "Primary checking",
+    cash_balance: Decimal = Decimal("0"),
+    cash_institution: str | None = None,
+    card_name: str | None = None,
+    card_balance: Decimal = Decimal("0"),
+    card_limit: Decimal | None = None,
+    card_due_day: int | None = None,
+    card_close_day: int | None = None,
+    card_promo_apr: Decimal | None = None,
+    card_promo_end: str | None = None,
+    safety_buffer: Decimal = Decimal("1000"),
+    ifpp_mode: str = "conservative",
+) -> dict[str, Any]:
+    """Create starter cash (+ optional card) and mark onboarding done."""
+    profile = session.query(Profile).filter(Profile.slug == profile_slug).one()
+    settings = session.get(AppSettings, 1)
+    if not settings:
+        settings = AppSettings(id=1)
+        session.add(settings)
+    settings.safety_buffer = safety_buffer
+    settings.ifpp_mode = ifpp_mode
+    settings.never_negative_scope = "checking"
+    settings.opportunity_cost_aware = True
+
+    cash = Account(
+        profile_id=profile.id,
+        kind="checking",
+        nickname=cash_name,
+        institution=cash_institution,
+        current_balance=cash_balance,
+        is_cash_for_ifpp=True,
+        include_in_net_worth=True,
+    )
+    session.add(cash)
+    created: dict[str, Any] = {"cash_account": cash_name}
+
+    if card_name:
+        limit = card_limit or Decimal("0")
+        bal = card_balance or Decimal("0")
+        avail = max(Decimal("0"), limit - bal) if limit else None
+        from datetime import date as date_cls
+
+        promo_end = None
+        if card_promo_end:
+            promo_end = date_cls.fromisoformat(card_promo_end[:10])
+        card = Account(
+            profile_id=profile.id,
+            kind="credit",
+            nickname=card_name,
+            institution=cash_institution,
+            current_balance=bal,
+            credit_limit=limit if limit else None,
+            available_credit=avail,
+            statement_close_day=card_close_day,
+            payment_due_day=card_due_day,
+            promo_apr=card_promo_apr,
+            promo_end_date=promo_end,
+            promo_balance=bal if card_promo_apr is not None and card_promo_apr == 0 else None,
+            is_cash_for_ifpp=False,
+        )
+        session.add(card)
+        created["card_account"] = card_name
+
+    settings.onboarding_complete = True
+    session.flush()
+    created["onboarding_complete"] = True
+
+    # First backup after setup (local non-negotiable)
+    try:
+        from financial_os.services.backup import create_backup
+
+        bak = create_backup(as_zip=True, note="post-setup")
+        created["backup"] = bak.get("name")
+        created["backup_path"] = bak.get("path")
+    except Exception as e:
+        created["backup_error"] = str(e)
+
+    return created
