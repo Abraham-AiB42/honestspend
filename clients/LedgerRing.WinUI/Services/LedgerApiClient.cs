@@ -165,6 +165,12 @@ public sealed class LedgerApiClient : IDisposable
             category_id = categoryId,
         }, ct);
 
+    public Task<JsonElement> AcceptRecurringAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/recurring/accept", body, ct);
+
+    public Task<JsonElement> GetCashflowReportAsync(int days = 30, CancellationToken ct = default)
+        => GetJsonAsync($"api/reports/cashflow?days={days}", ct);
+
     public Task<JsonElement> GetFeeSummaryAsync(int days = 365, CancellationToken ct = default)
     {
         var q = $"api/fees/summary?days={days}";

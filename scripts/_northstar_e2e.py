@@ -261,6 +261,12 @@ if "promo_brief" in home1:
 else:
     bad("promo_brief", "missing")
 
+r_cf = c.get("/api/reports/cashflow?days=30")
+if r_cf.status_code == 200 and "entities" in r_cf.json():
+    ok("GET /api/reports/cashflow")
+else:
+    bad("cashflow report", f"{r_cf.status_code}")
+
 next1 = home1.get("do_this_next") or {}
 if next1.get("title") and next1.get("reason") and next1.get("button_label"):
     ok("Do this next is complete", next1.get("title")[:60])

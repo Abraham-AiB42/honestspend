@@ -24,14 +24,26 @@ def build_fee_brief(
     scan = scan_fees(session, days=days, limit=20, as_of=as_of, profile_id=profile_id)
     count = int(scan.get("count") or 0)
     total = scan.get("total_abs") or "0"
+    items: list[dict[str, Any]] = []
     samples: list[str] = []
-    for f in (scan.get("candidates") or [])[:4]:
-        if isinstance(f, dict):
-            payee = f.get("payee") or "Fee"
-            amt = f.get("abs_amount") or f.get("amount") or ""
-            samples.append(f"{payee} · ${amt}")
-        else:
-            samples.append(str(f))
+    for f in (scan.get("candidates") or [])[:8]:
+        if not isinstance(f, dict):
+            continue
+        payee = f.get("payee") or "Fee"
+        amt = f.get("abs_amount") or f.get("amount") or ""
+        line = f"{payee} · ${amt}"
+        samples.append(line)
+        items.append(
+            {
+                "transaction_id": f.get("transaction_id"),
+                "payee": payee,
+                "amount": f.get("amount"),
+                "abs_amount": str(amt),
+                "txn_date": f.get("txn_date"),
+                "reason": f.get("reason"),
+                "label": line,
+            }
+        )
 
     if count <= 0:
         return {
@@ -43,6 +55,7 @@ def build_fee_brief(
             "count": 0,
             "total_abs": "0",
             "samples": [],
+            "items": [],
             "needs_attention": False,
             "days": days,
         }
@@ -56,6 +69,7 @@ def build_fee_brief(
         "count": count,
         "total_abs": str(total),
         "samples": samples,
+        "items": items,
         "needs_attention": True,
         "days": days,
     }

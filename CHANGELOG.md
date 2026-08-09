@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 — One-tap bills/fees + cashflow report
+
+- **Add this bill** from recurring suggestions (`POST /api/recurring/accept`)
+- **Fee check** Yes fee / Not a fee / Skip on Home
+- **`GET /api/reports/cashflow`** + Full books **Reports** page (by entity)
+
 ## 0.8.0 — Dream H1 live books + month-close
 
 - **`docs/DREAM_ROADMAP.md`** — Excel+CK+QB+TT+Rocket Money *jobs* plan

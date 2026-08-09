@@ -181,3 +181,114 @@ def detect_recurring(
         ),
         "needs_attention": len(top) > 0,
     }
+
+
+def accept_recurring_suggestion(
+    session: Session,
+    *,
+    name: str,
+    amount: Decimal | str,
+    cadence: str = "monthly",
+    next_date: str | date | None = None,
+    profile_id: int | None = None,
+    account_id: int | None = None,
+) -> dict[str, Any]:
+    """Create a scheduled expense from a detected recurring pattern."""
+    from financial_os.db import Account, Profile
+
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("name required")
+    amt = -abs(_d(amount))
+    if amt >= ZERO:
+        raise ValueError("amount must be non-zero expense")
+    cad = (cadence or "monthly").lower()
+    if cad not in ("weekly", "biweekly", "semimonthly", "monthly", "yearly"):
+        cad = "monthly"
+
+    if profile_id is None:
+        personal = session.query(Profile).filter(Profile.slug == "personal").first()
+        if not personal:
+            raise ValueError("No personal profile")
+        profile_id = personal.id
+    elif not session.get(Profile, profile_id):
+        raise ValueError("Profile not found")
+
+    if account_id is None:
+        cash = (
+            session.query(Account)
+            .filter(
+                Account.profile_id == profile_id,
+                Account.archived_at.is_(None),
+            )
+            .filter(
+                (Account.kind.in_(("checking", "cash", "savings")))
+                | (Account.is_cash_for_ifpp.is_(True))
+            )
+            .order_by(Account.id)
+            .first()
+        )
+        account_id = cash.id if cash else None
+    elif account_id is not None:
+        acct = session.get(Account, account_id)
+        if not acct or acct.profile_id != profile_id:
+            raise ValueError("account_id must belong to profile")
+
+    if next_date is None:
+        nxt = date.today() + timedelta(days=30 if cad == "monthly" else 7)
+    elif isinstance(next_date, date):
+        nxt = next_date
+    else:
+        nxt = date.fromisoformat(str(next_date)[:10])
+
+    # Idempotent by name + profile
+    existing = (
+        session.query(ScheduledItem)
+        .filter(
+            ScheduledItem.profile_id == profile_id,
+            ScheduledItem.active.is_(True),
+            ScheduledItem.name == name,
+        )
+        .first()
+    )
+    if existing:
+        existing.amount = amt
+        existing.cadence = cad
+        existing.next_date = nxt
+        existing.account_id = account_id or existing.account_id
+        session.flush()
+        return {
+            "ok": True,
+            "created": False,
+            "updated": True,
+            "scheduled_id": existing.id,
+            "name": existing.name,
+            "amount": str(existing.amount),
+            "cadence": existing.cadence,
+            "next_date": existing.next_date.isoformat(),
+        }
+
+    row = ScheduledItem(
+        profile_id=profile_id,
+        account_id=account_id,
+        name=name[:128],
+        amount=amt,
+        next_date=nxt,
+        cadence=cad,
+        certainty="expected",
+        kind="expense",
+        notes="Added from recurring detection",
+        active=True,
+    )
+    session.add(row)
+    session.flush()
+    return {
+        "ok": True,
+        "created": True,
+        "updated": False,
+        "scheduled_id": row.id,
+        "name": row.name,
+        "amount": str(row.amount),
+        "cadence": row.cadence,
+        "next_date": row.next_date.isoformat(),
+    }

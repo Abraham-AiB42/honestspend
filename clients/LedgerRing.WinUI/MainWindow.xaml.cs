@@ -307,6 +307,7 @@ public sealed partial class MainWindow : Window
             case "buy": NavFrame.Navigate(typeof(BuyPage)); break;
             case "taxvault": NavFrame.Navigate(typeof(TaxVaultPage)); break;
             case "tax": NavFrame.Navigate(typeof(TaxPage)); break;
+            case "reports": NavFrame.Navigate(typeof(ReportsPage)); break;
             case "intermix": NavFrame.Navigate(typeof(IntermixPage)); break;
             case "about": NavFrame.Navigate(typeof(AboutPage)); break;
         }

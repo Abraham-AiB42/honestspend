@@ -84,9 +84,13 @@
                         <TextBlock Opacity="0.7" Text="Fee check" />
                         <TextBlock x:Name="FeeTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock x:Name="FeeReason" Opacity="0.85" TextWrapping="Wrap" />
-                        <ItemsControl x:Name="FeeSamples" />
-                        <Button Content="Review fees" HorizontalAlignment="Left"
-                                Click="Fees_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock x:Name="FeeItemLabel" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="Yes, a fee" Click="FeeConfirm_Click" Style="{StaticResource AccentButtonStyle}" />
+                            <Button Content="Not a fee" Click="FeeDismiss_Click" />
+                            <Button Content="Skip" Click="FeeSkip_Click" />
+                        </StackPanel>
+                        <TextBlock x:Name="FeeMsg" Opacity="0.8" />
                     </StackPanel>
                 </Border>
 
@@ -98,9 +102,14 @@
                         <TextBlock Opacity="0.7" Text="Possible bills" />
                         <TextBlock x:Name="RecurringTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock x:Name="RecurringReason" Opacity="0.85" TextWrapping="Wrap" />
-                        <ItemsControl x:Name="RecurringList" />
-                        <Button Content="Add a bill" HorizontalAlignment="Left"
-                                Click="Recurring_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock x:Name="RecurringItemLabel" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="Add this bill" Click="RecurringAccept_Click"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            <Button Content="Skip" Click="RecurringSkip_Click" />
+                            <Button Content="Add manually" Click="Recurring_Click" />
+                        </StackPanel>
+                        <TextBlock x:Name="RecurringMsg" Opacity="0.8" />
                     </StackPanel>
                 </Border>
 

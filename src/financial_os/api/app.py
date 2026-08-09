@@ -1377,6 +1377,45 @@ def recurring_suggestions(
     return detect_recurring(db, profile_id=profile_id, lookback_days=lookback_days)
 
 
+class RecurringAcceptIn(BaseModel):
+    name: str
+    amount: Decimal  # expense magnitude; sign forced negative
+    cadence: str = "monthly"
+    next_date: date | None = None
+    profile_id: int | None = None
+    account_id: int | None = None
+
+
+@app.post("/api/recurring/accept")
+def recurring_accept(body: RecurringAcceptIn, db: Session = Depends(get_db)):
+    """One-tap: add detected pattern as scheduled bill."""
+    from financial_os.services.recurring_detect import accept_recurring_suggestion
+
+    try:
+        return accept_recurring_suggestion(
+            db,
+            name=body.name,
+            amount=body.amount,
+            cadence=body.cadence,
+            next_date=body.next_date,
+            profile_id=body.profile_id,
+            account_id=body.account_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/reports/cashflow")
+def reports_cashflow(
+    days: int = Query(30, ge=7, le=366),
+    db: Session = Depends(get_db),
+):
+    """Cash flow by entity (dream H2-A)."""
+    from financial_os.services.reports import cashflow_by_entity
+
+    return cashflow_by_entity(db, days=days)
+
+
 @app.get("/api/home/month-close")
 def home_month_close(
     profile_id: Optional[int] = None,

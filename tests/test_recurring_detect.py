@@ -54,3 +54,16 @@ def test_detect_monthly_subscription(tmp_path):
         names = " ".join(x["name"].upper() for x in out["suggestions"])
         assert "NETFLIX" in names
         assert out["needs_attention"] is True
+        sug = out["suggestions"][0]
+        from financial_os.services.recurring_detect import accept_recurring_suggestion
+
+        acc = accept_recurring_suggestion(
+            s,
+            name=sug["name"],
+            amount=sug["amount_abs"],
+            cadence=sug["cadence"],
+            next_date=sug.get("suggested_next_date"),
+            profile_id=personal.id,
+        )
+        assert acc["ok"] is True
+        assert acc["created"] is True

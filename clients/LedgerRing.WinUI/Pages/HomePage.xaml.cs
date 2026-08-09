@@ -19,6 +19,10 @@ public sealed partial class HomePage : Page
     private int? _promoAccountId;
     private string _monthCloseAction = "hold";
     private int? _monthCloseAccountId;
+    private readonly List<(int TxnId, string Label)> _feeItems = new();
+    private int _feeIdx;
+    private readonly List<JsonElement> _recurringItems = new();
+    private int _recurringIdx;
 
     public HomePage()
     {
@@ -153,43 +157,47 @@ public sealed partial class HomePage : Page
                 BooksCard.Visibility = Visibility.Collapsed;
             }
 
-            // Fee inbox (dream H1-C2)
+            // Fee inbox (dream H1-C2) — confirm / dismiss one at a time
+            _feeItems.Clear();
+            _feeIdx = 0;
+            FeeMsg.Text = "";
             if (_home.TryGetProperty("fee_brief", out var fee) && fee.ValueKind == JsonValueKind.Object
                 && fee.TryGetProperty("needs_attention", out var fna) && fna.ValueKind == JsonValueKind.True)
             {
                 FeeCard.Visibility = Visibility.Visible;
                 FeeTitle.Text = JsonUi.Str(fee, "title");
                 FeeReason.Text = JsonUi.Str(fee, "reason");
-                var fSamples = new List<string>();
-                if (fee.TryGetProperty("samples", out var fs) && fs.ValueKind == JsonValueKind.Array)
+                if (fee.TryGetProperty("items", out var fi) && fi.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var s in fs.EnumerateArray())
+                    foreach (var it in fi.EnumerateArray())
                     {
-                        var t = s.GetString();
-                        if (!string.IsNullOrEmpty(t)) fSamples.Add("· " + t);
+                        if (it.TryGetProperty("transaction_id", out var tid) && tid.ValueKind == JsonValueKind.Number)
+                            _feeItems.Add((tid.GetInt32(), JsonUi.Str(it, "label", JsonUi.Str(it, "payee"))));
                     }
                 }
-                FeeSamples.ItemsSource = fSamples;
+                ShowFeeItem();
             }
             else
             {
                 FeeCard.Visibility = Visibility.Collapsed;
             }
 
-            // Recurring suggestions (dream H1-A2)
+            // Recurring suggestions — one-tap add
+            _recurringItems.Clear();
+            _recurringIdx = 0;
+            RecurringMsg.Text = "";
             if (_home.TryGetProperty("recurring_suggestions", out var rec) && rec.ValueKind == JsonValueKind.Object
                 && rec.TryGetProperty("needs_attention", out var rna) && rna.ValueKind == JsonValueKind.True)
             {
                 RecurringCard.Visibility = Visibility.Visible;
                 RecurringTitle.Text = JsonUi.Str(rec, "title");
                 RecurringReason.Text = JsonUi.Str(rec, "reason");
-                var rLines = new List<string>();
                 if (rec.TryGetProperty("suggestions", out var rs) && rs.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var s in rs.EnumerateArray().Take(5))
-                        rLines.Add($"· {JsonUi.Str(s, "name")} · ${JsonUi.Str(s, "amount_abs")}/{JsonUi.Str(s, "cadence")}");
+                    foreach (var s in rs.EnumerateArray())
+                        _recurringItems.Add(s.Clone());
                 }
-                RecurringList.ItemsSource = rLines;
+                ShowRecurringItem();
             }
             else
             {
@@ -353,11 +361,109 @@ public sealed partial class HomePage : Page
         DoNext_Click(sender, e);
     }
 
-    private void Fees_Click(object sender, RoutedEventArgs e)
+    private void ShowFeeItem()
     {
-        // Full books Fees surface is capital-desk/review path; use Review + brief for now
-        _nextAction = "fees";
-        DoNext_Click(sender, e);
+        if (_feeIdx >= _feeItems.Count)
+        {
+            FeeItemLabel.Text = "Queue clear.";
+            return;
+        }
+        var (id, label) = _feeItems[_feeIdx];
+        FeeItemLabel.Text = $"{_feeIdx + 1}/{_feeItems.Count}: {label}";
+    }
+
+    private async void FeeConfirm_Click(object sender, RoutedEventArgs e)
+        => await FeeActAsync("mark_fee");
+
+    private async void FeeDismiss_Click(object sender, RoutedEventArgs e)
+        => await FeeActAsync("dismiss");
+
+    private void FeeSkip_Click(object sender, RoutedEventArgs e)
+    {
+        _feeIdx++;
+        if (_feeIdx >= _feeItems.Count)
+            FeeCard.Visibility = Visibility.Collapsed;
+        else
+            ShowFeeItem();
+    }
+
+    private async Task FeeActAsync(string action)
+    {
+        ErrorBar.IsOpen = false;
+        if (_feeIdx >= _feeItems.Count) return;
+        try
+        {
+            var id = _feeItems[_feeIdx].TxnId;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.ConfirmFeeAsync(id, action);
+            FeeMsg.Text = action == "mark_fee" ? "Marked as fee." : "Dismissed.";
+            _feeIdx++;
+            if (_feeIdx >= _feeItems.Count)
+                await RefreshAsync();
+            else
+                ShowFeeItem();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void ShowRecurringItem()
+    {
+        if (_recurringIdx >= _recurringItems.Count)
+        {
+            RecurringItemLabel.Text = "Queue clear.";
+            return;
+        }
+        var s = _recurringItems[_recurringIdx];
+        RecurringItemLabel.Text =
+            $"{_recurringIdx + 1}/{_recurringItems.Count}: {JsonUi.Str(s, "name")} · " +
+            $"${JsonUi.Str(s, "amount_abs")}/{JsonUi.Str(s, "cadence")}";
+    }
+
+    private async void RecurringAccept_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        if (_recurringIdx >= _recurringItems.Count) return;
+        try
+        {
+            var s = _recurringItems[_recurringIdx];
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var nextRaw = JsonUi.Str(s, "suggested_next_date", "");
+            var body = new Dictionary<string, object?>
+            {
+                ["name"] = JsonUi.Str(s, "name"),
+                ["amount"] = decimal.TryParse(JsonUi.Str(s, "amount_abs"), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var a) ? a : 0m,
+                ["cadence"] = JsonUi.Str(s, "cadence", "monthly"),
+                ["next_date"] = string.IsNullOrEmpty(nextRaw) || nextRaw == "—" ? null : nextRaw,
+                ["profile_id"] = AppState.SelectedProfileId,
+            };
+            var res = await api.AcceptRecurringAsync(body);
+            RecurringMsg.Text = $"Added · {JsonUi.Str(res, "name")} · {JsonUi.Str(res, "cadence")}";
+            _recurringIdx++;
+            if (_recurringIdx >= _recurringItems.Count)
+                await RefreshAsync();
+            else
+                ShowRecurringItem();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void RecurringSkip_Click(object sender, RoutedEventArgs e)
+    {
+        _recurringIdx++;
+        if (_recurringIdx >= _recurringItems.Count)
+            RecurringCard.Visibility = Visibility.Collapsed;
+        else
+            ShowRecurringItem();
     }
 
     private void Recurring_Click(object sender, RoutedEventArgs e)

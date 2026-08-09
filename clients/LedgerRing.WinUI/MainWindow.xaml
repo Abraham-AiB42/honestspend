@@ -159,6 +159,11 @@
                         <FontIcon Glyph="&#xE8A1;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Reports" Tag="reports">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Intermix" Tag="intermix">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8AB;" />
