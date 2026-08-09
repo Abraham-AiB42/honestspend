@@ -182,6 +182,27 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> QuickScenarioAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/scenarios/quick", body, ct);
 
+    public Task<JsonElement> ListScenariosAsync(CancellationToken ct = default)
+    {
+        var q = "api/scenarios";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> RunScenarioAsync(int scenarioId, CancellationToken ct = default)
+        => PostJsonAsync($"api/scenarios/{scenarioId}/run", new { }, ct);
+
+    public async Task DeleteScenarioAsync(int scenarioId, CancellationToken ct = default)
+    {
+        var r = await _http.DeleteAsync($"api/scenarios/{scenarioId}", ct);
+        if (!r.IsSuccessStatusCode)
+        {
+            var body = await r.Content.ReadAsStringAsync(ct);
+            throw new HttpRequestException($"{(int)r.StatusCode} api/scenarios/{scenarioId}: {body}");
+        }
+    }
+
     public Task<JsonElement> GetFeeSummaryAsync(int days = 365, CancellationToken ct = default)
     {
         var q = $"api/fees/summary?days={days}";

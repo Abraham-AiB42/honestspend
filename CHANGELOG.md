@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.0 — Liquidity OS
+
+Local multi-entity **liquidity OS**: Safe to spend · Simple open-rarely · Full books · CSV/Plaid path · month-close · tax-year prep · scenarios · reports.
+
+- **What-if scenarios** Full books page (list / run / delete / quick save)
+- **`scripts/_dogfood_e2e.py`** — RC path A automated household journey  
+- **`docs/RELEASE_1.0.0.md`** — is / isn’t  
+- Grade-A bar includes dogfood + 1.0 docs  
+
+See [VERSIONING.md](docs/VERSIONING.md). Not a bureau, not e-file, not payroll.
+
 ## 0.9.1 — Version honesty (pre-1.0 freeze)
 
 - **[`docs/VERSIONING.md`](docs/VERSIONING.md)** — feature tags vs ~65% dream / **0.6.5-class** maturity  

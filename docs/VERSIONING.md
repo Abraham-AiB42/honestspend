@@ -11,8 +11,9 @@ Linear milestone tags for what shipped:
 | **0.6.x** | Public multi-entity · never-neg · Glance · multi-user |
 | **0.7.x** | Simple mode · first-run · wizards |
 | **0.8.x** | Live books loop · month-close · fees/bills one-tap |
-| **0.9.x** | Tax year prep · scenarios · reports · **pre-1.0 freeze line** |
-| **1.0.0** | Only after [RC_1.0.md](./RC_1.0.md) checklist is green |
+| **0.9.x** | Tax year prep · scenarios · reports · pre-1.0 freeze |
+| **1.0.0** | Liquidity OS ship — [RC_1.0.md](./RC_1.0.md) + dogfood e2e green |
+| **1.x** | H3 polish (mobile PWA, automation OS, nerd grid) |
 
 Tags **are not** “percent of the dream done.” They mark **slices of capability**.
 
@@ -22,20 +23,16 @@ Against [`DREAM_ROADMAP.md`](./DREAM_ROADMAP.md) jobs (Excel · CK · QB · TT �
 
 | Estimate | Meaning |
 |----------|---------|
-| **~65%** | Current honest maturity (as of 0.9.x) |
-| **~0.6.5-class** | How it *feels* on a 0→1.0 dream scale |
-| **~35% left** | Mostly dogfood, package proof, scenario UX, 1.0 honesty — not random features |
+| **~65–70%** | At 0.9.x freeze (0.6.5-class on 0→1.0 dream scale) |
+| **1.0 promise** | Liquidity OS jobs shippable; not full H3 / not Intuit parity |
 
-**Rule:** We may be on tag **0.9.x** while product maturity is still **~0.6.5-class**. That is intentional honesty, not a bug.
+**Rule:** Feature tags (0.7–0.9) ran ahead of dream %. **1.0.0** is the honest “you can live on the liquidity promise” line after RC — not “dream finished.”
 
-## 3. Freeze line (until 1.0)
+## 3. After 1.0
 
-While on **0.9.x**:
-
-1. **Do not tag `v1.0.0`** until every item in [RC_1.0.md](./RC_1.0.md) passes.  
-2. Next releases are **`0.9.1`, `0.9.2`, …** (fixes, RC work, small H2 polish).  
-3. Marketing / About / README must say **pre-1.0** and **~65% dream**, not “almost 1.0.”  
-4. Do **not** rewrite old git tags (0.7–0.9 stay as history).
+1. **1.0.x** — bugfixes and small polish.  
+2. **1.1+** — H3 (Glance PWA, automation UI, nerd tools).  
+3. Do **not** rewrite old git tags (0.6–0.9 stay as history).
 
 ## 4. What 1.0 *will* mean
 

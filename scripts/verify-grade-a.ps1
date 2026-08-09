@@ -54,11 +54,11 @@ Step "private-name gate" {
 Step "version sync" {
     $init = Get-Content (Join-Path $Root "src\financial_os\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '0\.9\.1') { throw "__init__.py not 0.9.1" }
-    if ($pyproj -notmatch '0\.9\.1') { throw "pyproject.toml not 0.9.1" }
+    if ($init -notmatch '1\.0\.0') { throw "__init__.py not 1.0.0" }
+    if ($pyproj -notmatch '1\.0\.0') { throw "pyproject.toml not 1.0.0" }
     $iss = Get-Content (Join-Path $Root "packaging\LedgerRing.iss") -Raw
-    if ($iss -notmatch '0\.9\.1') { throw "LedgerRing.iss not 0.9.1" }
-    Write-Host "version 0.9.1 consistent"
+    if ($iss -notmatch '1\.0\.0') { throw "LedgerRing.iss not 1.0.0" }
+    Write-Host "version 1.0.0 consistent"
 }
 
 Step "north-star surface files" {
@@ -71,7 +71,9 @@ Step "north-star surface files" {
         "clients\LedgerRing.WinUI\Pages\AddHubPage.xaml",
         "clients\LedgerRing.WinUI\Pages\MoneyWizardPage.xaml",
         "clients\LedgerRing.WinUI\Helpers\UiCopy.cs",
+        "clients\LedgerRing.WinUI\Pages\ScenariosPage.xaml",
         "scripts\_northstar_e2e.py",
+        "scripts\_dogfood_e2e.py",
         "scripts\package-release.ps1",
         "scripts\prepare-engine-bundle.ps1"
     )
@@ -94,6 +96,17 @@ if (-not $SkipPackageLayout) {
         if ($inst -notmatch "engine\\") { throw "INSTALL.md missing engine layout" }
         Write-Host "install + package path documented"
     }
+}
+
+Step "dogfood e2e (RC path A)" {
+    & $py (Join-Path $Root "scripts\_dogfood_e2e.py")
+}
+
+Step "1.0 release docs" {
+    foreach ($f in @("docs\RELEASE_1.0.0.md", "docs\RC_1.0.md", "docs\VERSIONING.md")) {
+        if (-not (Test-Path (Join-Path $Root $f))) { throw "missing $f" }
+    }
+    Write-Host "1.0 docs present"
 }
 
 Write-Host ""

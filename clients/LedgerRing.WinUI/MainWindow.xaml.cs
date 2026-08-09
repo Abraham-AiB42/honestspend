@@ -305,6 +305,7 @@ public sealed partial class MainWindow : Window
             case "bills": NavFrame.Navigate(typeof(BillsPage)); break;
             case "credit": NavFrame.Navigate(typeof(CreditPage)); break;
             case "buy": NavFrame.Navigate(typeof(BuyPage)); break;
+            case "scenarios": NavFrame.Navigate(typeof(ScenariosPage)); break;
             case "taxvault": NavFrame.Navigate(typeof(TaxVaultPage)); break;
             case "tax": NavFrame.Navigate(typeof(TaxPage)); break;
             case "reports": NavFrame.Navigate(typeof(ReportsPage)); break;

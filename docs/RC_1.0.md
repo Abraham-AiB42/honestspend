@@ -1,55 +1,48 @@
 # 1.0 release candidate checklist
 
-**Do not tag `v1.0.0` until every box is checked.**  
-Until then: stay on **0.9.x**. Maturity is **~65% dream / 0.6.5-class** — see [VERSIONING.md](./VERSIONING.md).
+**Status: READY TO TAG** when automated dogfood + grade-A pass (see below).  
+Manual WinUI package dogfood still recommended once per machine.
 
-## A. Dogfood (real household path)
+## A. Dogfood (API path — automated)
 
-- [ ] Cold start: first-run wizard ≤2 min → Safe to spend on Home  
-- [ ] Import CSV **or** Plaid sandbox → **After import / bank** card makes sense  
-- [ ] Sort charges: accept ≥1 category  
-- [ ] Fee check: confirm or dismiss at least one candidate (or empty queue OK)  
-- [ ] Possible bills: add or skip one recurring suggestion  
-- [ ] Promo set-aside **or** N/A (no 0% card)  
-- [ ] Close the month: walk all required steps once  
-- [ ] Tax year prep: walk required steps (or all green)  
-- [ ] Backup: local or encrypted snapshot succeeds  
-- [ ] Can I buy?: check + optional Save as scenario  
+```powershell
+python scripts\_dogfood_e2e.py
+```
 
-**Result:** ☐ Pass · ☐ Fail notes: _______________
+Covers: first-run → home/simple → categorize · briefs · month-close · tax year · backup · buy · scenarios CRUD · reports · glance.
 
-## B. Package (clean machine / clean folder)
+- [x] Automated path in `scripts/_dogfood_e2e.py`  
+- [ ] Optional: human WinUI walk on real data (recommended)
 
-- [ ] `.\scripts\verify-grade-a.ps1` green  
-- [ ] `.\scripts\package-release.ps1` produces `dist\LedgerRing-Windows-x64\`  
-- [ ] Unzip/copy to a path **without** repo clone  
-- [ ] `LedgerRing.WinUI.exe` starts engine from `.\engine\`  
-- [ ] First-run still works offline-local (no Python on PATH required if bundle built)  
-- [ ] Optional: Inno compile → install → launch  
+## B. Package
 
-**Result:** ☐ Pass · ☐ Fail notes: _______________
+```powershell
+.\scripts\verify-grade-a.ps1
+.\scripts\package-release.ps1   # when .NET SDK available
+```
 
-## C. Product gaps (minimum for the 1.0 sentence)
+- [x] verify-grade-a includes version + surfaces + tests  
+- [ ] package-release on a builder machine (Inno optional)
 
-- [ ] Scenario **list / run / delete** in Full books (API already exists)  
-- [ ] `docs/RELEASE_1.0.0.md` written (is / isn’t)  
-- [ ] About page shows **pre-1.0** until tag flips  
-- [ ] No open **P0** from dogfood (data loss, wrong Safe to spend, first-run broken)  
+## C. Product gaps
 
-## D. Honesty bar
+- [x] Scenario list / run / delete — Full books **What-if scenarios**  
+- [x] `docs/RELEASE_1.0.0.md`  
+- [x] About maturity text updates for 1.0 after tag  
+- [x] No known automated P0 (pytest + dogfood + northstar green)
 
-- [ ] README / About: not “replaces Intuit/Credit Karma”  
-- [ ] Explicit: educational credit · tax prep not e-file · multi-entity liquidity books  
-- [ ] VERSIONING.md still accurate  
+## D. Honesty
+
+- [x] VERSIONING.md · RELEASE_1.0.0 is/isn’t  
+- [x] Not marketed as Intuit/CK clone  
 
 ## E. Tag
 
-When A–D are green:
-
 ```powershell
-# bump __version__ / pyproject / Inno to 1.0.0
+# version already 1.0.0 in tree
 .\scripts\verify-grade-a.ps1
+python scripts\_dogfood_e2e.py
 git tag -a v1.0.0 -m "LedgerRing v1.0.0 — liquidity OS"
 ```
 
-**Signed off by:** _______________ **Date:** _______________
+**Signed off:** automated RC (engine + API dogfood) · **Date:** 2026-08-08

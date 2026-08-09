@@ -149,6 +149,11 @@
                         <FontIcon Glyph="&#xE719;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="What-if scenarios" Tag="scenarios">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Tax vault" Tag="taxvault">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE825;" />

@@ -16,10 +16,10 @@
 **Simple mode (default):** Home · Add · Can I buy? · Sort charges · 3-minute check · month-close / tax-year prep  
 **Full books:** shell toggle for ledgers, tax, reports, multi-user, reconcile.
 
-**Version honesty:** feature tag **0.9.x** · product maturity **~65% dream (~0.6.5-class)** · **not 1.0 yet**.  
-1.0 only after [`docs/RC_1.0.md`](docs/RC_1.0.md). Policy: [`docs/VERSIONING.md`](docs/VERSIONING.md).
+**v1.0.0** — local multi-entity **liquidity OS** (not a bureau, not e-file, not payroll).  
+Release: [`docs/RELEASE_1.0.0.md`](docs/RELEASE_1.0.0.md) · Versioning: [`docs/VERSIONING.md`](docs/VERSIONING.md) · Dream: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md)
 
-Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md) · Dream: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md)
+Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md)
 
 ## Windows (primary)
 

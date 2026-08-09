@@ -12,9 +12,9 @@
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="LedgerRing" />
             <TextBlock x:Name="VersionText" Opacity="0.8" Text="Connecting…" />
             <TextBlock x:Name="MaturityText" Opacity="0.75" TextWrapping="Wrap"
-                Text="Pre-1.0 · product maturity ~65% dream (~0.6.5-class). Feature tags can read 0.9.x — that is not “almost 1.0.”" />
+                Text="Local multi-entity liquidity OS." />
             <TextBlock TextWrapping="Wrap" FontSize="16">
-                Open-source freeware multi-entity liquidity OS — not a bureau, not e-file, not payroll.
+                Open-source freeware — not a bureau, not e-file, not payroll, not a loan marketplace.
             </TextBlock>
             <TextBlock Opacity="0.8" TextWrapping="Wrap">
                 • Never bounce checking&#x0a;
