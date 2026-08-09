@@ -150,6 +150,49 @@ public sealed partial class HomePage : Page
                 BooksCard.Visibility = Visibility.Collapsed;
             }
 
+            // Fee inbox (dream H1-C2)
+            if (_home.TryGetProperty("fee_brief", out var fee) && fee.ValueKind == JsonValueKind.Object
+                && fee.TryGetProperty("needs_attention", out var fna) && fna.ValueKind == JsonValueKind.True)
+            {
+                FeeCard.Visibility = Visibility.Visible;
+                FeeTitle.Text = JsonUi.Str(fee, "title");
+                FeeReason.Text = JsonUi.Str(fee, "reason");
+                var fSamples = new List<string>();
+                if (fee.TryGetProperty("samples", out var fs) && fs.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var s in fs.EnumerateArray())
+                    {
+                        var t = s.GetString();
+                        if (!string.IsNullOrEmpty(t)) fSamples.Add("· " + t);
+                    }
+                }
+                FeeSamples.ItemsSource = fSamples;
+            }
+            else
+            {
+                FeeCard.Visibility = Visibility.Collapsed;
+            }
+
+            // Recurring suggestions (dream H1-A2)
+            if (_home.TryGetProperty("recurring_suggestions", out var rec) && rec.ValueKind == JsonValueKind.Object
+                && rec.TryGetProperty("needs_attention", out var rna) && rna.ValueKind == JsonValueKind.True)
+            {
+                RecurringCard.Visibility = Visibility.Visible;
+                RecurringTitle.Text = JsonUi.Str(rec, "title");
+                RecurringReason.Text = JsonUi.Str(rec, "reason");
+                var rLines = new List<string>();
+                if (rec.TryGetProperty("suggestions", out var rs) && rs.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var s in rs.EnumerateArray().Take(5))
+                        rLines.Add($"· {JsonUi.Str(s, "name")} · ${JsonUi.Str(s, "amount_abs")}/{JsonUi.Str(s, "cadence")}");
+                }
+                RecurringList.ItemsSource = rLines;
+            }
+            else
+            {
+                RecurringCard.Visibility = Visibility.Collapsed;
+            }
+
             // 3-minute open-rarely ritual
             _ritualNextAction = "hold";
             if (_home.TryGetProperty("three_minute_check", out var ritual) && ritual.ValueKind == JsonValueKind.Object)
@@ -261,6 +304,16 @@ public sealed partial class HomePage : Page
         DoNext_Click(sender, e);
     }
 
+    private void Fees_Click(object sender, RoutedEventArgs e)
+    {
+        // Full books Fees surface is capital-desk/review path; use Review + brief for now
+        _nextAction = "fees";
+        DoNext_Click(sender, e);
+    }
+
+    private void Recurring_Click(object sender, RoutedEventArgs e)
+        => Frame?.Navigate(typeof(MoneyWizardPage), "bill");
+
     private void DoNext_Click(object sender, RoutedEventArgs e)
     {
         switch (_nextAction)
@@ -271,7 +324,15 @@ public sealed partial class HomePage : Page
                 break;
             case "fees":
             case "stop_fees":
+                // Fee candidates live on Full books; Review still useful — show brief text
+                BriefText.Text =
+                    NextReason.Text
+                    + "\n\nTip: Full books → Import history or re-scan after Sort charges. "
+                    + "Confirm fee-like payees so they stop hitting Safe to spend.";
                 Frame?.Navigate(typeof(ReviewPage));
+                break;
+            case "plaid":
+                Frame?.Navigate(typeof(PlaidPage));
                 break;
             case "promo_sink":
             case "promo_balloon":

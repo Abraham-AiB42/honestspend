@@ -48,13 +48,15 @@ def test_home_simple_shape(client: TestClient):
     assert "language" in body
     ritual = body.get("three_minute_check") or {}
     assert ritual.get("title") == "3-minute check"
-    assert ritual.get("total") == 5
-    assert len(ritual.get("steps") or []) == 5
+    assert ritual.get("total", 0) >= 5
+    assert len(ritual.get("steps") or []) >= 5
     assert "done_count" in ritual
     books = body.get("books_brief") or {}
     assert "uncategorized_count" in books
     assert "attention" in books
     assert books.get("title")
+    assert "fee_brief" in body
+    assert "recurring_suggestions" in body
 
 
 def test_wealth_tips_when_safe_surplus(client: TestClient):

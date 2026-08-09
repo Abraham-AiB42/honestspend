@@ -13,6 +13,8 @@
 | **Sort charges** | Plain review queue (accept categories) |
 | **3-minute check** | On Home — open-rarely ritual (safe · charges · fees · promo · bills) |
 | **After import / bank** | `books_brief` — uncategorized · pending · stale Plaid → Sort charges / re-link |
+| **Fee check** | `fee_brief` — fee-like charges last 45d |
+| **Possible bills** | `recurring_suggestions` — repeat charges not yet scheduled |
 
 **Full books** (shell toggle) restores the full nav for month-end / CPA / power users.
 

@@ -225,6 +225,25 @@ if books.get("title") and books.get("attention"):
 else:
     bad("books_brief", str(books)[:120])
 
+fees = home1.get("fee_brief") or {}
+if "needs_attention" in fees and fees.get("title"):
+    ok("fee brief present", fees.get("title")[:40])
+else:
+    bad("fee_brief", str(fees)[:100])
+
+rec = home1.get("recurring_suggestions") or {}
+if "suggestions" in rec:
+    ok("recurring suggestions present", rec.get("title", "")[:40])
+else:
+    bad("recurring_suggestions", str(rec)[:100])
+
+# dedicated API
+r_rec = c.get("/api/recurring/suggestions")
+if r_rec.status_code == 200 and "suggestions" in r_rec.json():
+    ok("GET /api/recurring/suggestions")
+else:
+    bad("recurring API", f"{r_rec.status_code}")
+
 next1 = home1.get("do_this_next") or {}
 if next1.get("title") and next1.get("reason") and next1.get("button_label"):
     ok("Do this next is complete", next1.get("title")[:60])

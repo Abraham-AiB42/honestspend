@@ -1365,6 +1365,18 @@ def home_simple(
     return build_home_simple(db, profile_id=profile_id, scope=scope, mode=mode)
 
 
+@app.get("/api/recurring/suggestions")
+def recurring_suggestions(
+    profile_id: Optional[int] = None,
+    lookback_days: int = Query(180, ge=30, le=400),
+    db: Session = Depends(get_db),
+):
+    """Likely bills/subs from history (confirm before adding)."""
+    from financial_os.services.recurring_detect import detect_recurring
+
+    return detect_recurring(db, profile_id=profile_id, lookback_days=lookback_days)
+
+
 @app.get("/api/payments/candidates")
 def payment_candidates(
     days: int = Query(14, ge=1, le=60),

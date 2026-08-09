@@ -12,7 +12,9 @@ from financial_os.db import Account, Profile, ScheduledItem, Transaction
 from financial_os.services.capital_desk import build_capital_desk
 from financial_os.services.digest import build_digest
 from financial_os.services.ifpp_service import ifpp_to_dict, run_ifpp
+from financial_os.services.fee_brief import build_fee_brief
 from financial_os.services.import_brief import build_import_brief
+from financial_os.services.recurring_detect import detect_recurring
 from financial_os.services.wealth_basics import build_wealth_tips
 
 ZERO = Decimal("0")
@@ -111,15 +113,18 @@ def build_home_simple(
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
-    # Fold uncategorized into 3-min check detail if present
-    if books.get("uncategorized_count"):
-        for step in ritual.get("steps") or []:
-            if step.get("id") == "sort_charges" and not step.get("done"):
-                step["detail"] = (
-                    f"{books['uncategorized_count']} waiting — "
-                    + (books.get("sample_uncategorized") or ["Sort charges"])[0]
-                )
-                break
+    fees = build_fee_brief(
+        session,
+        profile_id=pid if sc == "entity" else None,
+        as_of=as_of,
+    )
+    recurring = detect_recurring(
+        session,
+        profile_id=pid if sc == "entity" else None,
+        as_of=as_of,
+    )
+    # Enrich 3-min check from books + fees + bank health
+    ritual = _enrich_ritual(ritual, books=books, fees=fees)
 
     return {
         "as_of": as_of.isoformat(),
@@ -143,6 +148,8 @@ def build_home_simple(
         "setup": setup,
         "three_minute_check": ritual,
         "books_brief": books,
+        "fee_brief": fees,
+        "recurring_suggestions": recurring,
         "digest_message": dig.get("message"),
         "headline": desk.get("headline"),
         "principles": [
@@ -255,6 +262,94 @@ def _three_minute_check(
         "progress_label": f"{done_n} of {total} done",
         "steps": steps,
     }
+
+
+def _enrich_ritual(
+    ritual: dict[str, Any],
+    *,
+    books: dict[str, Any],
+    fees: dict[str, Any],
+) -> dict[str, Any]:
+    """Fold live-books + fee state into the 3-minute checklist."""
+    steps = list(ritual.get("steps") or [])
+    # Update fees_ok from fee_brief (stronger than digest alone)
+    for step in steps:
+        if step.get("id") == "fees_ok" and fees.get("needs_attention"):
+            step["done"] = False
+            step["title"] = fees.get("title") or step["title"]
+            step["detail"] = fees.get("reason") or step["detail"]
+            step["action"] = "fees"
+        if step.get("id") == "sort_charges" and books.get("uncategorized_count"):
+            step["done"] = False
+            n = books["uncategorized_count"]
+            sample = (books.get("sample_uncategorized") or [""])[0]
+            step["title"] = f"Sort a few charges ({n})"
+            step["detail"] = sample or f"{n} waiting in Sort charges."
+            step["count"] = n
+
+    # Bank health step (Plaid reauth / stale)
+    bank_done = not (
+        books.get("plaid_needs_reauth") or (books.get("plaid_stale") and books.get("plaid_linked"))
+    )
+    if books.get("plaid_linked") or books.get("plaid_needs_reauth"):
+        if books.get("plaid_needs_reauth"):
+            bank_title, bank_detail, bank_action = (
+                "Re-connect bank",
+                "A linked bank login expired.",
+                "plaid",
+            )
+            bank_done = False
+        elif books.get("plaid_stale"):
+            bank_title, bank_detail, bank_action = (
+                "Refresh bank sync",
+                "A linked bank has not synced in 3+ days.",
+                "plaid",
+            )
+            bank_done = False
+        else:
+            bank_title, bank_detail, bank_action = (
+                "Banks linked",
+                "Sync looks current.",
+                "hold",
+            )
+        # Insert after sort_charges if not already present
+        if not any(s.get("id") == "bank_ok" for s in steps):
+            insert_at = next(
+                (i + 1 for i, s in enumerate(steps) if s.get("id") == "sort_charges"),
+                2,
+            )
+            steps.insert(
+                insert_at,
+                {
+                    "id": "bank_ok",
+                    "title": bank_title,
+                    "done": bank_done,
+                    "action": bank_action,
+                    "detail": bank_detail,
+                },
+            )
+        else:
+            for step in steps:
+                if step.get("id") == "bank_ok":
+                    step["title"] = bank_title
+                    step["done"] = bank_done
+                    step["action"] = bank_action
+                    step["detail"] = bank_detail
+
+    done_n = sum(1 for s in steps if s.get("done"))
+    total = len(steps)
+    ritual = dict(ritual)
+    ritual["steps"] = steps
+    ritual["done_count"] = done_n
+    ritual["total"] = total
+    ritual["all_done"] = done_n == total
+    ritual["progress_label"] = f"{done_n} of {total} done"
+    ritual["subtitle"] = (
+        "All clear — you can close the app."
+        if ritual["all_done"]
+        else "Open rarely — tick these and close."
+    )
+    return ritual
 
 
 def _setup_flags(session: Session, profile_id: int | None) -> dict[str, bool]:

@@ -76,6 +76,34 @@
                     </StackPanel>
                 </Border>
 
+                <Border x:Name="FeeCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Fee check" />
+                        <TextBlock x:Name="FeeTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="FeeReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="FeeSamples" />
+                        <Button Content="Review fees" HorizontalAlignment="Left"
+                                Click="Fees_Click" Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="RecurringCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Possible bills" />
+                        <TextBlock x:Name="RecurringTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="RecurringReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="RecurringList" />
+                        <Button Content="Add a bill" HorizontalAlignment="Left"
+                                Click="Recurring_Click" Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                </Border>
+
                 <Border x:Name="RitualCard"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
