@@ -96,4 +96,36 @@ public sealed partial class BuyPage : Page
             ErrorBar.IsOpen = true;
         }
     }
+
+    private async void SaveScenario_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
+            if (amount <= 0)
+                throw new InvalidOperationException("Enter an amount first.");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.QuickScenarioAsync(new
+            {
+                name = $"Buy ${amount:0.00}",
+                amount,
+                on_date = DateTime.Today.ToString("yyyy-MM-dd"),
+                profile_id = AppState.SelectedProfileId,
+                scope = AppState.IfppScope,
+            });
+            var sim = res.TryGetProperty("simulation", out var s) ? s : default;
+            ScenarioMsg.Text =
+                $"Saved scenario · {JsonUi.Str(res.GetProperty("scenario"), "name")}. " +
+                (sim.ValueKind == JsonValueKind.Object ? JsonUi.Str(sim, "message") : "");
+            if (sim.ValueKind == JsonValueKind.Object)
+                SimText.Text = JsonUi.Str(sim, "message");
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
 }

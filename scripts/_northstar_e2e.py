@@ -267,6 +267,23 @@ if r_cf.status_code == 200 and "entities" in r_cf.json():
 else:
     bad("cashflow report", f"{r_cf.status_code}")
 
+if home1.get("tax_year") and home1["tax_year"].get("steps"):
+    ok("tax_year on home", home1["tax_year"].get("progress_label", "")[:40])
+else:
+    bad("tax_year", "missing")
+
+r_ty = c.get("/api/tax/year-checklist")
+if r_ty.status_code == 200:
+    ok("GET /api/tax/year-checklist")
+else:
+    bad("tax year API", str(r_ty.status_code))
+
+r_sc = c.post("/api/scenarios/quick", json={"name": "Northstar buy", "amount": 50})
+if r_sc.status_code == 200 and "scenario" in r_sc.json():
+    ok("POST /api/scenarios/quick")
+else:
+    bad("scenarios quick", r_sc.text[:80])
+
 next1 = home1.get("do_this_next") or {}
 if next1.get("title") and next1.get("reason") and next1.get("button_label"):
     ok("Do this next is complete", next1.get("title")[:60])

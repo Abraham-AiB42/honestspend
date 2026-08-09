@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 — Tax year prep + scenarios + debt report
+
+- **Tax year checklist** on Home + `GET /api/tax/year-checklist` (categorize · vault · packet)
+- **Named scenarios** schema **v10** · `GET/POST /api/scenarios` · quick save from Can I buy?
+- **Debt snapshot** `GET /api/reports/debt` on Reports page
+- Dream H2 slice toward “I live here”
+
 ## 0.8.1 — One-tap bills/fees + cashflow report
 
 - **Add this bill** from recurring suggestions (`POST /api/recurring/accept`)

@@ -264,6 +264,20 @@ class ImportPreset(Base):
     account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
 
 
+class WhatIfScenario(Base):
+    """Named IFPP what-if (extra outflows JSON) — dream H2-D."""
+
+    __tablename__ = "whatif_scenarios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("profiles.id"), nullable=True)
+    scope: Mapped[str] = mapped_column(String(16), default="entity")
+    extra_outflows_json: Mapped[str] = mapped_column(Text, default="[]")
+    notes: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class CategoryRule(Base):
     """Merchant/payee pattern → category. Priority: higher wins first."""
 

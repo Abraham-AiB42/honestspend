@@ -17,6 +17,7 @@ from financial_os.services.import_brief import build_import_brief
 from financial_os.services.month_close import build_month_close
 from financial_os.services.promo_brief import build_promo_brief
 from financial_os.services.recurring_detect import detect_recurring
+from financial_os.services.tax_year import build_tax_year_checklist
 from financial_os.services.wealth_basics import build_wealth_tips
 
 ZERO = Decimal("0")
@@ -135,6 +136,7 @@ def build_home_simple(
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
+    tax_year = build_tax_year_checklist(session, as_of=as_of)
     # Enrich 3-min check from books + fees + bank health
     ritual = _enrich_ritual(ritual, books=books, fees=fees)
 
@@ -164,6 +166,7 @@ def build_home_simple(
         "recurring_suggestions": recurring,
         "promo_brief": promo,
         "month_close": close,
+        "tax_year": tax_year,
         "digest_message": dig.get("message"),
         "headline": desk.get("headline"),
         "principles": [

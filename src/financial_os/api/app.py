@@ -1416,6 +1416,108 @@ def reports_cashflow(
     return cashflow_by_entity(db, days=days)
 
 
+@app.get("/api/reports/debt")
+def reports_debt(
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.reports import debt_snapshot
+
+    return debt_snapshot(db, profile_id=profile_id)
+
+
+@app.get("/api/tax/year-checklist")
+def tax_year_checklist(
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Annual tax handoff prep (not e-file)."""
+    from financial_os.services.tax_year import build_tax_year_checklist
+
+    return build_tax_year_checklist(db, year=year)
+
+
+@app.get("/api/scenarios")
+def scenarios_list(
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.scenarios import list_scenarios
+
+    return list_scenarios(db, profile_id=profile_id)
+
+
+class ScenarioIn(BaseModel):
+    name: str
+    extra_outflows: list[dict] = []
+    profile_id: int | None = None
+    scope: str = "entity"
+    notes: str | None = None
+
+
+@app.post("/api/scenarios")
+def scenarios_create(body: ScenarioIn, db: Session = Depends(get_db)):
+    from financial_os.services.scenarios import create_scenario
+
+    try:
+        return create_scenario(
+            db,
+            name=body.name,
+            extra_outflows=body.extra_outflows,
+            profile_id=body.profile_id,
+            scope=body.scope,
+            notes=body.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/scenarios/{scenario_id}/run")
+def scenarios_run(scenario_id: int, db: Session = Depends(get_db)):
+    from financial_os.services.scenarios import run_scenario
+
+    try:
+        return run_scenario(db, scenario_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+@app.delete("/api/scenarios/{scenario_id}")
+def scenarios_delete(scenario_id: int, db: Session = Depends(get_db)):
+    from financial_os.services.scenarios import delete_scenario
+
+    try:
+        return delete_scenario(db, scenario_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
+class ScenarioQuickIn(BaseModel):
+    name: str = "What-if purchase"
+    amount: Decimal
+    on_date: date | None = None
+    profile_id: int | None = None
+    scope: str = "entity"
+
+
+@app.post("/api/scenarios/quick")
+def scenarios_quick(body: ScenarioQuickIn, db: Session = Depends(get_db)):
+    """Save + run a one-shot outflow scenario."""
+    from financial_os.services.scenarios import quick_scenario_from_amount
+
+    try:
+        return quick_scenario_from_amount(
+            db,
+            name=body.name,
+            amount=body.amount,
+            on_date=body.on_date,
+            profile_id=body.profile_id,
+            scope=body.scope,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.get("/api/home/month-close")
 def home_month_close(
     profile_id: Optional[int] = None,

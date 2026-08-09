@@ -19,6 +19,7 @@ public sealed partial class HomePage : Page
     private int? _promoAccountId;
     private string _monthCloseAction = "hold";
     private int? _monthCloseAccountId;
+    private string _taxYearAction = "hold";
     private readonly List<(int TxnId, string Label)> _feeItems = new();
     private int _feeIdx;
     private readonly List<JsonElement> _recurringItems = new();
@@ -248,6 +249,30 @@ public sealed partial class HomePage : Page
                 MonthCloseList.ItemsSource = mLines;
                 var allDone = mc.TryGetProperty("all_done", out var mad) && mad.ValueKind == JsonValueKind.True;
                 MonthCloseBtn.Visibility = allDone ? Visibility.Collapsed : Visibility.Visible;
+            }
+
+            // Tax year prep (H2-B)
+            _taxYearAction = "hold";
+            if (_home.TryGetProperty("tax_year", out var ty) && ty.ValueKind == JsonValueKind.Object)
+            {
+                TaxYearTitle.Text = JsonUi.Str(ty, "title");
+                TaxYearSubtitle.Text = JsonUi.Str(ty, "subtitle");
+                TaxYearProgress.Text = JsonUi.Str(ty, "progress_label");
+                var tLines = new List<string>();
+                if (ty.TryGetProperty("steps", out var ts) && ts.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var st in ts.EnumerateArray())
+                    {
+                        var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
+                        var opt = st.TryGetProperty("optional", out var o) && o.ValueKind == JsonValueKind.True;
+                        tLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")}" + (opt ? " (optional)" : ""));
+                        if (!done && _taxYearAction == "hold" && !opt)
+                            _taxYearAction = JsonUi.Str(st, "action", "hold");
+                    }
+                }
+                TaxYearList.ItemsSource = tLines;
+                var tDone = ty.TryGetProperty("all_done", out var tad) && tad.ValueKind == JsonValueKind.True;
+                TaxYearBtn.Visibility = tDone ? Visibility.Collapsed : Visibility.Visible;
             }
 
             // 3-minute open-rarely ritual
@@ -541,6 +566,25 @@ public sealed partial class HomePage : Page
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void TaxYear_Click(object sender, RoutedEventArgs e)
+    {
+        switch (_taxYearAction)
+        {
+            case "review":
+                Frame?.Navigate(typeof(ReviewPage));
+                break;
+            case "fund_tax_vault":
+                Frame?.Navigate(typeof(TaxVaultPage));
+                break;
+            case "tax_packet":
+                Frame?.Navigate(typeof(TaxPage));
+                break;
+            default:
+                Frame?.Navigate(typeof(TaxPage));
+                break;
         }
     }
 

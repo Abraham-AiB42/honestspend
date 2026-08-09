@@ -47,6 +47,16 @@
                 </StackPanel>
             </Border>
 
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Debt snapshot" />
+                    <TextBlock x:Name="DebtTotals" Opacity="0.9" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="DebtList" />
+                </StackPanel>
+            </Border>
+
             <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="True" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

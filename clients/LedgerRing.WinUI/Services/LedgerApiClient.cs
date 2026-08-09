@@ -171,6 +171,17 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetCashflowReportAsync(int days = 30, CancellationToken ct = default)
         => GetJsonAsync($"api/reports/cashflow?days={days}", ct);
 
+    public Task<JsonElement> GetDebtReportAsync(CancellationToken ct = default)
+    {
+        var q = "api/reports/debt";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> QuickScenarioAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/scenarios/quick", body, ct);
+
     public Task<JsonElement> GetFeeSummaryAsync(int days = 365, CancellationToken ct = default)
     {
         var q = $"api/fees/summary?days={days}";

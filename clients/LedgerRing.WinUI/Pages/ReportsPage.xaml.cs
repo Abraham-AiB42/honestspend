@@ -67,6 +67,28 @@ public sealed partial class ReportsPage : Page
             {
                 FeeText.Text = "Fee summary unavailable.";
             }
+
+            try
+            {
+                var debt = await api.GetDebtReportAsync();
+                DebtTotals.Text =
+                    $"Total {Money(debt, "total_balance")} · {JsonUi.Str(debt, "count")} accounts · " +
+                    $"est. months {JsonUi.Str(debt, "estimated_months", "—")}";
+                var dLines = new List<string>();
+                if (debt.TryGetProperty("debts", out var da) && da.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var d in da.EnumerateArray())
+                        dLines.Add(
+                            $"{JsonUi.Str(d, "name")} · {Money(d, "balance")} · {JsonUi.Str(d, "apr_pct")} · " +
+                            JsonUi.Str(d, "recommendation"));
+                }
+                DebtList.ItemsSource = dLines.Count > 0 ? dLines : new List<string> { "No debts." };
+            }
+            catch
+            {
+                DebtTotals.Text = "Debt snapshot unavailable.";
+                DebtList.ItemsSource = new List<string>();
+            }
         }
         catch (Exception ex)
         {

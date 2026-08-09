@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("lederring.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -157,6 +157,20 @@ def _mig_9_autopay_policy(conn) -> None:
     _exec_ignore(conn, "ALTER TABLE accounts ADD COLUMN autopay_policy VARCHAR(32)")
 
 
+def _mig_10_whatif_scenarios(conn) -> None:
+    _exec_ignore(
+        conn,
+        "CREATE TABLE IF NOT EXISTS whatif_scenarios ("
+        "id INTEGER PRIMARY KEY, "
+        "name VARCHAR(128) NOT NULL, "
+        "profile_id INTEGER, "
+        "scope VARCHAR(16) DEFAULT 'entity', "
+        "extra_outflows_json TEXT DEFAULT '[]', "
+        "notes VARCHAR(512), "
+        "created_at DATETIME)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -168,6 +182,7 @@ MIGRATIONS: dict[int, Callable] = {
     7: _mig_7_import_presets,
     8: _mig_8_audit_events,
     9: _mig_9_autopay_policy,
+    10: _mig_10_whatif_scenarios,
 }
 
 

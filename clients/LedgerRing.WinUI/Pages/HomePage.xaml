@@ -141,6 +141,23 @@
                     </StackPanel>
                 </Border>
 
+                <Border x:Name="TaxYearCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Tax year prep" />
+                        <TextBlock x:Name="TaxYearTitle" FontWeight="SemiBold" FontSize="18" />
+                        <TextBlock x:Name="TaxYearSubtitle" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:Name="TaxYearProgress" FontWeight="SemiBold" />
+                        <ItemsControl x:Name="TaxYearList" />
+                        <Button x:Name="TaxYearBtn" Content="Do next tax step" HorizontalAlignment="Left"
+                                Click="TaxYear_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock Opacity="0.6" FontSize="12" TextWrapping="Wrap"
+                            Text="Prep for TurboTax/CPA — not e-file. Educational only." />
+                    </StackPanel>
+                </Border>
+
                 <Border x:Name="RitualCard"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

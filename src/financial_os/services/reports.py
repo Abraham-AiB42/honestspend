@@ -109,3 +109,55 @@ def fee_year_summary_report(
     from financial_os.services.fee_scan import fee_summary
 
     return fee_summary(session, days=days, profile_id=profile_id)
+
+
+def debt_snapshot(session: Session, *, profile_id: int | None = None) -> dict[str, Any]:
+    """High-level debt board for Reports (not bureau)."""
+    from financial_os.services.debt_service import accounts_to_debts, opportunity_context
+    from financial_os.services.debt_strategy import simulate_payoff
+
+    debts = accounts_to_debts(
+        session,
+        profile_id=profile_id,
+        scope="entity" if profile_id is not None else "group",
+    )
+    rate, src, aware = opportunity_context(session)
+    plan = simulate_payoff(
+        debts,
+        strategy="avalanche",
+        extra_monthly=ZERO,
+        opportunity_rate=rate,
+        opportunity_rate_source=src,
+        opportunity_cost_aware=aware,
+    )
+    rows = []
+    total = ZERO
+    for o in plan.order or []:
+        if isinstance(o, dict):
+            bal = _d(o.get("balance"))
+            name = o.get("name") or "Debt"
+            apr = o.get("effective_apr_pct") or o.get("apr_pct") or ""
+            rec = o.get("recommendation") or ""
+        else:
+            bal = _d(getattr(o, "balance", 0))
+            name = getattr(o, "name", "Debt")
+            eapr = getattr(o, "effective_apr", None)
+            apr = f"{float(eapr)*100:.2f}%" if eapr is not None else ""
+            rec = getattr(o, "recommendation", "") or ""
+        total += bal
+        rows.append(
+            {
+                "name": name,
+                "balance": str(bal.quantize(Decimal("0.01"))),
+                "apr_pct": apr,
+                "recommendation": rec,
+            }
+        )
+    return {
+        "title": "Debt snapshot",
+        "total_balance": str(total.quantize(Decimal("0.01"))),
+        "count": len(rows),
+        "debts": rows[:12],
+        "estimated_months": plan.estimated_months,
+        "principle": "Fiscal first — educational payoff order, not a FICO product.",
+    }

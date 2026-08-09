@@ -54,11 +54,11 @@ Step "private-name gate" {
 Step "version sync" {
     $init = Get-Content (Join-Path $Root "src\financial_os\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '0\.8\.1') { throw "__init__.py not 0.8.1" }
-    if ($pyproj -notmatch '0\.8\.1') { throw "pyproject.toml not 0.8.1" }
+    if ($init -notmatch '0\.9\.0') { throw "__init__.py not 0.9.0" }
+    if ($pyproj -notmatch '0\.9\.0') { throw "pyproject.toml not 0.9.0" }
     $iss = Get-Content (Join-Path $Root "packaging\LedgerRing.iss") -Raw
-    if ($iss -notmatch '0\.8\.1') { throw "LedgerRing.iss not 0.8.1" }
-    Write-Host "version 0.8.1 consistent"
+    if ($iss -notmatch '0\.9\.0') { throw "LedgerRing.iss not 0.9.0" }
+    Write-Host "version 0.9.0 consistent"
 }
 
 Step "north-star surface files" {
