@@ -23,7 +23,7 @@
 
 | Path | Role |
 |------|------|
-| **Import CSV** | Default free path |
+| **Import CSV** | Default free path · optional Balance column / ending balance → Reconcile |
 | **Import OFX/QFX** | Quicken-style downloads · FITID dedupe · **LEDGERBAL → Reconcile** |
 | **PDF statements** | Best-effort text extract (prefer CSV/OFX when offered) |
 | **Bank guides** | Login links + download steps (no passwords) |

@@ -94,3 +94,71 @@ def test_debit_credit_columns(tmp_path: Path):
     amts = sorted(float(t.amount) for t in s.query(Transaction).all())
     assert amts == [-25.0, 500.0]
     s.close()
+
+
+def test_csv_ending_balance_column(tmp_path: Path):
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Chase",
+        current_balance=Decimal("1000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Date,Description,Amount,Balance
+2026-08-01,COFFEE,-4.50,995.50
+2026-08-02,PAY,-20.00,975.50
+"""
+    from financial_os.services.bank_csv import preview_bank_csv
+
+    prev = preview_bank_csv(StringIO(csv_text))
+    assert prev.get("ending_balance") == "975.50"
+    assert prev["mapping"].get("balance_col")
+
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+    )
+    assert result.transactions_created == 2
+    assert result.institution_balance_set is True
+    assert result.ending_balance == "975.50"
+    assert result.balance_source == "column"
+    assert result.drift is not None
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("975.50")
+    s.close()
+
+
+def test_csv_institution_balance_override(tmp_path: Path):
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Chase",
+        current_balance=Decimal("500"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Date,Description,Amount
+2026-08-01,COFFEE,-4.50
+"""
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+        institution_balance=Decimal("480.00"),
+    )
+    assert result.institution_balance_set is True
+    assert result.ending_balance == "480.00"
+    assert result.balance_source == "override"
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("480.00")
+    s.close()

@@ -63,6 +63,9 @@
                         <ComboBoxItem Content="Invert signs" Tag="invert" />
                     </ComboBox>
                     <CheckBox x:Name="AutoCatBox" Content="Auto-categorize after import" IsChecked="True" />
+                    <TextBox x:Name="EndingBalanceBox" Header="Bank ending balance (optional)"
+                             PlaceholderText="From CSV Balance column, or type statement balance"
+                             HorizontalAlignment="Stretch" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Pick CSV…" Click="PickCsv_Click" Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Pick OFX/QFX…" Click="PickOfx_Click" />
@@ -82,7 +85,7 @@
                         <Button x:Name="GoHomeBtn" Content="Home" Click="GoHome_Click" Visibility="Collapsed" />
                     </StackPanel>
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Best: CSV or OFX/QFX from online banking. PDF is best-effort (text statements only). OFX LEDGERBAL sets bank balance for Reconcile." />
+                        Text="Best: CSV or OFX/QFX. CSV Balance column or ending balance field → Reconcile. OFX LEDGERBAL does the same. PDF is best-effort text only." />
                 </StackPanel>
             </Border>
 

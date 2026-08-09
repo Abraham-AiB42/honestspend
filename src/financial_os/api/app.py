@@ -2511,6 +2511,8 @@ async def import_bank_csv_upload(
     account_id: int = Query(...),
     amount_sign: str = Query("bank"),
     auto_categorize: bool = Query(True),
+    institution_balance: Optional[Decimal] = Query(None),
+    apply_ending_balance: bool = Query(True),
     db: Session = Depends(get_db),
 ):
     content = await file.read()
@@ -2523,6 +2525,8 @@ async def import_bank_csv_upload(
         filename=file.filename or "bank.csv",
         auto_categorize=auto_categorize,
         amount_sign=amount_sign,
+        institution_balance=institution_balance,
+        apply_ending_balance=apply_ending_balance,
     )
     return {
         "rows_scanned": result.rows_scanned,
@@ -2532,6 +2536,11 @@ async def import_bank_csv_upload(
         "categorized": result.categorized,
         "errors": result.errors,
         "next_steps": result.next_steps,
+        "ending_balance": result.ending_balance,
+        "institution_balance_set": result.institution_balance_set,
+        "books_balance": result.books_balance,
+        "drift": result.drift,
+        "balance_source": result.balance_source,
     }
 
 

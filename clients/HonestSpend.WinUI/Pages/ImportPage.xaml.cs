@@ -372,8 +372,16 @@ public sealed partial class ImportPage : Page
             {
                 csvRes.TryGetProperty("ok", out var ok) && ok.GetBoolean() ? "Mapping OK" : "Mapping issues",
                 $"date → {JsonUi.Str(map, "date_col")} · payee → {JsonUi.Str(map, "description_col")} · " +
-                $"amount → {JsonUi.Str(map, "amount_col")} · debit → {JsonUi.Str(map, "debit_col")} · credit → {JsonUi.Str(map, "credit_col")}",
+                $"amount → {JsonUi.Str(map, "amount_col")} · debit → {JsonUi.Str(map, "debit_col")} · credit → {JsonUi.Str(map, "credit_col")}" +
+                (string.IsNullOrEmpty(JsonUi.Str(map, "balance_col")) ? "" : $" · balance → {JsonUi.Str(map, "balance_col")}"),
             };
+            var endBal = JsonUi.Str(csvRes, "ending_balance");
+            if (!string.IsNullOrEmpty(endBal))
+            {
+                csvLines.Add($"Ending balance from file: ${endBal}");
+                if (string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
+                    EndingBalanceBox.Text = endBal;
+            }
             if (csvRes.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var er in errs.EnumerateArray())
@@ -383,7 +391,8 @@ public sealed partial class ImportPage : Page
             {
                 csvLines.Add("Sample:");
                 foreach (var row in csvSample.EnumerateArray().Take(6))
-                    csvLines.Add($"  {JsonUi.Str(row, "date")} · {JsonUi.Str(row, "payee")} · {JsonUi.Str(row, "amount")}");
+                    csvLines.Add($"  {JsonUi.Str(row, "date")} · {JsonUi.Str(row, "payee")} · {JsonUi.Str(row, "amount")}" +
+                        (string.IsNullOrEmpty(JsonUi.Str(row, "balance")) ? "" : $" · bal {JsonUi.Str(row, "balance")}"));
             }
             csvLines.Add(JsonUi.Str(csvRes, "hint"));
             PreviewText.Text = string.Join("\n", csvLines);
@@ -490,19 +499,38 @@ public sealed partial class ImportPage : Page
                 return;
             }
             if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
+            decimal? instBal = null;
+            if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
+            {
+                var balText = EndingBalanceBox.Text.Trim().Replace("$", "").Replace(",", "");
+                if (decimal.TryParse(balText, System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsedBal)
+                    || decimal.TryParse(balText, out parsedBal))
+                    instBal = parsedBal;
+            }
             using var streamCsv = await _csvFile.OpenStreamForReadAsync();
             var res = await api.ImportBankCsvAsync(
                 streamCsv,
                 _csvFile.Name,
                 accountId,
                 sign,
-                AutoCatBox.IsChecked == true);
+                AutoCatBox.IsChecked == true,
+                institutionBalance: instBal);
             var csvLines = new List<string>
             {
                 $"CSV done · scanned {Prop(res, "rows_scanned")} · created {Prop(res, "transactions_created")} · " +
                 $"skipped existing {Prop(res, "skipped_existing")} · bad {Prop(res, "skipped_bad")} · " +
                 $"categorized {Prop(res, "categorized")}",
             };
+            if (!string.IsNullOrEmpty(Prop(res, "ending_balance")) && Prop(res, "ending_balance") != "?")
+            {
+                csvLines.Add(
+                    $"Bank ending bal ${Prop(res, "ending_balance")}" +
+                    (string.IsNullOrEmpty(Prop(res, "balance_source")) ? "" : $" ({Prop(res, "balance_source")})") +
+                    (string.IsNullOrEmpty(Prop(res, "drift")) || Prop(res, "drift") == "?"
+                        ? ""
+                        : $" · books drift ${Prop(res, "drift")}"));
+            }
             if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.14 — CSV ending balance → Reconcile
+
+- Detect **Balance / Running balance** columns on bank CSV
+- Last balance (or manual override) sets `institution_balance` for Reconcile + drift
+- Import page: optional **Bank ending balance** field · preview fills from file
+- Parity with OFX LEDGERBAL post-import path
+
 ## 1.0.13 — Inbox next steps + OFX ACCTID auto-match
 
 - **Inbox process** returns aggregated `next_steps` (Sort charges / Home)

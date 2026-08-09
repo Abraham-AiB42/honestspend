@@ -38,6 +38,18 @@ DESC_KEYS = (
 AMOUNT_KEYS = ("amount", "transaction amount", "amt", "value")
 DEBIT_KEYS = ("debit", "withdrawal", "outflow", "spend")
 CREDIT_KEYS = ("credit", "deposit", "inflow")
+# Running / ending balance columns (common on bank CSV exports)
+BALANCE_KEYS = (
+    "balance",
+    "running balance",
+    "running bal",
+    "account balance",
+    "available balance",
+    "ending balance",
+    "ledger balance",
+    "current balance",
+    "bal",
+)
 
 
 @dataclass
@@ -49,6 +61,11 @@ class CsvImportResult:
     errors: list[str] = field(default_factory=list)
     categorized: int = 0
     next_steps: list[dict[str, Any]] = field(default_factory=list)
+    ending_balance: str | None = None
+    institution_balance_set: bool = False
+    books_balance: str | None = None
+    drift: str | None = None
+    balance_source: str | None = None  # column | override | none
 
 
 def _norm(h: str) -> str:
@@ -161,6 +178,7 @@ def preview_bank_csv(
     amt_i = _find_col(headers, AMOUNT_KEYS)
     debit_i = _find_col(headers, DEBIT_KEYS)
     credit_i = _find_col(headers, CREDIT_KEYS)
+    bal_i = _find_col(headers, BALANCE_KEYS)
 
     mapping = {
         "date_col": headers[date_i] if date_i is not None else None,
@@ -173,6 +191,8 @@ def preview_bank_csv(
         "debit_index": debit_i,
         "credit_col": headers[credit_i] if credit_i is not None else None,
         "credit_index": credit_i,
+        "balance_col": headers[bal_i] if bal_i is not None else None,
+        "balance_index": bal_i,
     }
     errors: list[str] = []
     if date_i is None:
@@ -182,6 +202,7 @@ def preview_bank_csv(
 
     sample: list[dict[str, Any]] = []
     scanned = 0
+    last_balance: Decimal | None = None
     for row in reader:
         if not row or all(not (c or "").strip() for c in row):
             continue
@@ -198,16 +219,31 @@ def preview_bank_csv(
                 amount = -abs(deb)
             elif cred and cred != 0:
                 amount = abs(cred)
+        bal: Decimal | None = None
+        if bal_i is not None and bal_i < len(row):
+            bal = _parse_amount(row[bal_i])
+            if bal is not None:
+                last_balance = bal
         sample.append(
             {
                 "date": d.isoformat() if d else None,
                 "payee": payee.strip()[:80],
                 "amount": str(amount) if amount is not None else None,
+                "balance": str(bal) if bal is not None else None,
                 "raw": [c[:40] for c in row[:8]],
             }
         )
         if len(sample) >= max_rows:
             break
+
+    # scan rest of file for last balance when balance column present
+    if bal_i is not None:
+        for row in reader:
+            if not row or bal_i >= len(row):
+                continue
+            bal = _parse_amount(row[bal_i])
+            if bal is not None:
+                last_balance = bal
 
     return {
         "ok": len(errors) == 0,
@@ -216,7 +252,16 @@ def preview_bank_csv(
         "mapping": mapping,
         "sample": sample,
         "rows_previewed": scanned,
-        "hint": "Confirm mapping looks right, then import. Use amount_sign=invert if signs are flipped.",
+        "ending_balance": str(last_balance) if last_balance is not None else None,
+        "hint": (
+            "Confirm mapping looks right, then import. "
+            + (
+                "Balance column found — last value will set institution balance for Reconcile. "
+                if last_balance is not None
+                else "No balance column — you can enter bank ending balance on Import. "
+            )
+            + "Use amount_sign=invert if signs are flipped."
+        ),
     }
 
 
@@ -228,6 +273,8 @@ def import_bank_csv(
     filename: str = "import.csv",
     auto_categorize: bool = True,
     amount_sign: str = "bank",  # bank: expenses negative; invert: flip signs
+    institution_balance: Decimal | None = None,
+    apply_ending_balance: bool = True,
 ) -> CsvImportResult:
     result = CsvImportResult()
     acct = session.get(Account, account_id)
@@ -251,7 +298,7 @@ def import_bank_csv(
         if "," in line or "\t" in line or ";" in line:
             # header-like if has a date-ish word or amount
             low = line.lower()
-            if any(k in low for k in ("date", "amount", "description", "debit", "credit", "payee")):
+            if any(k in low for k in ("date", "amount", "description", "debit", "credit", "payee", "balance")):
                 start = i
                 break
     body = "\n".join(lines[start:])
@@ -268,6 +315,7 @@ def import_bank_csv(
     amt_i = _find_col(headers, AMOUNT_KEYS)
     debit_i = _find_col(headers, DEBIT_KEYS)
     credit_i = _find_col(headers, CREDIT_KEYS)
+    bal_i = _find_col(headers, BALANCE_KEYS)
 
     if date_i is None:
         result.errors.append(f"Could not find date column in {headers}")
@@ -293,6 +341,7 @@ def import_bank_csv(
         if e
     }
 
+    last_balance: Decimal | None = None
     for row in reader:
         result.rows_scanned += 1
         if not row or all(not (c or "").strip() for c in row):
@@ -333,6 +382,11 @@ def import_bank_csv(
             # Credit cards often list charges as positive — if account is credit and amount > 0 for spend-like, keep bank convention:
             # We assume CSV already uses signed convention; user can flip with amount_sign.
 
+            if bal_i is not None and bal_i < len(row):
+                bal = _parse_amount(row[bal_i])
+                if bal is not None:
+                    last_balance = bal
+
             external_id = f"csv:{account_id}:{d.isoformat()}:{amount}:{payee[:80]}"
             if external_id in existing:
                 result.skipped_existing += 1
@@ -359,7 +413,42 @@ def import_bank_csv(
 
     session.flush()
 
-    if result.transactions_created > 0 or result.rows_scanned > 0:
+    # Ending balance → institution_balance for Reconcile (OFX LEDGERBAL parity)
+    bal_to_apply: Decimal | None = None
+    bal_source: str | None = None
+    if institution_balance is not None:
+        bal_to_apply = institution_balance
+        bal_source = "override"
+    elif apply_ending_balance and last_balance is not None:
+        bal_to_apply = last_balance
+        bal_source = "column"
+
+    drift: Decimal | None = None
+    if bal_to_apply is not None:
+        from financial_os.services.reconcile import set_institution_balance
+
+        set_institution_balance(session, account_id, bal_to_apply, mark_reconciled=False)
+        result.institution_balance_set = True
+        result.ending_balance = str(bal_to_apply)
+        result.balance_source = bal_source
+        session.refresh(acct)
+        books = Decimal(str(acct.current_balance or 0))
+        result.books_balance = str(books)
+        drift = (books - bal_to_apply).quantize(Decimal("0.01"))
+        result.drift = str(drift)
+    else:
+        result.books_balance = str(acct.current_balance or 0)
+        if last_balance is not None:
+            result.ending_balance = str(last_balance)
+            result.balance_source = "column"
+        else:
+            result.balance_source = "none"
+
+    if (
+        result.transactions_created > 0
+        or result.rows_scanned > 0
+        or result.institution_balance_set
+    ):
         # Any completed import run resets the freeware download reminder clock
         try:
             from financial_os.services.import_reminders import mark_import_activity
@@ -386,6 +475,7 @@ def import_bank_csv(
         profile_id=acct.profile_id,
         created=result.transactions_created,
         categorized=result.categorized,
+        drift=drift,
         source="CSV",
     )
     return result

@@ -626,6 +626,8 @@ public sealed class LedgerApiClient : IDisposable
         int accountId,
         string amountSign = "bank",
         bool autoCategorize = true,
+        decimal? institutionBalance = null,
+        bool applyEndingBalance = true,
         CancellationToken ct = default)
     {
         using var content = new MultipartFormDataContent();
@@ -635,7 +637,10 @@ public sealed class LedgerApiClient : IDisposable
         var q =
             $"api/import/bank-csv?account_id={accountId}" +
             $"&amount_sign={Uri.EscapeDataString(amountSign)}" +
-            $"&auto_categorize={autoCategorize.ToString().ToLowerInvariant()}";
+            $"&auto_categorize={autoCategorize.ToString().ToLowerInvariant()}" +
+            $"&apply_ending_balance={applyEndingBalance.ToString().ToLowerInvariant()}";
+        if (institutionBalance is decimal bal)
+            q += $"&institution_balance={Uri.EscapeDataString(bal.ToString(System.Globalization.CultureInfo.InvariantCulture))}";
         var r = await _http.PostAsync(q, content, ct);
         return await ReadJsonAsync(r, q, ct);
     }
