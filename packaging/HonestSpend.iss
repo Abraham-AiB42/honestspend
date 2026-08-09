@@ -10,7 +10,7 @@
 ; Keep in sync with pyproject.toml / financial_os.__version__
 #define MyAppPublisher "HonestSpend contributors"
 #define MyAppExeName "HonestSpend.WinUI.exe"
-#define MyAppURL "https://github.com/Abraham-AiB42/floatpile"
+#define MyAppURL "https://github.com/Abraham-AiB42/honestspend"
 #define SourceDir "..\dist\HonestSpend-Windows-x64"
 
 [Setup]
