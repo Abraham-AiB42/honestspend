@@ -5,6 +5,9 @@
 **Constraint:** Local-first, freeware, Windows-first client (WinUI), Python engine stays source of fiscal truth  
 **Success:** User can open rarely, never bounce checking, never pay avoidable interest/fees, multi-entity books stay clear, daily path ≤2 minutes  
 
+**Product dream (Excel + CK + QB + TT + Rocket Money jobs):** see **[`docs/DREAM_ROADMAP.md`](./DREAM_ROADMAP.md)** — H1 live books → H2 v1.0 → H3 platforms.  
+Phases P0–P1 and packaging are largely **shipped** in v0.7.x; continue from **P2 / dream H1**.
+
 This plan is **ordered by dependency and risk**. Do not skip P0 for feature work.
 
 ---

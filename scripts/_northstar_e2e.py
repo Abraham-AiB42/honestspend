@@ -206,6 +206,7 @@ for key in (
     "language",
     "principles",
     "three_minute_check",
+    "books_brief",
 ):
     if key not in home1:
         bad(f"home field {key}", "missing")
@@ -217,6 +218,12 @@ if ritual.get("total") == 5 and ritual.get("steps"):
     ok("3-minute check has 5 steps", ritual.get("progress_label") or "")
 else:
     bad("3-minute check", str(ritual)[:120])
+
+books = home1.get("books_brief") or {}
+if books.get("title") and books.get("attention"):
+    ok("books brief present", f"{books.get('attention')}: {books.get('title')[:40]}")
+else:
+    bad("books_brief", str(books)[:120])
 
 next1 = home1.get("do_this_next") or {}
 if next1.get("title") and next1.get("reason") and next1.get("button_label"):

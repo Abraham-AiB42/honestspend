@@ -12,6 +12,7 @@ from financial_os.db import Account, Profile, ScheduledItem, Transaction
 from financial_os.services.capital_desk import build_capital_desk
 from financial_os.services.digest import build_digest
 from financial_os.services.ifpp_service import ifpp_to_dict, run_ifpp
+from financial_os.services.import_brief import build_import_brief
 from financial_os.services.wealth_basics import build_wealth_tips
 
 ZERO = Decimal("0")
@@ -105,6 +106,20 @@ def build_home_simple(
         desk=desk,
         profile_id=pid if sc == "entity" else None,
     )
+    books = build_import_brief(
+        session,
+        profile_id=pid if sc == "entity" else None,
+        as_of=as_of,
+    )
+    # Fold uncategorized into 3-min check detail if present
+    if books.get("uncategorized_count"):
+        for step in ritual.get("steps") or []:
+            if step.get("id") == "sort_charges" and not step.get("done"):
+                step["detail"] = (
+                    f"{books['uncategorized_count']} waiting — "
+                    + (books.get("sample_uncategorized") or ["Sort charges"])[0]
+                )
+                break
 
     return {
         "as_of": as_of.isoformat(),
@@ -127,6 +142,7 @@ def build_home_simple(
         "wealth_tips": wealth,
         "setup": setup,
         "three_minute_check": ritual,
+        "books_brief": books,
         "digest_message": dig.get("message"),
         "headline": desk.get("headline"),
         "principles": [

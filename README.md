@@ -16,7 +16,7 @@
 **v0.7 Simple mode (default):** Home · Add · Can I buy? · Sort charges · 3-minute check  
 **Full books:** flip the shell toggle for ledgers, tax, multi-user, reconcile.
 
-Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple mode: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md) · Release: [`docs/RELEASE_0.7.0.md`](docs/RELEASE_0.7.0.md)
+Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple mode: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md) · Dream roadmap: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md) · Release: [`docs/RELEASE_0.7.0.md`](docs/RELEASE_0.7.0.md)
 
 ## Windows (primary)
 

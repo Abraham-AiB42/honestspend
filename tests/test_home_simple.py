@@ -51,6 +51,10 @@ def test_home_simple_shape(client: TestClient):
     assert ritual.get("total") == 5
     assert len(ritual.get("steps") or []) == 5
     assert "done_count" in ritual
+    books = body.get("books_brief") or {}
+    assert "uncategorized_count" in books
+    assert "attention" in books
+    assert books.get("title")
 
 
 def test_wealth_tips_when_safe_surplus(client: TestClient):

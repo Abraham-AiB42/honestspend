@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — Dream H1 start (v0.8 prep)
+
+- **`docs/DREAM_ROADMAP.md`** — plan to realize Excel+CK+QB+TT+Rocket Money *jobs*
+- **`books_brief`** on `GET /api/home/simple` — post-import / bank health for Simple Home
+- WinUI Home card **After import / bank** with CTA to Sort charges / Plaid
+
 ## 0.7.1 — Open-rarely polish
 
 - Hide **Get started** after first-run (Simple + Full nav)

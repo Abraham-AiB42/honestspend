@@ -15,6 +15,7 @@ public sealed partial class HomePage : Page
     private JsonElement _home;
     private string _nextAction = "hold";
     private string _ritualNextAction = "hold";
+    private string _booksAction = "hold";
 
     public HomePage()
     {
@@ -118,6 +119,37 @@ public sealed partial class HomePage : Page
             if (alerts.Count == 0) alerts.Add("All clear — no action queue.");
             AlertList.ItemsSource = alerts;
 
+            // Live books / import brief (dream H1-A1)
+            _booksAction = "hold";
+            if (_home.TryGetProperty("books_brief", out var books) && books.ValueKind == JsonValueKind.Object)
+            {
+                var attn = JsonUi.Str(books, "attention", "clear");
+                var show = attn is "action" or "watch"
+                    || (attn == "optional" && ShouldShowBankTip());
+                BooksCard.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+                if (show)
+                {
+                    BooksTitle.Text = JsonUi.Str(books, "title");
+                    BooksReason.Text = JsonUi.Str(books, "reason");
+                    _booksAction = JsonUi.Str(books, "primary_action", "review");
+                    BooksBtn.Content = JsonUi.Str(books, "button_label", "Continue");
+                    var samples = new List<string>();
+                    if (books.TryGetProperty("sample_uncategorized", out var sa) && sa.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var s in sa.EnumerateArray())
+                        {
+                            var t = s.GetString();
+                            if (!string.IsNullOrEmpty(t)) samples.Add("· " + t);
+                        }
+                    }
+                    BooksSamples.ItemsSource = samples;
+                }
+            }
+            else
+            {
+                BooksCard.Visibility = Visibility.Collapsed;
+            }
+
             // 3-minute open-rarely ritual
             _ritualNextAction = "hold";
             if (_home.TryGetProperty("three_minute_check", out var ritual) && ritual.ValueKind == JsonValueKind.Object)
@@ -202,6 +234,30 @@ public sealed partial class HomePage : Page
     private void RitualNext_Click(object sender, RoutedEventArgs e)
     {
         _nextAction = _ritualNextAction;
+        DoNext_Click(sender, e);
+    }
+
+    private void Books_Click(object sender, RoutedEventArgs e)
+    {
+        _nextAction = _booksAction switch
+        {
+            "review" => "review",
+            "plaid" => "plaid",
+            "ledger" => "ledger",
+            "import" => "import",
+            _ => "review",
+        };
+        // Navigate directly for surfaces not in DoNext switch
+        if (_booksAction is "plaid")
+        {
+            Frame?.Navigate(typeof(PlaidPage));
+            return;
+        }
+        if (_booksAction is "import")
+        {
+            Frame?.Navigate(typeof(ImportPage));
+            return;
+        }
         DoNext_Click(sender, e);
     }
 
