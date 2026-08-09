@@ -37,15 +37,16 @@ def ensure_inbox_layout() -> dict[str, str]:
         readme.write_text(
             "Floatpile inbox\n"
             "================\n"
-            "Drop bank CSV or text PDF statement exports here.\n"
-            "  e.g. chase.csv, Everyday-card.pdf, Primary-checking-2026-08.csv\n"
+            "Drop bank exports here:\n"
+            "  .csv  .ofx  .qfx  (best)\n"
+            "  .pdf  text statements (best-effort)\n"
+            "  e.g. chase.ofx, Everyday-card.csv, Primary-checking.qfx\n"
             "Name files with account nicknames when you can.\n"
             "\n"
             "Run:  floatpile import-inbox\n"
             "Or:   Import → Import inbox now · tray → Import inbox now\n"
             "Or:   scheduled task Floatpile-ImportInbox\n"
             "\n"
-            "CSV is preferred. PDF is best-effort (text statements only).\n"
             "Processed files move to inbox/archive/.\n"
             "Floatpile never stores bank passwords.\n",
             encoding="utf-8",
@@ -142,7 +143,7 @@ def list_inbox_files() -> list[dict[str, Any]]:
             continue
         if p.name.upper() == "README.TXT":
             continue
-        if p.suffix.lower() not in (".csv", ".txt", ".pdf"):
+        if p.suffix.lower() not in (".csv", ".txt", ".pdf", ".ofx", ".qfx"):
             continue
         out.append(
             {
@@ -211,6 +212,21 @@ def process_inbox(
                 entry["format"] = "pdf"
                 entry["pages"] = getattr(res, "pages", None)
                 entry["rows_scanned"] = res.lines_scanned
+            elif suffix in (".ofx", ".qfx"):
+                from financial_os.services.bank_ofx import import_ofx
+
+                with path.open("rb") as fh:
+                    res = import_ofx(
+                        session,
+                        account_id=acct.id,
+                        file_obj=fh,
+                        filename=path.name,
+                        auto_categorize=auto_categorize,
+                        amount_sign=amount_sign,
+                    )
+                entry["format"] = suffix.lstrip(".")
+                entry["rows_scanned"] = res.transactions_found
+                entry["account_hint"] = res.account_hint
             else:
                 with path.open("rb") as fh:
                     res = import_bank_csv(

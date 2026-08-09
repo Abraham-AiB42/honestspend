@@ -6,7 +6,7 @@
 ;   - dist\Floatpile-Windows-x64\ populated by package-release.ps1
 
 #define MyAppName "Floatpile"
-#define MyAppVersion "1.0.8"
+#define MyAppVersion "1.0.9"
 ; Keep in sync with pyproject.toml / financial_os.__version__
 ; Install folder / EXE may still say Floatpile for path continuity (docs/BRAND.md)
 #define MyAppPublisher "Floatpile contributors"

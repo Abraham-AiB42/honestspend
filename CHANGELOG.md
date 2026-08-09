@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9 — OFX/QFX bank import
+
+- **OFX / QFX** preview + import (no extra deps) · FITID dedupe
+- Inbox accepts `.ofx` / `.qfx` alongside CSV/PDF
+- Import page: Pick OFX/QFX · bank guides mention Quicken formats
+
 ## 1.0.8 — Tray inbox + PDF statement import
 
 - **Tray:** Import page · Open inbox folder · Import inbox now (API or offline)

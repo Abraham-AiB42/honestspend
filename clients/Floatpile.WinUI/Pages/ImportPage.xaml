@@ -65,17 +65,18 @@
                     <CheckBox x:Name="AutoCatBox" Content="Auto-categorize after import" IsChecked="True" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Pick CSV…" Click="PickCsv_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Pick OFX/QFX…" Click="PickOfx_Click" />
                         <Button Content="Pick PDF statement…" Click="PickPdf_Click" />
                         <TextBlock x:Name="CsvPathText" VerticalAlignment="Center" Opacity="0.75" Text="No file" />
                     </StackPanel>
                     <Button Content="Preview mapping" Click="PreviewCsv_Click" />
                     <TextBlock x:Name="PreviewText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Import CSV" Click="ImportCsv_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Import file" Click="ImportCsv_Click" Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Import PDF statement" Click="ImportPdf_Click" />
                     </StackPanel>
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="PDF is best-effort on text statements only. Prefer CSV when the bank offers it." />
+                        Text="Best: CSV or OFX/QFX from online banking. PDF is best-effort (text statements only)." />
                 </StackPanel>
             </Border>
 

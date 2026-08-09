@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "floatpile"
-version = "1.0.8"
+version = "1.0.9"
 description = "Floatpile — open-source liquidity cockpit (safe to spend · multi-entity · local books)"
 readme = "README.md"
 license = { text = "MIT" }

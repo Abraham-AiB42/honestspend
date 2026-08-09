@@ -14,6 +14,7 @@ namespace Floatpile_WinUI.Pages;
 public sealed partial class ImportPage : Page
 {
     private StorageFile? _csvFile;
+    private StorageFile? _ofxFile;
     private StorageFile? _pdfFile;
     private StorageFile? _xlsxFile;
     private string? _inboxPath;
@@ -258,8 +259,19 @@ public sealed partial class ImportPage : Page
         var file = await PickFileAsync(new[] { ".csv", ".txt" });
         if (file is null) return;
         _csvFile = file;
+        _ofxFile = null;
         _pdfFile = null;
         CsvPathText.Text = file.Name;
+    }
+
+    private async void PickOfx_Click(object sender, RoutedEventArgs e)
+    {
+        var file = await PickFileAsync(new[] { ".ofx", ".qfx" });
+        if (file is null) return;
+        _ofxFile = file;
+        _csvFile = null;
+        _pdfFile = null;
+        CsvPathText.Text = file.Name + " (OFX/QFX)";
     }
 
     private async void PickPdf_Click(object sender, RoutedEventArgs e)
@@ -268,6 +280,7 @@ public sealed partial class ImportPage : Page
         if (file is null) return;
         _pdfFile = file;
         _csvFile = null;
+        _ofxFile = null;
         CsvPathText.Text = file.Name + " (PDF)";
     }
 
@@ -320,7 +333,26 @@ public sealed partial class ImportPage : Page
                 PreviewText.Text = string.Join("\n", pdfLines);
                 return;
             }
-            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or PDF first.");
+            if (_ofxFile is not null)
+            {
+                using var ofxStream = await _ofxFile.OpenStreamForReadAsync();
+                var ofxRes = await api.PreviewOfxAsync(ofxStream, _ofxFile.Name);
+                var ofxLines = new List<string>
+                {
+                    $"OFX/QFX · {JsonUi.Str(ofxRes, "transactions_found")} transactions" +
+                    (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "account_hint")) ? "" : $" · acct {JsonUi.Str(ofxRes, "account_hint")}"),
+                    JsonUi.Str(ofxRes, "hint"),
+                };
+                if (ofxRes.TryGetProperty("sample", out var ofxSample) && ofxSample.ValueKind == JsonValueKind.Array)
+                {
+                    ofxLines.Add("Sample:");
+                    foreach (var row in ofxSample.EnumerateArray().Take(8))
+                        ofxLines.Add($"  {JsonUi.Str(row, "txn_date")} · {JsonUi.Str(row, "payee")} · {JsonUi.Str(row, "amount")}");
+                }
+                PreviewText.Text = string.Join("\n", ofxLines);
+                return;
+            }
+            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV, OFX/QFX, or PDF first.");
             using var streamCsv = await _csvFile.OpenStreamForReadAsync();
             var csvRes = await api.PreviewBankCsvAsync(streamCsv, _csvFile.Name);
             var map = csvRes.TryGetProperty("mapping", out var m) ? m : default;
@@ -357,18 +389,28 @@ public sealed partial class ImportPage : Page
         ResultText.Text = "";
         try
         {
-            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV first.");
             if (AccountBox.SelectedItem is not ComboBoxItem ai || ai.Tag is not int accountId)
                 throw new InvalidOperationException("Pick a target account.");
             var sign = "bank";
             if (SignBox.SelectedItem is ComboBoxItem si && si.Tag is string st)
                 sign = st;
 
-            using var stream = await _csvFile.OpenStreamForReadAsync();
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
+            if (_ofxFile is not null)
+            {
+                using var stream = await _ofxFile.OpenStreamForReadAsync();
+                var ofxRes = await api.ImportOfxAsync(
+                    stream, _ofxFile.Name, accountId, sign, AutoCatBox.IsChecked == true);
+                ResultText.Text =
+                    $"OFX/QFX done · found {Prop(ofxRes, "transactions_found")} · created {Prop(ofxRes, "transactions_created")} · " +
+                    $"skipped {Prop(ofxRes, "skipped_existing")} · categorized {Prop(ofxRes, "categorized")}";
+                return;
+            }
+            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
+            using var streamCsv = await _csvFile.OpenStreamForReadAsync();
             var res = await api.ImportBankCsvAsync(
-                stream,
+                streamCsv,
                 _csvFile.Name,
                 accountId,
                 sign,

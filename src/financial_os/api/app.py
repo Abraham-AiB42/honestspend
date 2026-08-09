@@ -2352,6 +2352,55 @@ def import_inbox_process(body: InboxProcessIn, db: Session = Depends(get_db)):
     )
 
 
+@app.post("/api/import/ofx/preview")
+async def import_ofx_preview(file: UploadFile = File(...)):
+    """Preview OFX/QFX transactions without writing."""
+    content = await file.read()
+    from financial_os.services.bank_ofx import preview_ofx
+
+    try:
+        return preview_ofx(content)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/import/ofx")
+async def import_ofx_upload(
+    account_id: int = Form(...),
+    auto_categorize: bool = Form(True),
+    amount_sign: str = Form("bank"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    content = await file.read()
+    from financial_os.services.bank_ofx import import_ofx
+
+    if not db.get(Account, account_id):
+        raise HTTPException(404, "Account not found")
+    try:
+        result = import_ofx(
+            db,
+            account_id=account_id,
+            file_obj=content,
+            filename=file.filename or "download.ofx",
+            auto_categorize=auto_categorize,
+            amount_sign=amount_sign,
+        )
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    return {
+        "transactions_found": result.transactions_found,
+        "transactions_created": result.transactions_created,
+        "skipped_existing": result.skipped_existing,
+        "skipped_bad": result.skipped_bad,
+        "categorized": result.categorized,
+        "errors": result.errors,
+        "sample": result.sample,
+        "account_hint": result.account_hint,
+        "bank_id": result.bank_id,
+    }
+
+
 @app.post("/api/import/statement-pdf/preview")
 async def import_statement_pdf_preview(file: UploadFile = File(...)):
     """Heuristic PDF statement parse preview (text PDFs only)."""
