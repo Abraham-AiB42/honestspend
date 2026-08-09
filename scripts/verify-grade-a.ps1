@@ -54,11 +54,11 @@ Step "private-name gate" {
 Step "version sync" {
     $init = Get-Content (Join-Path $Root "src\financial_os\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '1\.0\.0') { throw "__init__.py not 1.0.0" }
-    if ($pyproj -notmatch '1\.0\.0') { throw "pyproject.toml not 1.0.0" }
+    if ($init -notmatch '1\.0\.1') { throw "__init__.py not 1.0.1" }
+    if ($pyproj -notmatch '1\.0\.1') { throw "pyproject.toml not 1.0.1" }
     $iss = Get-Content (Join-Path $Root "packaging\LedgerRing.iss") -Raw
-    if ($iss -notmatch '1\.0\.0') { throw "LedgerRing.iss not 1.0.0" }
-    Write-Host "version 1.0.0 consistent"
+    if ($iss -notmatch '1\.0\.1') { throw "LedgerRing.iss not 1.0.1" }
+    Write-Host "version 1.0.1 consistent"
 }
 
 Step "north-star surface files" {
@@ -103,10 +103,12 @@ Step "dogfood e2e (RC path A)" {
 }
 
 Step "1.0 release docs" {
-    foreach ($f in @("docs\RELEASE_1.0.0.md", "docs\RC_1.0.md", "docs\VERSIONING.md")) {
+    foreach ($f in @("docs\RELEASE_1.0.0.md", "docs\RC_1.0.md", "docs\VERSIONING.md", "docs\CLIENT_FIRST.md")) {
         if (-not (Test-Path (Join-Path $Root $f))) { throw "missing $f" }
     }
-    Write-Host "1.0 docs present"
+    $cf = Get-Content (Join-Path $Root "docs\CLIENT_FIRST.md") -Raw
+    if ($cf -notmatch "No PWA") { throw "CLIENT_FIRST.md must ban PWA" }
+    Write-Host "1.0 + client-first docs present"
 }
 
 Write-Host ""

@@ -16,8 +16,9 @@
 **Simple mode (default):** Home · Add · Can I buy? · Sort charges · 3-minute check · month-close / tax-year prep  
 **Full books:** shell toggle for ledgers, tax, reports, multi-user, reconcile.
 
-**v1.0.0** — local multi-entity **liquidity OS** (not a bureau, not e-file, not payroll).  
-Release: [`docs/RELEASE_1.0.0.md`](docs/RELEASE_1.0.0.md) · Versioning: [`docs/VERSIONING.md`](docs/VERSIONING.md) · Dream: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md)
+**v1.0** — local multi-entity **liquidity OS** (not a bureau, not e-file, not payroll).  
+**Client-first:** native **WinUI** is the product — **no PWA**. Glance is a thin fallback only.  
+Release: [`docs/RELEASE_1.0.0.md`](docs/RELEASE_1.0.0.md) · Clients: [`docs/CLIENT_FIRST.md`](docs/CLIENT_FIRST.md) · Dream: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md)
 
 Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md)
 

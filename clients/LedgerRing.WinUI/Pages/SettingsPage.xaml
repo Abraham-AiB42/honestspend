@@ -27,7 +27,16 @@
             <CheckBox x:Name="MinimizedBox" Content="Start minimized" />
             <CheckBox x:Name="LoginBox" Content="Launch at Windows logon (tray only — engine quietly ready)" />
             <TextBlock x:Name="StartupStatusText" Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                Text="Tip: tray keeps Safe to spend a click away without opening the full window." />
+                Text="Tip: tray keeps Safe to spend a click away. Double-click tray opens this desktop app (not a browser)." />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Automation (Windows)" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Client-first: schedule local backup + daily digest via Task Scheduler. No cloud, no PWA." />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Register scheduled tasks" Click="RegisterTasks_Click" />
+                <Button Content="Remove scheduled tasks" Click="UnregisterTasks_Click" />
+            </StackPanel>
+            <TextBlock x:Name="AutomationStatusText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
 
             <Expander Header="Connection &amp; data (advanced)" IsExpanded="False"
                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">

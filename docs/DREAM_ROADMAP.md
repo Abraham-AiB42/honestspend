@@ -222,14 +222,15 @@ Ship as `GET /api/reports/*` + Full books Reports page + 1–2 cards on Simple H
 - Custom debt rank + opportunity hurdle advanced editor  
 - Export: OFX/QBO-friendly CSV packs  
 
-#### Epic H3-B · Mobile / multi-client
-- Glance PWA: installable, offline shell cache, API key storage  
-- Progressive write: add bill, mark bill paid, Can I buy? (reuse APIs)  
-- Tailscale/docs for remote home lab  
+#### Epic H3-B · Multi-platform **native clients** (no PWA)
+- **Client-first forever** — WinUI is primary; no Progressive Web App product path  
+- Glance HTML remains a **thin emergency shell** for Mac/Linux/phone, not the roadmap  
+- Future: native Mac/Linux desktop (Swift/Qt/Avalonia — TBD), then mobile **native** if ever  
+- Tailscale/docs for remote home-lab access to the **engine + native client**  
 
-#### Epic H3-C · Automation OS
-- Windows Task Scheduler packs as first-class Settings UI (digest, backup, plaid sync if configured)  
-- Tray: Safe to spend + one critical toast + open WinUI deep link  
+#### Epic H3-C · Automation OS (Windows client)
+- Task Scheduler packs as first-class **WinUI Settings** UI (digest, backup, plaid sync)  
+- Tray: Safe to spend + toast + **open WinUI** (not browser)  
 - Optional: engine as Windows service (after tray path rock solid)  
 
 #### Epic H3-D · Collaboration (local)
@@ -252,6 +253,7 @@ Ship as `GET /api/reports/*` + Full books Reports page + 1–2 cards on Simple H
 | Affiliate “cancel Netflix for you” marketplace | Not liquidity OS |
 | Multi-writer cloud SQLite | Data corruption; use encrypted snapshots |
 | Replacing Excel for non-money work | Wrong product |
+| **PWA / “browser as the app”** | **Client-first** — native WinUI (then native Mac/Linux); Glance is fallback only |
 
 ---
 
@@ -381,7 +383,7 @@ That’s the dream—**realized as one product**, not five brands.
 | Tax year wizard | vault/packet | + reminders | ✓ checklist |
 | Scenarios | simulate ad-hoc | — | ✓ named |
 | Installer | zip + Inno script | ✓ | polished |
-| Mobile write | Glance read | PWA read+ | limited write |
+| Extra platforms | Glance read-only | native client later | never PWA |
 
 ## Appendix B — Mapping to old IMPLEMENTATION_PLAN phases
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import webbrowser
@@ -71,8 +72,36 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         draw.text((22, 18), "L", fill=(11, 15, 20))
         return img
 
-    def open_app(icon=None, item=None):
-        # Multi-platform shell; primary desktop client is still WinUI
+    def open_desktop(icon=None, item=None):
+        """Client-first: launch WinUI if present; never prefer PWA."""
+        import subprocess
+        from pathlib import Path
+
+        candidates: list[Path] = []
+        cwd = Path.cwd()
+        candidates += [
+            cwd / "LedgerRing.WinUI.exe",
+            cwd.parent / "LedgerRing.WinUI.exe",
+            cwd / "clients" / "LedgerRing.WinUI" / "bin",  # dev layout — skip recurse
+        ]
+        # Package layout: EXE next to engine\
+        if cwd.name.lower() == "engine":
+            candidates.insert(0, cwd.parent / "LedgerRing.WinUI.exe")
+        env_exe = os.environ.get("LEDGERRING_WINUI")
+        if env_exe:
+            candidates.insert(0, Path(env_exe))
+        for exe in candidates:
+            try:
+                if exe.is_file():
+                    subprocess.Popen([str(exe)], cwd=str(exe.parent), close_fds=True)
+                    return
+            except Exception:
+                continue
+        # Fallback: second-instance protocol not available — open API health as last resort
+        webbrowser.open(f"{_base()}/docs")
+
+    def open_glance(icon=None, item=None):
+        # Thin shell only — not the product
         webbrowser.open(f"{_base()}/glance")
 
     def open_plaid(icon=None, item=None):
@@ -156,10 +185,11 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             time.sleep(poll_seconds)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Refresh Safe to spend", refresh_now, default=True),
+        pystray.MenuItem("Open LedgerRing (desktop)", open_desktop, default=True),
+        pystray.MenuItem("Refresh Safe to spend", refresh_now),
         pystray.MenuItem("Link bank (browser)", open_plaid),
         pystray.MenuItem("API docs", open_docs),
-        pystray.MenuItem("Open Glance", open_app),
+        pystray.MenuItem("Glance (browser fallback)", open_glance),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit tray", on_exit),
     )

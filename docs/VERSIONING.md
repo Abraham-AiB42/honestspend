@@ -13,7 +13,7 @@ Linear milestone tags for what shipped:
 | **0.8.x** | Live books loop · month-close · fees/bills one-tap |
 | **0.9.x** | Tax year prep · scenarios · reports · pre-1.0 freeze |
 | **1.0.0** | Liquidity OS ship — [RC_1.0.md](./RC_1.0.md) + dogfood e2e green |
-| **1.x** | H3 polish (mobile PWA, automation OS, nerd grid) |
+| **1.x** | H3 polish (**client-first** WinUI automation, nerd tools; **no PWA**) |
 
 Tags **are not** “percent of the dream done.” They mark **slices of capability**.
 

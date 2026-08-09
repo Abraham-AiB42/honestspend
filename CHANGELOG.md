@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — Client-first (no PWA)
+
+- **[`docs/CLIENT_FIRST.md`](docs/CLIENT_FIRST.md)** — WinUI is the product; Glance is fallback only  
+- Dream H3: **native multi-platform clients**, never PWA  
+- **Tray:** Open LedgerRing (**desktop**) first; Glance demoted to browser fallback  
+- **Settings:** Register / remove Windows scheduled tasks (backup + digest) from the client  
+- About: client-first copy  
+
 ## 1.0.0 — Liquidity OS
 
 Local multi-entity **liquidity OS**: Safe to spend · Simple open-rarely · Full books · CSV/Plaid path · month-close · tax-year prep · scenarios · reports.

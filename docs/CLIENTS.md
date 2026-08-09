@@ -49,7 +49,7 @@ Do **not** share a live SQLite file on OneDrive for concurrent writers.
 
 | Platform | MVP path |
 |----------|----------|
-| **macOS / Linux** | `./scripts/start-glance.sh` → engine + browser **Glance** at `/glance` |
+| **macOS / Linux** | Engine + thin **Glance** browser shell until a **native** client exists — **not** a PWA product ([CLIENT_FIRST.md](./CLIENT_FIRST.md)) |
 | **iOS / Android** | Safari/Chrome → same `/glance` (or wrap WebView later); auth via API key |
 
 ### Contract clients must implement

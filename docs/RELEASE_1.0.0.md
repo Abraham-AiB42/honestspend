@@ -30,7 +30,7 @@
 |------|-----|
 | **Simple** | Home · Add · Get started (cold) · Can I buy? · Sort charges · About |
 | **Full books** | + Entities, ledger, import, banks, credit, tax, reports, **what-if scenarios**, users, … |
-| **Glance** | Mac/Linux/phone browser shell |
+| **Glance** | Thin read shell only — **not** a PWA product; clients are native-first ([CLIENT_FIRST.md](./CLIENT_FIRST.md)) |
 
 ## Install
 

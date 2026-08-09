@@ -257,7 +257,7 @@ public sealed partial class SettingsPage : Page
                 await App.Backend.EnsureRunningAsync();
             var ok = TrayHost.TryStart();
             StatusText.Text = ok
-                ? "Tray process started (Spendable hover + critical toasts)."
+                ? "Tray started — hover for Safe to spend; Open LedgerRing opens this desktop app."
                 : "Could not start tray — check backend root and `pip install pystray pillow`.";
         }
         catch (Exception ex)
@@ -274,6 +274,64 @@ public sealed partial class SettingsPage : Page
     }
 
     private void ShowWindow_Click(object sender, RoutedEventArgs e) => App.ShowMainWindow();
+
+    private void RegisterTasks_Click(object sender, RoutedEventArgs e)
+        => RunTaskScript(uninstall: false);
+
+    private void UnregisterTasks_Click(object sender, RoutedEventArgs e)
+        => RunTaskScript(uninstall: true);
+
+    private void RunTaskScript(bool uninstall)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var root = BackendHost.ResolveBackendRoot()
+                ?? AppConfig.BackendRoot
+                ?? Directory.GetCurrentDirectory();
+            var script = Path.Combine(root, "scripts", "register-tasks.ps1");
+            // Package layout: scripts next to engine or repo root
+            if (!File.Exists(script))
+                script = Path.Combine(root, "..", "scripts", "register-tasks.ps1");
+            script = Path.GetFullPath(script);
+            if (!File.Exists(script))
+            {
+                AutomationStatusText.Text =
+                    "register-tasks.ps1 not found next to the engine. Use a full repo or package that includes scripts\\.";
+                return;
+            }
+            var args = uninstall
+                ? $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\" -Uninstall"
+                : $"-NoProfile -ExecutionPolicy Bypass -File \"{script}\"";
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = args,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null)
+            {
+                AutomationStatusText.Text = "Could not start PowerShell.";
+                return;
+            }
+            var stdout = p.StandardOutput.ReadToEnd();
+            var stderr = p.StandardError.ReadToEnd();
+            p.WaitForExit(60000);
+            AutomationStatusText.Text = p.ExitCode == 0
+                ? (uninstall ? "Scheduled tasks removed." : "Scheduled tasks registered (current user).")
+                  + (string.IsNullOrWhiteSpace(stdout) ? "" : "\n" + stdout.Trim())
+                : $"Task script exit {p.ExitCode}: {stderr.Trim()} {stdout.Trim()}";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
 
     private async Task LoadFiscalAsync()
     {
