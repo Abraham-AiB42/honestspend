@@ -1965,6 +1965,66 @@ def list_rules(db: Session = Depends(get_db)):
     return out
 
 
+class RuleTestIn(BaseModel):
+    match_type: str = "contains"
+    pattern: str
+    limit: int = 80
+
+
+@app.post("/api/rules/test")
+def test_rule_pattern(body: RuleTestIn, db: Session = Depends(get_db)):
+    """Preview which recent payees a draft rule would match (no write)."""
+    from financial_os.services.categorizer import match_rule
+
+    pat = (body.pattern or "").strip()
+    if not pat:
+        return {"matches": [], "scanned": 0, "pattern": "", "match_type": body.match_type}
+
+    mt = (body.match_type or "contains").strip().lower()
+    # In-memory probe — never persisted (only pattern + match_type used)
+    probe = CategoryRule(match_type=mt, pattern=pat, category_id=1)
+    lim = max(1, min(int(body.limit or 80), 200))
+    # Distinct-ish recent payees from last N txns
+    txns = (
+        db.query(Transaction)
+        .order_by(Transaction.txn_date.desc(), Transaction.id.desc())
+        .limit(lim * 3)
+        .all()
+    )
+    seen: set[str] = set()
+    matches: list[dict] = []
+    scanned = 0
+    for t in txns:
+        text = f"{t.payee or ''} {t.memo or ''}".strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        scanned += 1
+        if match_rule(probe, key):
+            matches.append(
+                {
+                    "payee": t.payee or text,
+                    "txn_date": str(t.txn_date) if t.txn_date else None,
+                    "amount": str(t.amount) if t.amount is not None else None,
+                    "category_id": t.category_id,
+                }
+            )
+        if scanned >= lim:
+            break
+        if len(matches) >= 25:
+            break
+    return {
+        "match_type": mt,
+        "pattern": pat,
+        "scanned": scanned,
+        "match_count": len(matches),
+        "matches": matches,
+    }
+
+
 @app.post("/api/rules", response_model=RuleOut)
 def create_rule(body: RuleIn, db: Session = Depends(get_db)):
     if not db.get(Category, body.category_id):

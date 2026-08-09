@@ -567,6 +567,14 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetRulesAsync(CancellationToken ct = default)
         => GetJsonAsync("api/rules", ct);
 
+    public Task<JsonElement> TestRuleAsync(string matchType, string pattern, int limit = 80, CancellationToken ct = default)
+        => PostJsonAsync("api/rules/test", new
+        {
+            match_type = matchType,
+            pattern,
+            limit,
+        }, ct);
+
     public Task<JsonElement> CreateRuleAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/rules", body, ct);
 

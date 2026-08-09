@@ -49,8 +49,9 @@
             </ListView>
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Add rule" />
-            <TextBox x:Name="PatternBox" Header="Payee text to match" PlaceholderText="e.g. AMAZON or NETFLIX" />
-            <ComboBox x:Name="MatchBox" Header="How to match" SelectedIndex="0">
+            <TextBox x:Name="PatternBox" Header="Payee text to match" PlaceholderText="e.g. AMAZON or NETFLIX"
+                     TextChanged="Pattern_Changed" />
+            <ComboBox x:Name="MatchBox" Header="How to match" SelectedIndex="0" SelectionChanged="Match_Changed">
                 <ComboBoxItem Content="Contains (usual)" Tag="contains" />
                 <ComboBoxItem Content="Starts with" Tag="starts_with" />
                 <ComboBoxItem Content="Exact match" Tag="exact" />
@@ -59,7 +60,22 @@
             <ComboBox x:Name="CatBox" Header="Assign category" HorizontalAlignment="Stretch" />
             <NumberBox x:Name="PriorityBox" Header="Priority (higher wins if two match)" Value="100" />
             <CheckBox x:Name="TransferBox" Content="Treat as transfer (not spend)" />
-            <Button Content="Add rule" Click="Add_Click" Style="{StaticResource AccentButtonStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Test pattern" Click="Test_Click" />
+                <Button Content="Add rule" Click="Add_Click" Style="{StaticResource AccentButtonStyle}" />
+            </StackPanel>
+
+            <Border Padding="12" CornerRadius="8"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="6">
+                    <TextBlock FontWeight="SemiBold" Text="Would match (recent payees)" />
+                    <TextBlock x:Name="TestSummaryText" Opacity="0.75" TextWrapping="Wrap"
+                               Text="Type a pattern and tap Test (or wait a moment)." />
+                    <ListView x:Name="TestMatchList" SelectionMode="None" MaxHeight="180" />
+                </StackPanel>
+            </Border>
 
             <TextBlock x:Name="MsgText" Opacity="0.85" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />

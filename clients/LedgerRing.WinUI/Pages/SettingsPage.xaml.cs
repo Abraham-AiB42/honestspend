@@ -39,8 +39,75 @@ public sealed partial class SettingsPage : Page
         EngineLogText.Text = App.Backend?.LogPath is string lp
             ? $"Engine log: {lp}"
             : "Engine log: ~/.financial-os/engine.log (after Start engine)";
+        RefreshTaskStatus();
         await LoadPathsAsync();
         await LoadFiscalAsync();
+    }
+
+    private void RefreshTasks_Click(object sender, RoutedEventArgs e) => RefreshTaskStatus();
+
+    /// <summary>Query Task Scheduler for LedgerRing-AutoBackup / LedgerRing-Digest (current user).</summary>
+    private void RefreshTaskStatus()
+    {
+        try
+        {
+            // One-shot PowerShell: State + LastRunTime + NextRunTime for known task names
+            const string ps =
+                "$names=@('LedgerRing-AutoBackup','LedgerRing-Digest');" +
+                "foreach($n in $names){" +
+                "  $t=Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue;" +
+                "  if(-not $t){ Write-Output ($n + '|missing|—|—'); continue }" +
+                "  $i=$t | Get-ScheduledTaskInfo;" +
+                "  $last=if($i.LastRunTime -and $i.LastRunTime.Year -gt 2000){$i.LastRunTime.ToString('yyyy-MM-dd HH:mm')}else{'never'};" +
+                "  $next=if($i.NextRunTime -and $i.NextRunTime.Year -gt 2000){$i.NextRunTime.ToString('yyyy-MM-dd HH:mm')}else{'—'};" +
+                "  Write-Output ($n + '|' + $t.State + '|' + $last + '|' + $next)" +
+                "}";
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -NonInteractive -Command \"{ps}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+            };
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p is null)
+            {
+                TaskStatusText.Text = "Could not start PowerShell to query tasks.";
+                return;
+            }
+            var stdout = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(15000);
+            var lines = new List<string>();
+            foreach (var raw in stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = raw.Split('|');
+                if (parts.Length < 4)
+                {
+                    lines.Add(raw.Trim());
+                    continue;
+                }
+                var name = parts[0] switch
+                {
+                    "LedgerRing-AutoBackup" => "Auto-backup",
+                    "LedgerRing-Digest" => "Daily digest",
+                    _ => parts[0],
+                };
+                var state = parts[1];
+                if (state.Equals("missing", StringComparison.OrdinalIgnoreCase))
+                    lines.Add($"· {name}: not registered");
+                else
+                    lines.Add($"· {name}: {state} · last {parts[2]} · next {parts[3]}");
+            }
+            TaskStatusText.Text = lines.Count > 0
+                ? string.Join("\n", lines)
+                : "No task info returned. Register tasks below if needed.";
+        }
+        catch (Exception ex)
+        {
+            TaskStatusText.Text = "Task status unavailable: " + ex.Message;
+        }
     }
 
     private async Task LoadPathsAsync()
@@ -325,6 +392,7 @@ public sealed partial class SettingsPage : Page
                 ? (uninstall ? "Scheduled tasks removed." : "Scheduled tasks registered (current user).")
                   + (string.IsNullOrWhiteSpace(stdout) ? "" : "\n" + stdout.Trim())
                 : $"Task script exit {p.ExitCode}: {stderr.Trim()} {stdout.Trim()}";
+            RefreshTaskStatus();
         }
         catch (Exception ex)
         {

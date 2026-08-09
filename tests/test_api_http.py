@@ -94,6 +94,68 @@ def test_require_api_key_blocks(tmp_path, monkeypatch):
         assert r2.status_code == 200
 
 
+def test_rules_test_preview(client: TestClient):
+    """Draft rule pattern previews matches against recent payees (no write)."""
+    from datetime import date
+    from decimal import Decimal
+
+    from financial_os.db import Account, Profile, Transaction
+    import financial_os.api.app as app_mod
+
+    with app_mod.SessionLocal() as s:
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        acct = (
+            s.query(Account)
+            .filter(Account.profile_id == personal.id, Account.archived_at.is_(None))
+            .first()
+        )
+        if acct is None:
+            acct = Account(
+                profile_id=personal.id,
+                nickname="Test checking",
+                kind="checking",
+                current_balance=Decimal("100"),
+            )
+            s.add(acct)
+            s.flush()
+        s.add(
+            Transaction(
+                profile_id=personal.id,
+                account_id=acct.id,
+                txn_date=date(2026, 8, 1),
+                amount=Decimal("-12.50"),
+                payee="AMAZON MARKETPLACE",
+            )
+        )
+        s.add(
+            Transaction(
+                profile_id=personal.id,
+                account_id=acct.id,
+                txn_date=date(2026, 8, 2),
+                amount=Decimal("-9.00"),
+                payee="LOCAL COFFEE",
+            )
+        )
+        s.commit()
+
+    r = client.post(
+        "/api/rules/test",
+        json={"match_type": "contains", "pattern": "amazon", "limit": 50},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["match_count"] >= 1
+    payees = " ".join(m.get("payee") or "" for m in body.get("matches") or []).lower()
+    assert "amazon" in payees
+
+    r2 = client.post(
+        "/api/rules/test",
+        json={"match_type": "contains", "pattern": "zzzz-no-such-payee", "limit": 50},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["match_count"] == 0
+
+
 def test_reconcile_endpoint(client: TestClient):
     r = client.get("/api/reconcile")
     assert r.status_code == 200

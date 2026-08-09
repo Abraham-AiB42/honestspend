@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 — Ledger bulk + rule test + task status
+
+- **Ledger bulk categorize** — multi-select checkboxes · apply category to selected (learns rule from first)
+- **Rules test-as-you-type** — `POST /api/rules/test` previews matches against recent payees
+- **Settings task status** — shows Task Scheduler state for Auto-backup + Daily digest (last/next run)
+
 ## 1.0.2 — Client power tools
 
 - **Audit log** Full books page (`GET /api/permissions/audit`)

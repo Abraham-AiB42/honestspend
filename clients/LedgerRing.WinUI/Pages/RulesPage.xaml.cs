@@ -1,6 +1,7 @@
 using System.Text.Json;
 using LedgerRing_WinUI.Helpers;
 using LedgerRing_WinUI.Services;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
@@ -9,9 +10,16 @@ namespace LedgerRing_WinUI.Pages;
 
 public sealed partial class RulesPage : Page
 {
+    private DispatcherQueueTimer? _testDebounce;
+    private int _testSeq;
+
     public RulesPage()
     {
         InitializeComponent();
+        _testDebounce = DispatcherQueue.CreateTimer();
+        _testDebounce.Interval = TimeSpan.FromMilliseconds(450);
+        _testDebounce.IsRepeating = false;
+        _testDebounce.Tick += async (_, _) => await RunTestAsync(silent: true);
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -21,6 +29,74 @@ public sealed partial class RulesPage : Page
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadAsync();
+
+    private void Pattern_Changed(object sender, TextChangedEventArgs e) => ScheduleTest();
+    private void Match_Changed(object sender, SelectionChangedEventArgs e) => ScheduleTest();
+    private async void Test_Click(object sender, RoutedEventArgs e) => await RunTestAsync(silent: false);
+
+    private void ScheduleTest()
+    {
+        if (_testDebounce is null) return;
+        _testDebounce.Stop();
+        _testDebounce.Start();
+    }
+
+    private string CurrentMatchType()
+    {
+        if (MatchBox.SelectedItem is ComboBoxItem mi && mi.Tag is string mt)
+            return mt;
+        return "contains";
+    }
+
+    private async Task RunTestAsync(bool silent)
+    {
+        var pattern = PatternBox.Text?.Trim() ?? "";
+        if (string.IsNullOrEmpty(pattern))
+        {
+            TestSummaryText.Text = "Type a pattern to preview matches against recent payees.";
+            TestMatchList.ItemsSource = null;
+            return;
+        }
+
+        var seq = ++_testSeq;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.TestRuleAsync(CurrentMatchType(), pattern);
+            if (seq != _testSeq) return; // stale
+
+            var count = res.TryGetProperty("match_count", out var mc) ? mc.GetInt32() : 0;
+            var scanned = res.TryGetProperty("scanned", out var sc) ? sc.GetInt32() : 0;
+            var lines = new List<string>();
+            if (res.TryGetProperty("matches", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var m in arr.EnumerateArray())
+                {
+                    var payee = JsonUi.Str(m, "payee", "(no payee)");
+                    var date = JsonUi.Str(m, "txn_date", "");
+                    var amt = JsonUi.Str(m, "amount", "");
+                    lines.Add(string.IsNullOrEmpty(date) ? payee : $"{date} · {payee} · {amt}");
+                }
+            }
+            TestMatchList.ItemsSource = lines;
+            TestSummaryText.Text = count == 0
+                ? $"No matches in {scanned} recent payees · pattern \"{pattern}\""
+                : $"{count} match{(count == 1 ? "" : "es")} of {scanned} recent payees · \"{pattern}\"";
+            if (!silent)
+                MsgText.Text = TestSummaryText.Text;
+        }
+        catch (Exception ex)
+        {
+            if (seq != _testSeq) return;
+            TestSummaryText.Text = silent ? "Test paused (engine offline?)." : ex.Message;
+            if (!silent)
+            {
+                ErrorBar.Message = ex.Message;
+                ErrorBar.IsOpen = true;
+            }
+        }
+    }
 
     private async Task LoadAsync()
     {
@@ -87,6 +163,8 @@ public sealed partial class RulesPage : Page
             }
             RuleList.ItemsSource = rows;
             MsgText.Text = $"{rows.Count} rules";
+            if (!string.IsNullOrWhiteSpace(PatternBox.Text))
+                await RunTestAsync(silent: true);
         }
         catch (Exception ex)
         {
@@ -104,9 +182,7 @@ public sealed partial class RulesPage : Page
                 throw new InvalidOperationException("Pattern required.");
             if (CatBox.SelectedItem is not ComboBoxItem ci || ci.Tag is not int catId)
                 throw new InvalidOperationException("Pick a category.");
-            var match = "contains";
-            if (MatchBox.SelectedItem is ComboBoxItem mi && mi.Tag is string mt)
-                match = mt;
+            var match = CurrentMatchType();
 
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
@@ -120,6 +196,8 @@ public sealed partial class RulesPage : Page
                 active = true,
             });
             PatternBox.Text = "";
+            TestMatchList.ItemsSource = null;
+            TestSummaryText.Text = "Type a pattern to preview matches against recent payees.";
             MsgText.Text = "Rule added.";
             await LoadAsync();
         }

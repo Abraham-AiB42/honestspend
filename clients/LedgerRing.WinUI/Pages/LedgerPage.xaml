@@ -24,6 +24,25 @@
                 </StackPanel>
             </Grid>
 
+            <Border Padding="12" CornerRadius="8"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Bulk categorize" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="Check rows below, pick a category, Apply. Learns a rule from the first payee." />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Select all" Click="SelectAll_Click" />
+                        <Button Content="Clear" Click="ClearSelection_Click" />
+                        <ComboBox x:Name="BulkCatBox" Header="Category" MinWidth="220" PlaceholderText="Pick category" />
+                        <Button Content="Apply to selected" Click="BulkApply_Click"
+                                Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom" />
+                    </StackPanel>
+                    <TextBlock x:Name="BulkStatusText" Opacity="0.75" FontSize="12" />
+                </StackPanel>
+            </Border>
+
             <ListView x:Name="TxnList" SelectionMode="None">
                 <ListView.ItemTemplate>
                     <DataTemplate>
@@ -33,15 +52,18 @@
                                 BorderThickness="1" CornerRadius="10">
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2">
+                                <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                          VerticalAlignment="Center" MinWidth="32" />
+                                <StackPanel Grid.Column="1" Spacing="2">
                                     <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
                                     <TextBlock Opacity="0.7" Text="{Binding Subtitle}" TextWrapping="Wrap" />
                                 </StackPanel>
                                 <ComboBox
-                                    Grid.Column="1"
+                                    Grid.Column="2"
                                     MinWidth="200"
                                     ItemsSource="{Binding Categories}"
                                     SelectedItem="{Binding SelectedCategory, Mode=TwoWay}"

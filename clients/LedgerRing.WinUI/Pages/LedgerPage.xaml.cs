@@ -69,9 +69,16 @@ public sealed partial class LedgerPage : Page
                 _allCats.Add(new CatOpt(id, label));
             }
             CatBox.Items.Clear();
+            BulkCatBox.Items.Clear();
             foreach (var c in _allCats)
+            {
                 CatBox.Items.Add(c);
+                // Bulk: real categories only (skip uncategorized null)
+                if (c.Id is not null)
+                    BulkCatBox.Items.Add(c);
+            }
             if (CatBox.Items.Count > 0) CatBox.SelectedIndex = 0;
+            if (BulkCatBox.Items.Count > 0) BulkCatBox.SelectedIndex = 0;
 
             await LoadTxnsAsync();
         }
@@ -124,6 +131,7 @@ public sealed partial class LedgerPage : Page
                 _rows.Add(new TxnRow(id, title, $"{acctName} · {st}", cats, selected));
             }
             MsgText.Text = $"{_rows.Count} transactions";
+            BulkStatusText.Text = "0 selected";
             VoidTxnBox.Items.Clear();
             foreach (var row in _rows)
             {
@@ -134,6 +142,53 @@ public sealed partial class LedgerPage : Page
         finally
         {
             _loading = false;
+        }
+    }
+
+    private void SelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var row in _rows)
+            row.IsSelected = true;
+        BulkStatusText.Text = $"{_rows.Count} selected";
+    }
+
+    private void ClearSelection_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var row in _rows)
+            row.IsSelected = false;
+        BulkStatusText.Text = "0 selected";
+    }
+
+    private async void BulkApply_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (BulkCatBox.SelectedItem is not CatOpt cat || cat.Id is null)
+                throw new InvalidOperationException("Pick a category for bulk apply.");
+            var selected = _rows.Where(r => r.IsSelected).ToList();
+            if (selected.Count == 0)
+                throw new InvalidOperationException("Select at least one transaction (checkbox).");
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var n = 0;
+            for (var i = 0; i < selected.Count; i++)
+            {
+                var row = selected[i];
+                // Learn rule only on first row so we don't spam learned rules
+                await api.PatchTransactionAsync(row.Id, new { category_id = cat.Id }, learn: i == 0);
+                row.SelectedCategory = cat;
+                row.IsSelected = false;
+                n++;
+            }
+            BulkStatusText.Text = $"Applied {cat.Label} to {n} · rule learned from first";
+            MsgText.Text = $"Bulk categorized {n} → {cat.Label}";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
         }
     }
 
@@ -234,6 +289,13 @@ public sealed partial class LedgerPage : Page
         {
             get => _selected;
             set { _selected = value; OnPropertyChanged(); }
+        }
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get => _isSelected;
+            set { _isSelected = value; OnPropertyChanged(); }
         }
 
         public TxnRow(int id, string title, string subtitle, ObservableCollection<CatOpt> cats, CatOpt selected)

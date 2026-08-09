@@ -83,10 +83,10 @@ public sealed partial class ReportsPage : Page
                 var dLines = new List<string>();
                 if (debt.TryGetProperty("debts", out var da) && da.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var d in da.EnumerateArray())
+                    foreach (var debtRow in da.EnumerateArray())
                         dLines.Add(
-                            $"{JsonUi.Str(d, "name")} · {Money(d, "balance")} · {JsonUi.Str(d, "apr_pct")} · " +
-                            JsonUi.Str(d, "recommendation"));
+                            $"{JsonUi.Str(debtRow, "name")} · {Money(debtRow, "balance")} · {JsonUi.Str(debtRow, "apr_pct")} · " +
+                            JsonUi.Str(debtRow, "recommendation"));
                 }
                 DebtList.ItemsSource = dLines.Count > 0 ? dLines : new List<string> { "No debts." };
             }
