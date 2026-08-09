@@ -1,11 +1,24 @@
 using System.Diagnostics;
-using System.Text.Json;
 
 namespace LedgerRing_WinUI.Services;
 
 /// <summary>Locate this WinUI EXE for tray / package cold-start (client-first).</summary>
 public static class WinUiPaths
 {
+    /// <summary>Default data folder used when AppConfig.DataDir is unset.</summary>
+    public static string DataDirRoot()
+    {
+        if (!string.IsNullOrWhiteSpace(AppConfig.DataDir))
+            return AppConfig.DataDir!;
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".financial-os");
+    }
+
+    /// <summary>Pending page tag from tray / second launch (e.g. review, reports).</summary>
+    public static string NavigateRequestPath()
+        => Path.Combine(DataDirRoot(), "winui.navigate");
+
     /// <summary>Write path so Python tray can launch us via LEDGERRING_WINUI or pointer file.</summary>
     public static void PublishExePathForTray()
     {
@@ -16,11 +29,7 @@ public static class WinUiPaths
             if (string.IsNullOrWhiteSpace(exe) || !File.Exists(exe))
                 return;
 
-            var data = !string.IsNullOrWhiteSpace(AppConfig.DataDir)
-                ? AppConfig.DataDir!
-                : Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".financial-os");
+            var data = DataDirRoot();
             Directory.CreateDirectory(data);
             var pointer = Path.Combine(data, "winui.path");
             File.WriteAllText(pointer, exe);
@@ -42,6 +51,47 @@ public static class WinUiPaths
         catch
         {
             /* non-fatal */
+        }
+    }
+
+    /// <summary>Queue a nav tag for the running instance (or cold start).</summary>
+    public static void WriteNavigateRequest(string pageTag)
+    {
+        try
+        {
+            var tag = (pageTag ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(tag)) return;
+            // normalize aliases
+            tag = tag switch
+            {
+                "sort" or "charges" or "sort-charges" => "review",
+                "settings" => "settings",
+                _ => tag,
+            };
+            var dir = DataDirRoot();
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(NavigateRequestPath(), tag);
+        }
+        catch
+        {
+            /* non-fatal */
+        }
+    }
+
+    /// <summary>Read and clear pending nav tag, or null if none.</summary>
+    public static string? ConsumeNavigateRequest()
+    {
+        try
+        {
+            var path = NavigateRequestPath();
+            if (!File.Exists(path)) return null;
+            var tag = File.ReadAllText(path).Trim().Split('\n', '\r')[0].Trim().ToLowerInvariant();
+            try { File.Delete(path); } catch { /* ignore */ }
+            return string.IsNullOrEmpty(tag) ? null : tag;
+        }
+        catch
+        {
+            return null;
         }
     }
 }

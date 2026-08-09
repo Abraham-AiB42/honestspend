@@ -33,6 +33,19 @@ When we leave Windows-primary:
 
 Glance may improve as a **lab/read tool**; it does not replace client-first delivery.
 
+## Tray → desktop deep-links
+
+Tray menu opens the **WinUI** EXE (from `winui.path`), not Glance:
+
+| Tray item | CLI / request |
+|-----------|----------------|
+| Open LedgerRing | (home) |
+| Sort charges | `--page review` |
+| Reports | `--page reports` |
+| Settings | `--page settings` |
+
+A second launch writes `~/.financial-os/winui.navigate` (or `FOS_DATA_DIR`) and signals the running instance to show + navigate. Cold start: same `--page` flag on the EXE.
+
 ## 1.x roadmap alignment
 
 H3 automation and nerd tools ship **in WinUI** first.  

@@ -25,6 +25,7 @@
                         <Button Content="Refresh suggestions" Click="Suggest_Click" />
                         <Button Content="Accept confident ones" Click="ApplyHigh_Click"
                                 Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Accept all shown" Click="AcceptAll_Click" />
                     </StackPanel>
                     <CheckBox x:Name="GrokBox" Content="Use AI assist if configured (optional)" IsChecked="False" />
                 </StackPanel>
@@ -50,6 +51,8 @@
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="6">
                                     <Button Content="Looks right" Tag="{Binding}" Click="Accept_Click"
                                             Style="{StaticResource AccentButtonStyle}"
+                                            Visibility="{Binding AcceptVisible}" />
+                                    <Button Content="Skip" Tag="{Binding}" Click="Skip_Click"
                                             Visibility="{Binding AcceptVisible}" />
                                     <TextBlock Text="{Binding Badge}" Opacity="0.7" HorizontalAlignment="Center" />
                                 </StackPanel>

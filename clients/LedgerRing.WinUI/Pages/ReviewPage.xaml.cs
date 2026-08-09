@@ -130,6 +130,51 @@ public sealed partial class ReviewPage : Page
         }
     }
 
+    private void Skip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not ReviewRow row) return;
+        _rows.Remove(row);
+        var left = _rows.Count(r => r.AcceptVisible == Visibility.Visible);
+        StatusText.Text = left == 0
+            ? "Queue cleared for now (skipped rest)."
+            : $"{left} left · skipped one.";
+        if (_rows.Count == 0)
+            ShowEmpty("All clear", "Skipped for this session. Refresh to see again.");
+    }
+
+    private async void AcceptAll_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        var pending = _rows.Where(r => r.CategoryId is not null && r.AcceptVisible == Visibility.Visible).ToList();
+        if (pending.Count == 0)
+        {
+            StatusText.Text = "Nothing to accept — refresh or use Accept confident ones.";
+            return;
+        }
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var n = 0;
+            for (var i = 0; i < pending.Count; i++)
+            {
+                var row = pending[i];
+                await api.PatchTransactionAsync(
+                    row.TxnId,
+                    new { category_id = row.CategoryId!.Value },
+                    learn: true);
+                n++;
+            }
+            StatusText.Text = $"Accepted {n} · rules learned.";
+            await RunBatchAsync(false);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
     public sealed class ReviewRow
     {
         public int TxnId { get; }

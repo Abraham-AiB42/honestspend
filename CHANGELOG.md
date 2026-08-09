@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 — Sort polish · debt CSV · tray deep-links
+
+- **Sort charges** Skip · Accept all shown (learns rules)
+- **Reports** Export debt CSV (alongside cashflow)
+- **Tray → WinUI deep-link** menu: Sort charges / Reports / Settings via `--page` + `winui.navigate`
+- Second-instance launch honors page and activates existing window
+
 ## 1.0.3 — Ledger bulk + rule test + task status
 
 - **Ledger bulk categorize** — multi-select checkboxes · apply category to selected (learns rule from first)

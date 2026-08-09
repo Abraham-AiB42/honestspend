@@ -20,7 +20,8 @@
                         Text="Cash flow by who — not a full accounting suite. Full books only." />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button Content="Export CSV" Click="Export_Click" />
+                    <Button Content="Export cashflow CSV" Click="Export_Click" />
+                    <Button Content="Export debt CSV" Click="ExportDebt_Click" />
                     <Button Content="Refresh" Click="Refresh_Click" />
                 </StackPanel>
             </Grid>

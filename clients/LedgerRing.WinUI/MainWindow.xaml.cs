@@ -68,6 +68,13 @@ public sealed partial class MainWindow : Window
             var needs = ob.TryGetProperty("needs_setup", out var n) && n.GetBoolean();
             AppState.ShowSetupNav = needs;
             ApplySimpleChrome();
+            // Deep-link overrides first-run only when setup is already done
+            var deep = WinUiPaths.ConsumeNavigateRequest() ?? AppConfig.OpenPage;
+            if (!string.IsNullOrWhiteSpace(deep) && !(needs && !AppState.ReadOnlySession))
+            {
+                NavigatePublic(deep!);
+                return;
+            }
             if (needs && !AppState.ReadOnlySession)
             {
                 SelectNav("setup");
@@ -78,10 +85,66 @@ public sealed partial class MainWindow : Window
         catch
         {
             // Engine offline — still show home; Settings can start it.
+            var deepOffline = WinUiPaths.ConsumeNavigateRequest() ?? AppConfig.OpenPage;
+            if (!string.IsNullOrWhiteSpace(deepOffline))
+            {
+                NavigatePublic(deepOffline!);
+                return;
+            }
         }
 
         SelectNav("home");
         NavFrame.Navigate(typeof(HomePage));
+    }
+
+    /// <summary>Tray / second-instance deep-link after show.</summary>
+    public void ConsumePendingNavigation()
+    {
+        var tag = WinUiPaths.ConsumeNavigateRequest();
+        if (string.IsNullOrWhiteSpace(tag)) return;
+        NavigatePublic(tag);
+    }
+
+    /// <summary>Public nav from deep-link tags (review, reports, settings, …).</summary>
+    public void NavigatePublic(string tag)
+    {
+        tag = (tag ?? "").Trim().ToLowerInvariant();
+        if (tag is "sort" or "charges" or "sort-charges") tag = "review";
+        if (tag == "settings")
+        {
+            // Settings is the NavigationView footer item, not a menu tag
+            try
+            {
+                NavView.SelectedItem = NavView.SettingsItem;
+            }
+            catch { /* ignore */ }
+            NavFrame.Navigate(typeof(SettingsPage));
+            // Full books if needed for other pages — settings always available
+            return;
+        }
+        // Deep-link to Full books pages should leave Simple mode
+        if (AppState.SimpleMode && !SimpleNavTags.Contains(tag) && tag != "home")
+        {
+            AppState.SimpleMode = false;
+            try
+            {
+                Windows.Storage.ApplicationData.Current.LocalSettings.Values["UiMode"] = "full";
+            }
+            catch { /* ignore */ }
+            ApplySimpleChrome();
+            for (var j = 0; j < UiModeBox.Items.Count; j++)
+            {
+                if (UiModeBox.Items[j] is ComboBoxItem cbi && cbi.Tag as string == "full")
+                {
+                    _shellLoading = true;
+                    UiModeBox.SelectedIndex = j;
+                    _shellLoading = false;
+                    break;
+                }
+            }
+        }
+        SelectNav(tag);
+        NavigateTag(tag);
     }
 
     private void UiMode_Changed(object sender, SelectionChangedEventArgs e)

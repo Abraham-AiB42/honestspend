@@ -14,6 +14,7 @@ namespace LedgerRing_WinUI.Pages;
 public sealed partial class ReportsPage : Page
 {
     private JsonElement _lastCashflow;
+    private JsonElement _lastDebt;
 
     public ReportsPage()
     {
@@ -77,6 +78,7 @@ public sealed partial class ReportsPage : Page
             try
             {
                 var debt = await api.GetDebtReportAsync();
+                _lastDebt = debt.Clone();
                 DebtTotals.Text =
                     $"Total {Money(debt, "total_balance")} · {JsonUi.Str(debt, "count")} accounts · " +
                     $"est. months {JsonUi.Str(debt, "estimated_months", "—")}";
@@ -92,6 +94,7 @@ public sealed partial class ReportsPage : Page
             }
             catch
             {
+                _lastDebt = default;
                 DebtTotals.Text = "Debt snapshot unavailable.";
                 DebtList.ItemsSource = new List<string>();
             }
@@ -128,21 +131,63 @@ public sealed partial class ReportsPage : Page
                     sb.Append(JsonUi.Str(row, "cash_balance", "0")).AppendLine();
                 }
             }
-            var picker = new FileSavePicker();
-            var hwnd = WindowNative.GetWindowHandle(App.MainWindowInstance);
-            InitializeWithWindow.Initialize(picker, hwnd);
-            picker.SuggestedFileName = "ledgerring-cashflow.csv";
-            picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
-            var file = await picker.PickSaveFileAsync();
-            if (file is null) return;
-            await File.WriteAllTextAsync(file.Path, sb.ToString(), Encoding.UTF8);
-            TotalsText.Text += " · Exported CSV.";
+            await SaveCsvAsync("ledgerring-cashflow.csv", sb.ToString());
+            TotalsText.Text += " · Exported cashflow CSV.";
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private async void ExportDebt_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (_lastDebt.ValueKind != JsonValueKind.Object)
+            {
+                await LoadAsync();
+                if (_lastDebt.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("Load debt snapshot first.");
+            }
+            var sb = new StringBuilder();
+            sb.AppendLine("name,balance,apr_pct,recommendation");
+            if (_lastDebt.TryGetProperty("debts", out var debts) && debts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var row in debts.EnumerateArray())
+                {
+                    sb.Append(Csv(JsonUi.Str(row, "name"))).Append(',');
+                    sb.Append(JsonUi.Str(row, "balance", "0")).Append(',');
+                    sb.Append(Csv(JsonUi.Str(row, "apr_pct"))).Append(',');
+                    sb.Append(Csv(JsonUi.Str(row, "recommendation"))).AppendLine();
+                }
+            }
+            // Totals footer as comment-style last lines for spreadsheet clarity
+            sb.AppendLine();
+            sb.Append("total_balance,").Append(JsonUi.Str(_lastDebt, "total_balance", "0")).AppendLine();
+            sb.Append("estimated_months,").Append(JsonUi.Str(_lastDebt, "estimated_months", "")).AppendLine();
+            await SaveCsvAsync("ledgerring-debt.csv", sb.ToString());
+            DebtTotals.Text += " · Exported debt CSV.";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private static async Task SaveCsvAsync(string suggestedName, string content)
+    {
+        var picker = new FileSavePicker();
+        var hwnd = WindowNative.GetWindowHandle(App.MainWindowInstance);
+        InitializeWithWindow.Initialize(picker, hwnd);
+        picker.SuggestedFileName = suggestedName;
+        picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
+        var file = await picker.PickSaveFileAsync();
+        if (file is null) return;
+        await File.WriteAllTextAsync(file.Path, content, Encoding.UTF8);
     }
 
     private static string Csv(string s)

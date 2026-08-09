@@ -72,9 +72,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         draw.text((22, 18), "L", fill=(11, 15, 20))
         return img
 
-    def open_desktop(icon=None, item=None):
-        """Client-first: launch WinUI if present; never prefer PWA."""
-        import subprocess
+    def _winui_candidates() -> list:
         from pathlib import Path
 
         candidates: list[Path] = []
@@ -100,26 +98,61 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         ]
         if cwd.name.lower() == "engine":
             candidates.insert(0, cwd.parent / "LedgerRing.WinUI.exe")
-        # Resolve path files
         resolved: list[Path] = []
         for c in candidates:
             try:
                 if c.name.lower() == "winui.path" and c.is_file():
-                    p = Path(c.read_text(encoding="utf-8", errors="ignore").strip().splitlines()[0].strip())
+                    p = Path(
+                        c.read_text(encoding="utf-8", errors="ignore")
+                        .strip()
+                        .splitlines()[0]
+                        .strip()
+                    )
                     resolved.append(p)
                 else:
                     resolved.append(c)
             except Exception:
                 continue
-        for exe in resolved:
+        return resolved
+
+    def open_desktop(icon=None, item=None, page: str | None = None):
+        """Client-first: launch WinUI if present; never prefer PWA.
+
+        Optional page deep-link (e.g. review, reports, settings) via --page.
+        """
+        import subprocess
+        from pathlib import Path
+
+        # Write navigate request so a running single-instance WinUI can switch page
+        if page:
+            try:
+                data = Path(settings.data_dir)
+                data.mkdir(parents=True, exist_ok=True)
+                (data / "winui.navigate").write_text(page.strip().lower(), encoding="utf-8")
+            except Exception:
+                pass
+
+        for exe in _winui_candidates():
             try:
                 if exe.is_file() and exe.suffix.lower() in (".exe", ""):
-                    subprocess.Popen([str(exe)], cwd=str(exe.parent), close_fds=True)
+                    args = [str(exe)]
+                    if page:
+                        args += ["--page", page]
+                    subprocess.Popen(args, cwd=str(exe.parent), close_fds=True)
                     return
             except Exception:
                 continue
         # Last resort: docs — not Glance as primary
         webbrowser.open(f"{_base()}/docs")
+
+    def open_sort_charges(icon=None, item=None):
+        open_desktop(page="review")
+
+    def open_reports(icon=None, item=None):
+        open_desktop(page="reports")
+
+    def open_settings(icon=None, item=None):
+        open_desktop(page="settings")
 
     def open_glance(icon=None, item=None):
         # Thin shell only — not the product
@@ -207,6 +240,9 @@ def run_tray(*, poll_seconds: int = 60) -> None:
 
     menu = pystray.Menu(
         pystray.MenuItem("Open LedgerRing (desktop)", open_desktop, default=True),
+        pystray.MenuItem("Sort charges", open_sort_charges),
+        pystray.MenuItem("Reports", open_reports),
+        pystray.MenuItem("Settings", open_settings),
         pystray.MenuItem("Refresh Safe to spend", refresh_now),
         pystray.MenuItem("Link bank (browser)", open_plaid),
         pystray.MenuItem("API docs", open_docs),

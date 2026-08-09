@@ -26,11 +26,16 @@ public static class AppConfig
     /// <summary>CLI / logon: hide UI, run engine + tray only.</summary>
     public static bool TrayOnly { get; set; }
 
+    /// <summary>Optional deep-link page tag from CLI (review, reports, settings, …).</summary>
+    public static string? OpenPage { get; set; }
+
     /// <summary>Parse Environment.GetCommandLineArgs() into flags.</summary>
     public static void ApplyCommandLine(string[] args)
     {
-        foreach (var a in args.Skip(1))
+        var list = args.Skip(1).ToList();
+        for (var i = 0; i < list.Count; i++)
         {
+            var a = list[i];
             if (a.Equals("--tray-only", StringComparison.OrdinalIgnoreCase) ||
                 a.Equals("/tray-only", StringComparison.OrdinalIgnoreCase))
             {
@@ -47,6 +52,22 @@ public static class AppConfig
             {
                 StartTrayWithApp = true;
             }
+            else if (a.StartsWith("--page=", StringComparison.OrdinalIgnoreCase) ||
+                     a.StartsWith("--open=", StringComparison.OrdinalIgnoreCase) ||
+                     a.StartsWith("/page=", StringComparison.OrdinalIgnoreCase))
+            {
+                OpenPage = a.Split('=', 2)[1].Trim().Trim('"');
+            }
+            else if ((a.Equals("--page", StringComparison.OrdinalIgnoreCase) ||
+                      a.Equals("--open", StringComparison.OrdinalIgnoreCase) ||
+                      a.Equals("/page", StringComparison.OrdinalIgnoreCase))
+                     && i + 1 < list.Count)
+            {
+                OpenPage = list[++i].Trim().Trim('"');
+            }
         }
+
+        if (!string.IsNullOrWhiteSpace(OpenPage))
+            WinUiPaths.WriteNavigateRequest(OpenPage);
     }
 }

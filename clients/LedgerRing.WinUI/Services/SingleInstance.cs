@@ -20,9 +20,20 @@ public static class SingleInstance
     {
         try
         {
+            // Deep-link / page args are written to winui.navigate before we signal show
+            // so the running instance can navigate after Activate.
+            try
+            {
+                AppConfig.ApplyCommandLine(Environment.GetCommandLineArgs());
+            }
+            catch { /* ignore */ }
+
             _mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
             if (!createdNew)
             {
+                // Ensure navigate request is on disk if second launch had --page
+                if (!string.IsNullOrWhiteSpace(AppConfig.OpenPage))
+                    WinUiPaths.WriteNavigateRequest(AppConfig.OpenPage!);
                 try
                 {
                     using var ev = EventWaitHandle.OpenExisting(EventName);

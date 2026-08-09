@@ -131,7 +131,7 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Show main window (second launch or Settings).</summary>
+    /// <summary>Show main window (second launch, tray, or Settings). Honors winui.navigate deep-link.</summary>
     public static void ShowMainWindow()
     {
         if (MainWindowInstance is null) return;
@@ -141,6 +141,8 @@ public partial class App : Application
             MainWindowInstance.Activate();
             if (MainWindowInstance.AppWindow.Presenter is OverlappedPresenter op)
                 op.Restore();
+            if (MainWindowInstance is MainWindow mw)
+                mw.ConsumePendingNavigation();
         }
         catch
         {
