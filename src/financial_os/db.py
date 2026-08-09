@@ -354,6 +354,9 @@ class AppSettings(Base):
     import_last_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # User snoozed until this date (inclusive quiet until after)
     import_reminder_snooze_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # Month-close ritual (YYYY-MM + timestamp when user marked closed)
+    month_close_period: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
+    month_close_last_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:

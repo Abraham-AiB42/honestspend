@@ -2,17 +2,78 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from financial_os.db import AppSettings
 from financial_os.services.fee_brief import build_fee_brief
 from financial_os.services.import_brief import build_import_brief
 from financial_os.services.promo_clock import promo_death_clock
 from financial_os.services.reconcile import reconcile_report
 from financial_os.services.tax_vault import get_tax_vault
+
+
+def period_key(as_of: date | None = None) -> str:
+    d = as_of or date.today()
+    return d.strftime("%Y-%m")
+
+
+def get_month_close_state(session: Session) -> dict[str, Any]:
+    s = session.get(AppSettings, 1)
+    if not s:
+        return {
+            "period": period_key(),
+            "closed_this_period": False,
+            "last_closed_at": None,
+            "last_closed_period": None,
+        }
+    cur = period_key()
+    last_period = getattr(s, "month_close_period", None)
+    last_at = getattr(s, "month_close_last_at", None)
+    return {
+        "period": cur,
+        "closed_this_period": bool(last_period == cur),
+        "last_closed_at": last_at.isoformat() if last_at else None,
+        "last_closed_period": last_period,
+    }
+
+
+def mark_month_closed(
+    session: Session,
+    *,
+    as_of: date | None = None,
+    force: bool = False,
+    profile_id: int | None = None,
+) -> dict[str, Any]:
+    """Record that the user finished the month-close ritual for as_of's period."""
+    as_of = as_of or date.today()
+    checklist = build_month_close(session, profile_id=profile_id, as_of=as_of)
+    if not checklist.get("all_done") and not force:
+        return {
+            "ok": False,
+            "error": "Required month-close steps still open.",
+            "checklist": checklist,
+        }
+    s = session.get(AppSettings, 1)
+    if not s:
+        s = AppSettings(id=1)
+        session.add(s)
+        session.flush()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    s.month_close_period = period_key(as_of)
+    s.month_close_last_at = now
+    session.flush()
+    return {
+        "ok": True,
+        "period": s.month_close_period,
+        "closed_at": now.isoformat(),
+        "forced": force and not checklist.get("all_done"),
+        "message": f"Month {s.month_close_period} marked closed. Open rarely until next period.",
+        "checklist": build_month_close(session, profile_id=profile_id, as_of=as_of),
+    }
 
 
 def build_month_close(
@@ -136,7 +197,7 @@ def build_month_close(
         {
             "id": "backup",
             "title": "Backup reminder",
-            "done": False,  # always soft reminder once per close pass
+            "done": False,  # filled below if period already closed
             "action": "backup",
             "detail": "Encrypted or local backup after month-close keeps the books safe.",
             "button_label": "Data & backup",
@@ -144,25 +205,60 @@ def build_month_close(
         },
     ]
 
+    state = get_month_close_state(session)
+    closed = bool(state.get("closed_this_period"))
+    if closed:
+        for s in steps:
+            if s["id"] == "backup":
+                s["done"] = True
+                s["detail"] = (
+                    f"Period {state.get('last_closed_period')} closed"
+                    + (
+                        f" · {state.get('last_closed_at')}"
+                        if state.get("last_closed_at")
+                        else ""
+                    )
+                )
+
     # Optional backup doesn't block "all done" for required steps
     required = [s for s in steps if not s.get("optional")]
     done_n = sum(1 for s in required if s["done"])
     total = len(required)
     all_done = done_n == total
+    can_mark_closed = all_done and not closed
+
+    if closed:
+        subtitle = f"Period {state.get('period')} is closed — open rarely until next month."
+        progress = f"Closed · {state.get('last_closed_period') or state.get('period')}"
+    elif all_done:
+        subtitle = "All required steps clear — take a backup, then mark the month closed."
+        progress = f"{done_n} of {total} required done · ready to close"
+    else:
+        subtitle = "Tick these once a month so books stay trustworthy."
+        progress = f"{done_n} of {total} required done"
 
     return {
         "title": "Close the month",
-        "subtitle": (
-            "All required steps clear — take a backup and close."
-            if all_done
-            else "Tick these once a month so books stay trustworthy."
-        ),
+        "subtitle": subtitle,
         "as_of": as_of.isoformat(),
+        "period": state.get("period"),
         "done_count": done_n,
         "total": total,
         "all_done": all_done,
-        "progress_label": f"{done_n} of {total} required done",
+        "closed_this_period": closed,
+        "can_mark_closed": can_mark_closed,
+        "last_closed_at": state.get("last_closed_at"),
+        "last_closed_period": state.get("last_closed_period"),
+        "progress_label": progress,
         "minutes": 10,
         "steps": steps,
         "promo_open_count": len(promo_open),
+        "primary_action": (
+            "mark_closed" if can_mark_closed else ("hold" if closed else None)
+        ),
+        "button_label": (
+            "Mark month closed"
+            if can_mark_closed
+            else ("Closed this month" if closed else "Do next close step")
+        ),
     }

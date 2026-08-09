@@ -248,7 +248,29 @@ public sealed partial class HomePage : Page
                 }
                 MonthCloseList.ItemsSource = mLines;
                 var allDone = mc.TryGetProperty("all_done", out var mad) && mad.ValueKind == JsonValueKind.True;
-                MonthCloseBtn.Visibility = allDone ? Visibility.Collapsed : Visibility.Visible;
+                var closed = mc.TryGetProperty("closed_this_period", out var cl) && cl.ValueKind == JsonValueKind.True;
+                var canMark = mc.TryGetProperty("can_mark_closed", out var cm) && cm.ValueKind == JsonValueKind.True;
+                if (closed)
+                {
+                    MonthCloseBtn.Visibility = Visibility.Collapsed;
+                    MarkMonthClosedBtn.Visibility = Visibility.Collapsed;
+                }
+                else if (canMark || allDone)
+                {
+                    MonthCloseBtn.Visibility = Visibility.Collapsed;
+                    MarkMonthClosedBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
+                        ? "Mark month closed"
+                        : JsonUi.Str(mc, "button_label");
+                    MarkMonthClosedBtn.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    MonthCloseBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
+                        ? "Do next close step"
+                        : JsonUi.Str(mc, "button_label");
+                    MonthCloseBtn.Visibility = Visibility.Visible;
+                    MarkMonthClosedBtn.Visibility = Visibility.Collapsed;
+                }
             }
 
             // Tax year prep (H2-B)
@@ -547,9 +569,32 @@ public sealed partial class HomePage : Page
             case "backup":
                 Frame?.Navigate(typeof(DataPage));
                 break;
+            case "mark_closed":
+                await MarkMonthClosed_Click_Core();
+                break;
             default:
                 Done_Click(sender, e);
                 break;
+        }
+    }
+
+    private async void MarkMonthClosed_Click(object sender, RoutedEventArgs e)
+        => await MarkMonthClosed_Click_Core();
+
+    private async Task MarkMonthClosed_Click_Core()
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.MarkMonthClosedAsync();
+            PromoMsg.Text = JsonUi.Str(res, "message", "Month marked closed.");
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
         }
     }
 

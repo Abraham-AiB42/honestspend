@@ -207,6 +207,32 @@ def build_post_import_next_steps(
             }
         )
 
+    # Soft tip: possible bills/subscriptions from history (do not replace Sort charges)
+    if uncat == 0 and created > 0:
+        try:
+            from financial_os.services.recurring_detect import detect_recurring
+
+            rec = detect_recurring(session, profile_id=profile_id, limit=3)
+            n = int(rec.get("count") or len(rec.get("suggestions") or []))
+            if n > 0:
+                sample = ""
+                sug = rec.get("suggestions") or []
+                if sug:
+                    sample = sug[0].get("payee") or sug[0].get("name") or ""
+                steps.append(
+                    {
+                        "action": "bills",
+                        "label": f"{n} possible bill(s)",
+                        "detail": (
+                            f"Pattern like {sample} — confirm on Home / Possible bills."
+                            if sample
+                            else "Confirm recurring on Home if they look real."
+                        ),
+                    }
+                )
+        except Exception:
+            pass
+
     if not steps:
         if created:
             steps.append(

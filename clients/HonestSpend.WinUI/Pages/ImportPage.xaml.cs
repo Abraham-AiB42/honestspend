@@ -431,9 +431,11 @@ public sealed partial class ImportPage : Page
                 GoReconcileBtn.Visibility = Visibility.Visible;
                 show = true;
             }
-            else if (action is "home" or "hold")
+            else if (action is "home" or "hold" or "bills")
             {
                 GoHomeBtn.Visibility = Visibility.Visible;
+                if (action == "bills")
+                    GoHomeBtn.Content = "Home · bills";
                 show = true;
             }
         }

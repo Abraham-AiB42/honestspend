@@ -57,3 +57,23 @@ def test_home_simple_has_month_close_and_promo(client: TestClient):
     assert "month_close" in body
     assert "promo_brief" in body
     assert body["month_close"].get("progress_label")
+
+
+def test_mark_month_closed(client: TestClient):
+    client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
+    r = client.get("/api/home/month-close")
+    body = r.json()
+    assert "closed_this_period" in body
+    assert body.get("closed_this_period") is False
+
+    # Force mark even if optional steps remain (test path)
+    r2 = client.post("/api/home/month-close/complete", json={"force": True})
+    assert r2.status_code == 200, r2.text
+    done = r2.json()
+    assert done.get("ok") is True
+    assert done.get("period")
+    assert done.get("checklist", {}).get("closed_this_period") is True
+
+    r3 = client.get("/api/home/month-close")
+    assert r3.json().get("closed_this_period") is True
+    assert r3.json().get("can_mark_closed") is False

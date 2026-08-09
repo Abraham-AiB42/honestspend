@@ -1544,6 +1544,30 @@ def home_month_close(
     return build_month_close(db, profile_id=profile_id)
 
 
+class MonthCloseCompleteIn(BaseModel):
+    force: bool = False
+    profile_id: int | None = None
+
+
+@app.post("/api/home/month-close/complete")
+def home_month_close_complete(
+    body: MonthCloseCompleteIn | None = None,
+    db: Session = Depends(get_db),
+):
+    """Mark current calendar month closed after required steps (or force)."""
+    from financial_os.services.month_close import mark_month_closed
+
+    body = body or MonthCloseCompleteIn()
+    result = mark_month_closed(
+        db,
+        force=body.force,
+        profile_id=body.profile_id,
+    )
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error") or "Cannot close month yet")
+    return result
+
+
 @app.get("/api/payments/candidates")
 def payment_candidates(
     days: int = Query(14, ge=1, le=60),

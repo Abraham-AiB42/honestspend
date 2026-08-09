@@ -136,8 +136,13 @@
                         <TextBlock x:Name="MonthCloseSubtitle" Opacity="0.8" TextWrapping="Wrap" />
                         <TextBlock x:Name="MonthCloseProgress" FontWeight="SemiBold" />
                         <ItemsControl x:Name="MonthCloseList" />
-                        <Button x:Name="MonthCloseBtn" Content="Do next close step" HorizontalAlignment="Left"
-                                Click="MonthClose_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="MonthCloseBtn" Content="Do next close step" HorizontalAlignment="Left"
+                                    Click="MonthClose_Click" Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:Name="MarkMonthClosedBtn" Content="Mark month closed" HorizontalAlignment="Left"
+                                    Click="MarkMonthClosed_Click" Visibility="Collapsed"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

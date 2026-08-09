@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("lederring.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -185,6 +185,12 @@ def _mig_11_import_reminders(conn) -> None:
     _exec_ignore(conn, "ALTER TABLE app_settings ADD COLUMN import_reminder_snooze_until DATE")
 
 
+def _mig_12_month_close(conn) -> None:
+    """Mark period closed for Simple month-close ritual (dream H1-B3)."""
+    _exec_ignore(conn, "ALTER TABLE app_settings ADD COLUMN month_close_period VARCHAR(7)")
+    _exec_ignore(conn, "ALTER TABLE app_settings ADD COLUMN month_close_last_at DATETIME")
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -198,6 +204,7 @@ MIGRATIONS: dict[int, Callable] = {
     9: _mig_9_autopay_policy,
     10: _mig_10_whatif_scenarios,
     11: _mig_11_import_reminders,
+    12: _mig_12_month_close,
 }
 
 

@@ -168,6 +168,9 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> AcceptRecurringAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/recurring/accept", body, ct);
 
+    public Task<JsonElement> MarkMonthClosedAsync(bool force = false, CancellationToken ct = default)
+        => PostJsonAsync("api/home/month-close/complete", new { force }, ct);
+
     public Task<JsonElement> GetCashflowReportAsync(int days = 30, CancellationToken ct = default)
         => GetJsonAsync($"api/reports/cashflow?days={days}", ct);
 

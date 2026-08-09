@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.15 — Mark month closed + post-import bill hints
+
+- **Schema v12:** `month_close_period` + `month_close_last_at` on app settings
+- `POST /api/home/month-close/complete` · Home **Mark month closed** when steps clear
+- Month-close card shows closed state for the calendar period
+- Post-import next_steps may suggest **possible bills** when recurring patterns exist
+
 ## 1.0.14 — CSV ending balance → Reconcile
 
 - Detect **Balance / Running balance** columns on bank CSV
