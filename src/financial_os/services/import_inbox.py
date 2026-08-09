@@ -35,7 +35,7 @@ def ensure_inbox_layout() -> dict[str, str]:
     readme = inbox / "README.txt"
     if not readme.exists():
         readme.write_text(
-            "Floatpile inbox\n"
+            "HonestSpend inbox\n"
             "================\n"
             "Drop bank exports here:\n"
             "  .csv  .ofx  .qfx  (best)\n"
@@ -43,12 +43,12 @@ def ensure_inbox_layout() -> dict[str, str]:
             "  e.g. chase.ofx, Everyday-card.csv, Primary-checking.qfx\n"
             "Name files with account nicknames when you can.\n"
             "\n"
-            "Run:  floatpile import-inbox\n"
+            "Run:  honestspend import-inbox\n"
             "Or:   Import → Import inbox now · tray → Import inbox now\n"
-            "Or:   scheduled task Floatpile-ImportInbox\n"
+            "Or:   scheduled task HonestSpend-ImportInbox\n"
             "\n"
             "Processed files move to inbox/archive/.\n"
-            "Floatpile never stores bank passwords.\n",
+            "HonestSpend never stores bank passwords.\n",
             encoding="utf-8",
         )
     return {"inbox": str(inbox), "archive": str(arch), "readme": str(readme)}

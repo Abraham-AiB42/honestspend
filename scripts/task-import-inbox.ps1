@@ -1,5 +1,5 @@
-# Floatpile scheduled: process bank CSV inbox (freeware money-in).
-# Registered by scripts/register-tasks.ps1 as Floatpile-ImportInbox.
+# HonestSpend scheduled: process bank CSV inbox (freeware money-in).
+# Registered by scripts/register-tasks.ps1 as HonestSpend-ImportInbox.
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot

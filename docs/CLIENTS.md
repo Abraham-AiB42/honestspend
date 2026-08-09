@@ -1,6 +1,6 @@
 # Multi-client architecture
 
-Floatpile is **API-first**. One local (or Docker) engine; any client speaks HTTP JSON.
+HonestSpend is **API-first**. One local (or Docker) engine; any client speaks HTTP JSON.
 
 ```
 ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
@@ -20,7 +20,7 @@ Floatpile is **API-first**. One local (or Docker) engine; any client speaks HTTP
 
 | Client | How |
 |--------|-----|
-| **WinUI 3 (native)** | `clients/Floatpile.WinUI` — primary desktop |
+| **WinUI 3 (native)** | `clients/HonestSpend.WinUI` — primary desktop |
 | **Web** | Frozen minimal + **Plaid Link** only |
 | **Windows tray** | `python -m financial_os.cli tray` |
 | **CLI** | `serve`, `digest`, `token`, `backup`, `health`, … |
@@ -90,7 +90,7 @@ Do **not** share a live SQLite file on OneDrive for concurrent writers.
 | URL | `http://127.0.0.1:7420/glance` |
 | File | `web/glance.html` |
 | Start | `scripts/start-glance.sh` · `scripts/start-glance.ps1` |
-| CLI | `floatpile glance` · `floatpile glance --open` |
+| CLI | `honestspend glance` · `honestspend glance --open` |
 
 Features: Spendable, red-now, pending, alerts, rescue options, fiscal brief. Optional API key field for multi-user.
 

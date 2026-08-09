@@ -95,7 +95,7 @@ def build_wealth_tips(
                 "title": f"Consider a 529 for education ({kids} child entity(ies))",
                 "amount_hint": "small automatic monthly → education goal",
                 "reason": (
-                    "You have child entity books in Floatpile. A 529 can grow tax-advantaged for qualified education. "
+                    "You have child entity books in HonestSpend. A 529 can grow tax-advantaged for qualified education. "
                     "Only after checking safety, high-APR debt, and match/IRA basics."
                 ),
                 "alternatives": [

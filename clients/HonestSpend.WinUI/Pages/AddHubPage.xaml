@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.AddHubPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="640">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Add something" />
+            <TextBlock Opacity="0.8" TextWrapping="Wrap"
+                Text="Short wizards. No jargon. We'll only ask what we need to keep you safe." />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Money accounts" />
+            <Grid ColumnSpacing="12" RowSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Button Content="Checking / cash" Tag="cash" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Row="0" Grid.Column="0" />
+                <Button Content="Savings / HYSA" Tag="savings" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Row="0" Grid.Column="1" />
+                <Button Content="Credit card" Tag="card" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Row="1" Grid.Column="0" />
+                <Button Content="Loan / mortgage" Tag="loan" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Row="1" Grid.Column="1" />
+            </Grid>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Recurring" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Content="Bill (money out)" Tag="bill" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" />
+                <Button Content="Income (money in)" Tag="income" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Column="1" />
+            </Grid>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="People / entities" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Content="Business" Tag="business" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" />
+                <Button Content="Child" Tag="child" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Column="1" />
+            </Grid>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Move money" />
+            <Button Content="Playbooks — reimburse · pay myself · kid allowance"
+                    Click="Playbooks_Click" HorizontalAlignment="Stretch" Padding="16" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Banks &amp; files" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Content="Link bank (Plaid)" Click="Bank_Click"
+                        HorizontalAlignment="Stretch" Padding="16" />
+                <Button Content="Import CSV" Click="Import_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Column="1" />
+            </Grid>
+            <TextBlock Opacity="0.65" TextWrapping="Wrap"
+                Text="Optional. Manual balances work fine — link banks when you want less typing." />
+            <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" IsClosable="True" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

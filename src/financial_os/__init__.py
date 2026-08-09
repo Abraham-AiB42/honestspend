@@ -1,3 +1,3 @@
-"""Floatpile — open-source liquidity cockpit (IFPP). Technical package: financial_os."""
+"""HonestSpend — open-source liquidity cockpit (IFPP). Technical package: financial_os."""
 
-__version__ = "1.0.10"
+__version__ = "1.0.11"

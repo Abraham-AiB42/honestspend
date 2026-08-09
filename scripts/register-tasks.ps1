@@ -1,4 +1,4 @@
-# Register Windows Task Scheduler jobs for Floatpile automation.
+# Register Windows Task Scheduler jobs for HonestSpend automation.
 # Run once (no admin required for current-user tasks).
 #
 # Usage:
@@ -21,9 +21,9 @@ if (-not (Test-Path (Join-Path $Root "src\financial_os"))) {
 $BackupScript = Join-Path $Root "scripts\task-auto-backup.ps1"
 $DigestScript = Join-Path $Root "scripts\task-digest.ps1"
 $InboxScript = Join-Path $Root "scripts\task-import-inbox.ps1"
-$TaskBackup = "Floatpile-AutoBackup"
-$TaskDigest = "Floatpile-Digest"
-$TaskInbox = "Floatpile-ImportInbox"
+$TaskBackup = "HonestSpend-AutoBackup"
+$TaskDigest = "HonestSpend-Digest"
+$TaskInbox = "HonestSpend-ImportInbox"
 
 function Remove-LrTask([string]$Name) {
   $existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
@@ -37,12 +37,22 @@ if ($Uninstall) {
   Remove-LrTask $TaskBackup
   Remove-LrTask $TaskDigest
   Remove-LrTask $TaskInbox
-  # legacy names (pre-Floatpile / LedgerRing era)
+  # legacy names (Floatpile / LedgerRing era)
+  Remove-LrTask "Floatpile-AutoBackup"
+  Remove-LrTask "Floatpile-Digest"
+  Remove-LrTask "Floatpile-ImportInbox"
   Remove-LrTask "LedgerRing-AutoBackup"
   Remove-LrTask "LedgerRing-Digest"
   Write-Host "Done (uninstalled)."
   exit 0
 }
+
+# Drop prior brand task names when re-registering under HonestSpend
+Remove-LrTask "Floatpile-AutoBackup"
+Remove-LrTask "Floatpile-Digest"
+Remove-LrTask "Floatpile-ImportInbox"
+Remove-LrTask "LedgerRing-AutoBackup"
+Remove-LrTask "LedgerRing-Digest"
 
 if (-not (Test-Path $BackupScript)) { throw "Missing $BackupScript" }
 if (-not (Test-Path $DigestScript)) { throw "Missing $DigestScript" }
@@ -57,7 +67,7 @@ $triggerB = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours($Bac
 $settingsB = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 $principalB = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskBackup -Action $actionB -Trigger $triggerB -Settings $settingsB -Principal $principalB `
-  -Description "Floatpile local SQLite auto-backup (respects schedule / force via env)" | Out-Null
+  -Description "HonestSpend local SQLite auto-backup (respects schedule / force via env)" | Out-Null
 Write-Host "Registered: $TaskBackup (daily ${BackupHour}:00)"
 
 # --- Daily digest ---
@@ -67,7 +77,7 @@ $triggerD = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours($Dig
 $settingsD = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 $principalD = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskDigest -Action $actionD -Trigger $triggerD -Settings $settingsD -Principal $principalD `
-  -Description "Floatpile daily digest (exit 2 if critical); may start engine if offline" | Out-Null
+  -Description "HonestSpend daily digest (exit 2 if critical); may start engine if offline" | Out-Null
 Write-Host "Registered: $TaskDigest (daily ${DigestHour}:00)"
 
 # --- Daily inbox import (bank CSV drop folder) ---
@@ -77,7 +87,7 @@ $triggerI = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(9))
 $settingsI = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 $principalI = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskInbox -Action $actionI -Trigger $triggerI -Settings $settingsI -Principal $principalI `
-  -Description "Floatpile import bank CSVs from data_dir/inbox (freeware drop folder)" | Out-Null
+  -Description "HonestSpend import bank CSVs from data_dir/inbox (freeware drop folder)" | Out-Null
 Write-Host "Registered: $TaskInbox (daily 09:00)"
 
 Write-Host ""

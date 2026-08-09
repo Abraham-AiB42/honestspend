@@ -18,8 +18,8 @@ _GUIDES: list[dict[str, Any]] = [
         "steps": [
             "Sign in to Chase online or the website (not always available in the mobile app).",
             "Open the account → Account activity (or Download account activity).",
-            "Choose a date range → Download → CSV, QFX, or OFX (all work in Floatpile).",
-            "Save into your Floatpile inbox folder, or Import → pick the file in the app.",
+            "Choose a date range → Download → CSV, QFX, or OFX (all work in HonestSpend).",
+            "Save into your HonestSpend inbox folder, or Import → pick the file in the app.",
         ],
         "notes": "Business and personal menus differ slightly. Look for “Download” near the activity table.",
     },
@@ -33,7 +33,7 @@ _GUIDES: list[dict[str, Any]] = [
             "Sign in → select your card.",
             "Statements & Activity (or View Transactions).",
             "Download → CSV (or Excel / OFX if listed).",
-            "Import into Floatpile and map to your card account.",
+            "Import into HonestSpend and map to your card account.",
         ],
         "notes": "CSV is ideal for mid-cycle refresh; PDF statements are better for month-close.",
     },
@@ -47,7 +47,7 @@ _GUIDES: list[dict[str, Any]] = [
             "Sign in → Accounts → pick checking or card.",
             "Account details / Transactions → Download or Export.",
             "Choose CSV for the date range you need.",
-            "Drop into inbox or Import CSV in Floatpile.",
+            "Drop into inbox or Import CSV in HonestSpend.",
         ],
         "notes": "Some products label export under “View statements” → Download transactions.",
     },
@@ -61,9 +61,9 @@ _GUIDES: list[dict[str, Any]] = [
             "Sign in → Accounts → select account.",
             "Download (near activity) → choose CSV or Quicken (QFX).",
             "Pick date range → Download.",
-            "Import CSV or QFX/OFX in Floatpile (CSV is fine; Quicken formats also work).",
+            "Import CSV or QFX/OFX in HonestSpend (CSV is fine; Quicken formats also work).",
         ],
-        "notes": "CSV, QFX, and OFX all import in Floatpile.",
+        "notes": "CSV, QFX, and OFX all import in HonestSpend.",
     },
     {
         "id": "wells_fargo",
@@ -75,7 +75,7 @@ _GUIDES: list[dict[str, Any]] = [
             "Sign in → Account Activity.",
             "Download / Export → CSV (or spreadsheet).",
             "Select period → download.",
-            "Import and assign to the matching Floatpile account.",
+            "Import and assign to the matching HonestSpend account.",
         ],
         "notes": "If you only see PDF statements, use those for monthly reconcile; ask for “download transactions” for weekly refresh.",
     },
@@ -88,7 +88,7 @@ _GUIDES: list[dict[str, Any]] = [
         "steps": [
             "Sign in → account → Account details / Activity.",
             "Download transactions → CSV or Quicken format.",
-            "Save and import into Floatpile.",
+            "Save and import into HonestSpend.",
         ],
         "notes": "Credit cards often have a clear “Download” control above the transaction list.",
     },
@@ -101,7 +101,7 @@ _GUIDES: list[dict[str, Any]] = [
         "steps": [
             "Sign in → Accounts → Account details.",
             "Download → CSV or OFX.",
-            "Import CSV in Floatpile.",
+            "Import CSV in HonestSpend.",
         ],
         "notes": "",
     },
@@ -114,7 +114,7 @@ _GUIDES: list[dict[str, Any]] = [
         "steps": [
             "Sign in → Activity.",
             "Download → CSV (or Quicken).",
-            "Import into your Discover card account in Floatpile.",
+            "Import into your Discover card account in HonestSpend.",
         ],
         "notes": "",
     },
@@ -127,7 +127,7 @@ _GUIDES: list[dict[str, Any]] = [
         "steps": [
             "Sign in → Accounts & Trade → select account.",
             "Activity / History → Download → CSV.",
-            "Map to the matching Floatpile account (cash or brokerage as you track it).",
+            "Map to the matching HonestSpend account (cash or brokerage as you track it).",
         ],
         "notes": "Investment lots are not a full portfolio product — treat as cashflow import.",
     },
@@ -142,7 +142,7 @@ _GUIDES: list[dict[str, Any]] = [
             "Open the account → Activity, Transactions, or Statements.",
             "Look for Download, Export, or “Download transactions” → prefer CSV.",
             "If only PDF statements exist, download those for monthly reconcile; use CSV when available for mid-cycle Safe to spend.",
-            "Save to your Floatpile inbox folder or use Import → Pick CSV.",
+            "Save to your HonestSpend inbox folder or use Import → Pick CSV.",
         ],
         "notes": "Search your bank’s help for “download transactions CSV” or “export OFX”.",
     },
@@ -153,7 +153,7 @@ def list_bank_guides() -> dict[str, Any]:
     return {
         "title": "Download from your bank",
         "principle": (
-            "Floatpile never stores bank passwords. You download a file; we import it. "
+            "HonestSpend never stores bank passwords. You download a file; we import it. "
             "Optional live link = your own Plaid keys."
         ),
         "inbox_hint": (

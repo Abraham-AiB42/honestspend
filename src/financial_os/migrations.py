@@ -1,4 +1,4 @@
-"""Versioned SQLite migrations for Floatpile."""
+"""Versioned SQLite migrations for HonestSpend."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ _LEGACY_COLUMN_SQL = [
     "ALTER TABLE accounts ADD COLUMN plaid_item_pk INTEGER",
     "ALTER TABLE accounts ADD COLUMN plaid_account_id VARCHAR(128)",
     "ALTER TABLE app_settings ADD COLUMN onboarding_complete BOOLEAN DEFAULT 0",
-    "ALTER TABLE app_settings ADD COLUMN product_name VARCHAR(64) DEFAULT 'Floatpile'",
+    "ALTER TABLE app_settings ADD COLUMN product_name VARCHAR(64) DEFAULT 'HonestSpend'",
     "ALTER TABLE accounts ADD COLUMN opened_date DATE",
     "ALTER TABLE accounts ADD COLUMN priority_rank INTEGER DEFAULT 100",
     "ALTER TABLE accounts ADD COLUMN apy NUMERIC(8,5)",

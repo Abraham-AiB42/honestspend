@@ -1,7 +1,7 @@
 """Educational credit-health simulation inspired by VantageScore factor weights.
 
 NOT an official VantageScore, FICO, or bureau score.
-Uses only data Floatpile knows (accounts, balances, user-supplied history inputs).
+Uses only data HonestSpend knows (accounts, balances, user-supplied history inputs).
 
 VantageScore 3.0 public factor weights (approximate educational model):
   Payment history   40%
@@ -282,11 +282,11 @@ def simulate_credit(
             suggestions.append(t)
 
     return CreditSimResult(
-        model="Floatpile educational model (VantageScore 3.0-style weights)",
+        model="HonestSpend educational model (VantageScore 3.0-style weights)",
         disclaimer=(
             "This is NOT an official VantageScore, FICO, Equifax, Experian, or TransUnion score. "
             "Credit Karma and the bureaus do not provide consumer APIs for third-party apps. "
-            "This simulation uses only debts and history you track in Floatpile for planning."
+            "This simulation uses only debts and history you track in HonestSpend for planning."
         ),
         score=score,
         band=_band(score),

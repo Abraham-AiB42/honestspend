@@ -54,11 +54,11 @@ Step "private-name gate" {
 Step "version sync" {
     $init = Get-Content (Join-Path $Root "src\financial_os\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '1\.0\.10') { throw "__init__.py not 1.0.10" }
-    if ($pyproj -notmatch '1\.0\.10') { throw "pyproject.toml not 1.0.10" }
-    $iss = Get-Content (Join-Path $Root "packaging\Floatpile.iss") -Raw
-    if ($iss -notmatch '1\.0\.10') { throw "Floatpile.iss not 1.0.10" }
-    Write-Host "version 1.0.10 consistent"
+    if ($init -notmatch '1\.0\.11') { throw "__init__.py not 1.0.11" }
+    if ($pyproj -notmatch '1\.0\.11') { throw "pyproject.toml not 1.0.11" }
+    $iss = Get-Content (Join-Path $Root "packaging\HonestSpend.iss") -Raw
+    if ($iss -notmatch '1\.0\.11') { throw "HonestSpend.iss not 1.0.11" }
+    Write-Host "version 1.0.11 consistent"
 }
 
 Step "north-star surface files" {
@@ -67,11 +67,11 @@ Step "north-star surface files" {
         "src\financial_os\services\wealth_basics.py",
         "docs\SIMPLE_MODE.md",
         "docs\RELEASE_0.7.0.md",
-        "clients\Floatpile.WinUI\Pages\FirstRunPage.xaml",
-        "clients\Floatpile.WinUI\Pages\AddHubPage.xaml",
-        "clients\Floatpile.WinUI\Pages\MoneyWizardPage.xaml",
-        "clients\Floatpile.WinUI\Helpers\UiCopy.cs",
-        "clients\Floatpile.WinUI\Pages\ScenariosPage.xaml",
+        "clients\HonestSpend.WinUI\Pages\FirstRunPage.xaml",
+        "clients\HonestSpend.WinUI\Pages\AddHubPage.xaml",
+        "clients\HonestSpend.WinUI\Pages\MoneyWizardPage.xaml",
+        "clients\HonestSpend.WinUI\Helpers\UiCopy.cs",
+        "clients\HonestSpend.WinUI\Pages\ScenariosPage.xaml",
         "scripts\_northstar_e2e.py",
         "scripts\_dogfood_e2e.py",
         "scripts\package-release.ps1",

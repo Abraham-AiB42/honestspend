@@ -132,7 +132,7 @@ async def permission_middleware(request: Request, call_next):
                     "detail": (
                         "X-API-Key required "
                         "(multi-user mode, FOS_REQUIRE_API_KEY, or non-loopback bind). "
-                        "Create a token via Users page or: floatpile token"
+                        "Create a token via Users page or: honestspend token"
                     ),
                     "multi_user_mode": multi_user_mode(session),
                 },
@@ -477,7 +477,7 @@ class SettingsOut(BaseModel):
     horizon_days: int = 45
     auto_categorize_on_import: bool = True
     onboarding_complete: bool = False
-    product_name: str = "Floatpile"
+    product_name: str = "HonestSpend"
     debt_strategy: str = "avalanche"
     debt_extra_monthly: Decimal = Decimal("0")
     opportunity_rate: Decimal | None = None
@@ -537,7 +537,7 @@ class ImportPathIn(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "version": __version__, "app": settings.app_name, "product": "Floatpile"}
+    return {"ok": True, "version": __version__, "app": settings.app_name, "product": "HonestSpend"}
 
 
 @app.get("/api/onboarding")
@@ -1839,7 +1839,7 @@ def credit_api_status():
         "credit_karma_api": False,
         "message": (
             "Credit Karma and Equifax/Experian/TransUnion do not offer consumer APIs "
-            "for third-party apps. Floatpile scores and debt plans use your in-app debts "
+            "for third-party apps. HonestSpend scores and debt plans use your in-app debts "
             "(APR, promo, limits, balances) plus history you enter."
         ),
         "model": "Educational VantageScore 3.0-style factor weights (not official)",
@@ -2552,7 +2552,7 @@ def plaid_status():
         "link_url": link_url,
         "hint": (
             "Optional BYOK: set your own FOS_PLAID_CLIENT_ID and FOS_PLAID_SECRET. "
-            "Floatpile is free — we never bill for bank feeds. CSV/OFX import works offline."
+            "HonestSpend is free — we never bill for bank feeds. CSV/OFX import works offline."
         ),
         "sandbox_hint": "POST /api/plaid/sandbox-link?profile_id=N for one-click sandbox bank (no Link UI).",
         "freeware": True,
@@ -2691,7 +2691,7 @@ def system_info():
     return {
         "ok": True,
         "version": __version__,
-        "product": "Floatpile",
+        "product": "HonestSpend",
         "app": settings.app_name,
         "host": settings.host,
         "port": settings.port,

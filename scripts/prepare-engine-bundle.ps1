@@ -1,7 +1,7 @@
 # Copy a runnable Python engine next to a published WinUI app.
 # Layout:
-#   dist/Floatpile.WinUI-win-x64/Floatpile.WinUI.exe
-#   dist/Floatpile.WinUI-win-x64/engine/   ← this script creates
+#   dist/HonestSpend.WinUI-win-x64/HonestSpend.WinUI.exe
+#   dist/HonestSpend.WinUI-win-x64/engine/   ← this script creates
 #     pyproject.toml, src/, .venv/
 #
 # Usage (from repo root):
@@ -16,7 +16,7 @@ param(
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 if (-not $Target) {
-    $Target = Join-Path $Root "dist\Floatpile.WinUI-win-x64"
+    $Target = Join-Path $Root "dist\HonestSpend.WinUI-win-x64"
 }
 
 if (-not (Test-Path $Target)) {
@@ -59,4 +59,4 @@ Write-Host "Engine ready. WinUI BackendHost looks for:"
 Write-Host "  $Engine"
 Write-Host "Smoke test:"
 Write-Host "  & `"$python`" -m financial_os.cli serve"
-Write-Host "Then run Floatpile.WinUI.exe from $Target"
+Write-Host "Then run HonestSpend.WinUI.exe from $Target"

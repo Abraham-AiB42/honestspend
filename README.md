@@ -1,4 +1,4 @@
-# Floatpile
+# HonestSpend
 
 **Open-source freeware** liquidity cockpit — ridiculously powerful engine, **stupid-simple** daily UI.
 
@@ -31,7 +31,7 @@ Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple: [`docs/SIM
 # Grade-A bar + one-folder package
 .\scripts\verify-grade-a.ps1
 .\scripts\package-release.ps1
-# → dist\Floatpile-Windows-x64\Floatpile.WinUI.exe  (+ engine\)
+# → dist\HonestSpend-Windows-x64\HonestSpend.WinUI.exe  (+ engine\)
 ```
 
 Install: [`docs/INSTALL.md`](docs/INSTALL.md)
@@ -41,8 +41,8 @@ Install: [`docs/INSTALL.md`](docs/INSTALL.md)
 ```bash
 ./scripts/start-glance.sh
 # http://127.0.0.1:7420/glance
-floatpile glance --open
-floatpile home --brief    # Safe to spend + Do this next
+honestspend glance --open
+honestspend home --brief    # Safe to spend + Do this next
 ```
 
 ## Engine quick start
@@ -52,7 +52,7 @@ python -m venv .venv
 # activate, then:
 pip install -e ".[dev]"
 python -m financial_os.cli serve
-# or: floatpile serve
+# or: honestspend serve
 ```
 
 1. WinUI **Get started** (~2 min) or API first-run  

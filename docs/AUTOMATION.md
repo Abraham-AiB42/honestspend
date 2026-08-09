@@ -1,4 +1,4 @@
-# Floatpile — Windows automation
+# HonestSpend — Windows automation
 
 Local-first jobs that keep books safe **without** opening the full UI every day.
 
@@ -10,10 +10,10 @@ In **WinUI → Settings**:
 2. Check **Launch at Windows logon (tray-only)**.
 3. Save.
 
-This writes `HKCU\…\Run\Floatpile` with:
+This writes `HKCU\…\Run\HonestSpend` with:
 
 ```text
-"…\Floatpile.WinUI.exe" --tray-only
+"…\HonestSpend.WinUI.exe" --tray-only
 ```
 
 On logon:
@@ -35,8 +35,8 @@ On logon:
 
 | Task | Script | Default |
 |------|--------|---------|
-| `Floatpile-AutoBackup` | `scripts/task-auto-backup.ps1` | Daily 03:00 |
-| `Floatpile-Digest` | `scripts/task-digest.ps1` | Daily 08:00 |
+| `HonestSpend-AutoBackup` | `scripts/task-auto-backup.ps1` | Daily 03:00 |
+| `HonestSpend-Digest` | `scripts/task-digest.ps1` | Daily 08:00 |
 
 ### CLI used by tasks
 

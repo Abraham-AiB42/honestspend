@@ -42,7 +42,7 @@ Covers: first-run → home/simple → categorize · briefs · month-close · tax
 # version already 1.0.0 in tree
 .\scripts\verify-grade-a.ps1
 python scripts\_dogfood_e2e.py
-git tag -a v1.0.0 -m "Floatpile v1.0.0 — liquidity OS"
+git tag -a v1.0.0 -m "HonestSpend v1.0.0 — liquidity OS"
 ```
 
 **Signed off:** automated RC (engine + API dogfood) · **Date:** 2026-08-08

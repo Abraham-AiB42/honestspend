@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "HonestSpend.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "HonestSpend.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

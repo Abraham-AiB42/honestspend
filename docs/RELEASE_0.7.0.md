@@ -1,4 +1,4 @@
-# Floatpile v0.7.0 — Simple mode (north star)
+# HonestSpend v0.7.0 — Simple mode (north star)
 
 **Ridiculously powerful engine · stupid-simple daily UI.**
 
@@ -9,12 +9,12 @@
 # pytest · northstar e2e · smoke · name-gate · version · surfaces
 
 .\scripts\package-release.ps1
-# → dist\Floatpile-Windows-x64\  (+ zip)
-# Run: dist\Floatpile-Windows-x64\Floatpile.WinUI.exe
+# → dist\HonestSpend-Windows-x64\  (+ zip)
+# Run: dist\HonestSpend-Windows-x64\HonestSpend.WinUI.exe
 # Engine auto-detected from .\engine\
 ```
 
-Optional installer: compile `packaging\Floatpile.iss` after package-release → `dist\Floatpile-Setup-x64.exe`.
+Optional installer: compile `packaging\HonestSpend.iss` after package-release → `dist\HonestSpend-Setup-x64.exe`.
 
 ## What users get
 

@@ -6,9 +6,9 @@
 
 | Priority | Surface | Role |
 |----------|---------|------|
-| **1** | **WinUI 3** (`Floatpile.WinUI`) | Daily product — Simple + Full books |
+| **1** | **WinUI 3** (`HonestSpend.WinUI`) | Daily product — Simple + Full books |
 | **2** | **System tray** (Python process, launched by client) | Hover Safe to spend · toasts · open **WinUI** |
-| **3** | **CLI** (`floatpile`) | Power users · scripts · automation |
+| **3** | **CLI** (`honestspend`) | Power users · scripts · automation |
 | **4** | **Glance HTML** | Emergency / Mac-Linux-phone **read** shell until native clients exist |
 
 ## Explicit non-goals
@@ -27,7 +27,7 @@
 | **Import OFX/QFX** | Quicken-style downloads · FITID dedupe · **LEDGERBAL → Reconcile** |
 | **PDF statements** | Best-effort text extract (prefer CSV/OFX when offered) |
 | **Bank guides** | Login links + download steps (no passwords) |
-| **Inbox folder** | Drop `.csv` / `.ofx` / `.qfx` / `.pdf` → `floatpile import-inbox` / daily task |
+| **Inbox folder** | Drop `.csv` / `.ofx` / `.qfx` / `.pdf` → `honestspend import-inbox` / daily task |
 | **Import reminders** | User-chosen cadence: off · daily · weekly · monthly |
 | **Post-import next steps** | Sort charges · Reconcile drift · Home (open-rarely habit) |
 | **BYOK Plaid** | Optional live link with *user’s* keys |
@@ -56,7 +56,7 @@ Tray menu opens the **WinUI** EXE (from `winui.path`), not Glance:
 
 | Tray item | CLI / request |
 |-----------|----------------|
-| Open Floatpile | (home) |
+| Open HonestSpend | (home) |
 | Sort charges | `--page review` |
 | Reports | `--page reports` |
 | Settings | `--page settings` |

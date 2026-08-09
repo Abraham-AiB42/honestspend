@@ -1,12 +1,12 @@
-# Install Floatpile
+# Install HonestSpend
 
 Freeware · local-first · Python fiscal engine · **WinUI** (Windows primary) · **Glance** (Mac/Linux/phone browser).
 
 ## Recommended layout
 
 ```
-C:\Floatpile\
-  Floatpile.WinUI.exe      ← native UI
+C:\HonestSpend\
+  HonestSpend.WinUI.exe      ← native UI
   … (WinAppSDK runtime files)
   engine\                   ← Python package + .venv
     pyproject.toml
@@ -42,7 +42,7 @@ pip install -e ".[dev]"
 
 # Native UI
 .\scripts\start-winui.ps1
-# or: cd clients\Floatpile.WinUI ; dotnet run -c Debug -p:Platform=x64
+# or: cd clients\HonestSpend.WinUI ; dotnet run -c Debug -p:Platform=x64
 ```
 
 ---
@@ -56,8 +56,8 @@ pip install -e ".[dev]"
 # From repo root — grade-A bar first, then package
 .\scripts\verify-grade-a.ps1
 .\scripts\package-release.ps1
-# → dist\Floatpile-Windows-x64\
-# → dist\Floatpile-Windows-x64.zip
+# → dist\HonestSpend-Windows-x64\
+# → dist\HonestSpend-Windows-x64.zip
 ```
 
 What it does:
@@ -69,8 +69,8 @@ What it does:
 
 **End user path**
 
-1. Unzip (keep `engine\` next to `Floatpile.WinUI.exe`)  
-2. Run `Floatpile.WinUI.exe`  
+1. Unzip (keep `engine\` next to `HonestSpend.WinUI.exe`)  
+2. Run `HonestSpend.WinUI.exe`  
 3. Complete **Get started** (~2 min)  
 4. Home shows **Safe to spend** + **3-minute check**  
 5. Optional: **Add → Link bank** or Import CSV  
@@ -83,8 +83,8 @@ Engine is auto-detected from `.\engine\`. If offline: Settings → **Start engin
 
 1. Install [Inno Setup 6](https://jrsoftware.org/isinfo.php)  
 2. Build a package folder first: `.\scripts\package-release.ps1`  
-3. Open `packaging\Floatpile.iss` and compile  
-4. Output: `dist\Floatpile-Setup-x64.exe`  
+3. Open `packaging\HonestSpend.iss` and compile  
+4. Output: `dist\HonestSpend-Setup-x64.exe`  
 
 Signing: set `SignTool` / certificate in the `.iss` if you ship publicly.
 
@@ -109,8 +109,8 @@ source .venv/bin/activate
 pip install -e .
 python -m financial_os.cli serve
 # browser: http://127.0.0.1:7420/glance
-# CLI:     floatpile glance          # JSON
-#          floatpile glance --open   # browser
+# CLI:     honestspend glance          # JSON
+#          honestspend glance --open   # browser
 ```
 
 Data: `~/.financial-os/` (override with `FOS_DATA_DIR`).
@@ -121,7 +121,7 @@ Data: `~/.financial-os/` (override with `FOS_DATA_DIR`).
 
 ## Multi-user & encrypted backups
 
-- Second user → **X-API-Key required** (Users page / `floatpile token`)  
+- Second user → **X-API-Key required** (Users page / `honestspend token`)  
 - Encrypted snapshots: WinUI Data page or `POST /api/backup/create-encrypted`  
 - See `docs/CLIENTS.md`
 
@@ -129,7 +129,7 @@ Data: `~/.financial-os/` (override with `FOS_DATA_DIR`).
 
 ## First run checklist
 
-1. Launch **Floatpile.WinUI.exe** (engine auto-starts from `.\engine\`).  
+1. Launch **HonestSpend.WinUI.exe** (engine auto-starts from `.\engine\`).  
 2. **Get started** (~2 min) → checking + optional card/bill.  
 3. **Home** → Safe to spend · Do this next · 3-minute check.  
 4. Optional: **Add → Link bank** or Import CSV.  

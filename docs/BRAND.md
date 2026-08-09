@@ -1,33 +1,37 @@
-# Brand (working alpha)
+# Brand
 
-**Working product name:** **Floatpile**  
-**Status:** Alpha working name — we will circle back on final branding later.
+**Product name:** **HonestSpend**
 
-## Meaning (working)
+## Meaning
 
 | Piece | Idea |
 |-------|------|
-| **Float** | Interest-free card float / purchasing power when safe |
-| **pile** | Multi-entity money piles (personal / business / child) |
+| **Honest** | Local books you control — no bank-password storage, no paid feed lock-in |
+| **Spend** | Safe to spend · intentional 0% float · never bounce checking |
 
-**Working tagline:** *Interest-free float. Honest money piles. Safe to spend.*
+**Tagline:** *Honest books. Safe to spend.*
 
 ## Clearance note (public research, not legal advice)
 
-No live personal-finance product named Floatpile found in open search. Engineering “float pile” jargon exists; other products use **Float** alone (cash-flow SaaS, scheduling). Domain + USPTO still needed before a hard launch under this name.
+Confirm domain + USPTO before a hard commercial launch under this name.
 
 ## Technical map
 
 | Layer | Name |
 |-------|------|
-| Display / UI / docs | **Floatpile** |
+| Display / UI / docs | **HonestSpend** |
 | Python import package | `financial_os` (engine; path stable) |
-| PyPI / CLI script | `floatpile` (+ legacy `financial-os`) |
-| WinUI project / EXE | `Floatpile.WinUI` / `Floatpile.WinUI.exe` |
+| PyPI / CLI script | `honestspend` (+ legacy `floatpile`, `ledgerring`, `financial-os`) |
+| WinUI project / EXE | `HonestSpend.WinUI` / `HonestSpend.WinUI.exe` |
 | Data dir | `~/.financial-os` (FOS_* env; path stable) |
-| Task Scheduler | `Floatpile-AutoBackup`, `Floatpile-Digest` |
+| Task Scheduler | `HonestSpend-AutoBackup`, `HonestSpend-Digest`, `HonestSpend-ImportInbox` |
 
 ## History
 
-Former product name: **LedgerRing** (CLI `ledgerring`).  
+| Name | Notes |
+|------|--------|
+| **HonestSpend** | Current product name |
+| **Floatpile** | Working alpha (CLI `floatpile` still aliases) |
+| **LedgerRing** | Earlier name (CLI `ledgerring` still aliases) |
+
 Rejected candidates: SpendRoom, TrueBooks, HonestBooks, Spendkin, CashRunway, etc.

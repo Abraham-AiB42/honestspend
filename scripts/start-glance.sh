@@ -14,7 +14,7 @@ pip install -q -e .
 export FOS_HOST="${FOS_HOST:-127.0.0.1}"
 export FOS_PORT="${FOS_PORT:-7420}"
 
-echo "Floatpile engine → http://${FOS_HOST}:${FOS_PORT}"
+echo "HonestSpend engine → http://${FOS_HOST}:${FOS_PORT}"
 echo "Glance UI        → http://${FOS_HOST}:${FOS_PORT}/glance"
 echo "API docs         → http://${FOS_HOST}:${FOS_PORT}/docs"
 

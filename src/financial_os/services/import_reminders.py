@@ -119,7 +119,7 @@ def build_import_reminder(
         title = "Bring in bank activity"
         reason = (
             f"{focus_copy} "
-            "Floatpile is free and local — we never store bank passwords. "
+            "HonestSpend is free and local — we never store bank passwords. "
             f"You chose {cadence} reminders."
         )
     else:

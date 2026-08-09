@@ -1,6 +1,6 @@
-# Floatpile — Design Document
+# HonestSpend — Design Document
 
-**Product name:** Floatpile  
+**Product name:** HonestSpend  
 **Distribution:** Open source freeware (small business owners + anyone)  
 **Platform:** Local-first; Windows first → Mac / Linux / iOS / Android  
 **North star:** Interest-Free Purchasing Power (IFPP)  

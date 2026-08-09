@@ -1,5 +1,5 @@
 services:
-  floatpile:
+  honestspend:
     build: .
     ports:
       - "7420:7420"
@@ -17,8 +17,8 @@ services:
       # FOS_PLAID_SECRET: ""
       # FOS_PLAID_ENV: sandbox
     volumes:
-      - floatpile-data:/data
+      - honestspend-data:/data
     restart: unless-stopped
 
 volumes:
-  floatpile-data:
+  honestspend-data:

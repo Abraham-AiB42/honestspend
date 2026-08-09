@@ -308,7 +308,7 @@ class AppSettings(Base):
     horizon_days: Mapped[int] = mapped_column(Integer, default=45)
     auto_categorize_on_import: Mapped[bool] = mapped_column(Boolean, default=True)
     onboarding_complete: Mapped[bool] = mapped_column(Boolean, default=False)
-    product_name: Mapped[str] = mapped_column(String(64), default="Floatpile")
+    product_name: Mapped[str] = mapped_column(String(64), default="HonestSpend")
     # Debt payoff preference
     debt_strategy: Mapped[str] = mapped_column(String(32), default="avalanche")
     debt_extra_monthly: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))

@@ -47,7 +47,7 @@ def get_remote_config() -> dict[str, Any]:
         return {
             "destination_folder": None,
             "auto_copy_encrypted": False,
-            "hint": "Set a folder (e.g. OneDrive\\Floatpile\\backups) for encrypted snapshot copies.",
+            "hint": "Set a folder (e.g. OneDrive\\HonestSpend\\backups) for encrypted snapshot copies.",
         }
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
@@ -101,7 +101,7 @@ def encrypt_bytes(plaintext: bytes, password: str) -> bytes:
 def decrypt_bytes(blob: bytes, password: str) -> bytes:
     AESGCM, PBKDF2HMAC, hashes, _os = _crypto()
     if not blob.startswith(MAGIC):
-        raise ValueError("Not a Floatpile encrypted backup (bad magic)")
+        raise ValueError("Not a HonestSpend encrypted backup (bad magic)")
     salt = blob[4:20]
     nonce = blob[20:32]
     ct = blob[32:]

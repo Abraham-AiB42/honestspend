@@ -48,7 +48,7 @@ def data_path_info() -> dict[str, Any]:
         }
     ]
     for od in _onedrive_roots():
-        cand = od / "Floatpile" / "data"
+        cand = od / "HonestSpend" / "data"
         candidates.append(
             {
                 "label": f"OneDrive · {od.name}",
@@ -57,7 +57,7 @@ def data_path_info() -> dict[str, Any]:
             }
         )
         # also Documents under OneDrive if present
-        docs = od / "Documents" / "Floatpile"
+        docs = od / "Documents" / "HonestSpend"
         candidates.append(
             {
                 "label": f"OneDrive Documents · {od.name}",

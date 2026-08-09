@@ -1,6 +1,6 @@
-# Contributing to Floatpile
+# Contributing to HonestSpend
 
-Floatpile is **open-source freeware** for small business owners and anyone who wants a liquidity cockpit (not an investment app).
+HonestSpend is **open-source freeware** for small business owners and anyone who wants a liquidity cockpit (not an investment app).
 
 ## Product north star
 

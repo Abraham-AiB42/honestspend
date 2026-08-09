@@ -89,7 +89,7 @@ def build_cpa_pack_zip(
     files = {k: v for k, v in files.items() if not k.startswith("_")}
 
     meta = {
-        "product": "Floatpile",
+        "product": "HonestSpend",
         "year": y,
         "profile_id": profile_id,
         "profile_slug": profile.slug,
@@ -138,7 +138,7 @@ def build_cpa_pack_zip(
         zf.writestr("readiness.json", json.dumps(readiness, indent=2))
         zf.writestr("META.json", json.dumps(meta, indent=2))
         readme = [
-            "Floatpile CPA Pack",
+            "HonestSpend CPA Pack",
             f"Entity: {profile.display_name}",
             f"Year: {y}",
             f"Ready: {readiness.get('ready')}",

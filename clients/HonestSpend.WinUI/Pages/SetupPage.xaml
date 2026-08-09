@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.SetupPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="640">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Get started" />
+            <TextBlock Opacity="0.8" TextWrapping="Wrap"
+                Text="About 2 minutes. We'll answer: what can you safely spend? No spreadsheet. You can refine anytime under Add." />
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="6">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Status" />
+                    <TextBlock x:Name="StatusSummary" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="Checklist" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Starter accounts" />
+            <ComboBox x:Name="ProfileSlugBox" Header="Who (add more under Full books → Entities)" SelectedIndex="0" HorizontalAlignment="Stretch" />
+            <TextBox x:Name="CashNameBox" Header="Checking nickname" Text="Primary checking" />
+            <TextBox x:Name="InstBox" Header="Institution (optional)" PlaceholderText="Chase, Amex…" />
+            <NumberBox x:Name="CashBalBox" Header="Checking balance ($)" Value="0" Minimum="0" />
+            <NumberBox x:Name="BufferBox" Header="Rainy-day floor kept out of Safe to spend ($)" Value="1000" Minimum="0" />
+            <ComboBox x:Name="ModeBox" Header="How careful should Safe to spend be?" SelectedIndex="0">
+                <ComboBoxItem Content="Careful (recommended)" Tag="conservative" />
+                <ComboBoxItem Content="Optimistic (counts expected income)" Tag="expected" />
+            </ComboBox>
+
+            <CheckBox x:Name="AddCardBox" Content="Also add a credit card" IsChecked="False"
+                      Checked="CardToggle" Unchecked="CardToggle" />
+            <StackPanel x:Name="CardPanel" Spacing="10" Visibility="Collapsed">
+                <TextBox x:Name="CardNameBox" Header="Card nickname" PlaceholderText="Amex 0%" />
+                <NumberBox x:Name="CardBalBox" Header="Balance owed ($)" Value="0" Minimum="0" />
+                <NumberBox x:Name="CardLimitBox" Header="Credit limit ($)" Minimum="0" />
+                <NumberBox x:Name="CardDueBox" Header="Payment due day (1–31)" Minimum="1" Maximum="31" Value="15" />
+                <NumberBox x:Name="PromoAprBox" Header="Promo APR (0 for 0%)" Value="0" Minimum="0" />
+                <CalendarDatePicker x:Name="PromoEndBox" Header="Promo end (optional)" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Guided first-run (recommended)" Click="FirstRun_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="Quick setup (classic)" Click="Setup_Click" />
+                <Button Content="Skip" Click="Skip_Click" />
+                <Button Content="Go to Home" Click="Home_Click" />
+            </StackPanel>
+
+            <TextBlock x:Name="MsgText" Opacity="0.85" TextWrapping="Wrap" />
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

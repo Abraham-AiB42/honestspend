@@ -59,7 +59,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     write_pid(pid_file)
 
     state: dict = {
-        "title": "Floatpile — starting…",
+        "title": "HonestSpend — starting…",
         "last_critical_key": None,
         "offline_notified": False,
     }
@@ -86,18 +86,23 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                     candidates.append(Path(line[0].strip()))
         except Exception:
             pass
-        env_exe = os.environ.get("FLOATPILE_WINUI")
-        if env_exe:
-            candidates.insert(0, Path(env_exe))
+        for env_key in ("HONESTSPEND_WINUI", "FLOATPILE_WINUI", "FOS_WINUI"):
+            env_exe = os.environ.get(env_key)
+            if env_exe:
+                candidates.insert(0, Path(env_exe))
+                break
         cwd = Path.cwd()
         candidates += [
             cwd / "winui.path",
             cwd.parent / "winui.path",
+            cwd / "HonestSpend.WinUI.exe",
+            cwd.parent / "HonestSpend.WinUI.exe",
+            # prior brand EXEs still open until user reinstalls
             cwd / "Floatpile.WinUI.exe",
             cwd.parent / "Floatpile.WinUI.exe",
         ]
         if cwd.name.lower() == "engine":
-            candidates.insert(0, cwd.parent / "Floatpile.WinUI.exe")
+            candidates.insert(0, cwd.parent / "HonestSpend.WinUI.exe")
         resolved: list[Path] = []
         for c in candidates:
             try:
@@ -186,7 +191,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                     seen = data.get("files_seen", 0)
                     msg = f"Inbox: {seen} file(s) · {n} new transactions"
                     if icon:
-                        notify(icon, "Floatpile · import", msg)
+                        notify(icon, "HonestSpend · import", msg)
                     refresh_now(icon)
                     return
         except Exception:
@@ -205,10 +210,10 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             n = data.get("transactions_created", 0)
             seen = data.get("files_seen", 0)
             if icon:
-                notify(icon, "Floatpile · import", f"Inbox: {seen} file(s) · {n} new")
+                notify(icon, "HonestSpend · import", f"Inbox: {seen} file(s) · {n} new")
         except Exception as e:
             if icon:
-                notify(icon, "Floatpile · import", f"Failed: {e}")
+                notify(icon, "HonestSpend · import", f"Failed: {e}")
 
     def open_glance(icon=None, item=None):
         # Thin shell only — not the product
@@ -229,7 +234,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     def refresh_now(icon=None, item=None):
         data = _get("/api/ifpp")
         if not data:
-            state["title"] = "Floatpile — server offline\nStart: financial-os serve"
+            state["title"] = "HonestSpend — server offline\nStart: financial-os serve"
             if icon:
                 icon.title = state["title"]
                 try:
@@ -237,7 +242,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                 except Exception:
                     pass
                 if not state["offline_notified"]:
-                    notify(icon, "Floatpile", "Engine offline on :7420")
+                    notify(icon, "HonestSpend", "Engine offline on :7420")
                     state["offline_notified"] = True
             return
 
@@ -278,12 +283,12 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                     msg = critical[0].get("message", "Critical alert")
                     if len(critical) > 1:
                         msg += f" (+{len(critical) - 1} more)"
-                    notify(icon, "Floatpile · action needed", msg)
+                    notify(icon, "HonestSpend · action needed", msg)
             else:
                 state["last_critical_key"] = None
                 if warn and item is not None:
                     # only on manual refresh for warnings
-                    notify(icon, "Floatpile", warn[0].get("message", "Warning"))
+                    notify(icon, "HonestSpend", warn[0].get("message", "Warning"))
 
     def on_exit(icon, item):
         clear_pid(pid_file)
@@ -295,7 +300,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             time.sleep(poll_seconds)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Open Floatpile (desktop)", open_desktop, default=True),
+        pystray.MenuItem("Open HonestSpend (desktop)", open_desktop, default=True),
         pystray.MenuItem("Sort charges", open_sort_charges),
         pystray.MenuItem("Import (bank CSV)", open_import),
         pystray.MenuItem("Open inbox folder", open_inbox_folder),
@@ -310,9 +315,9 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         pystray.MenuItem("Quit tray", on_exit),
     )
     icon = pystray.Icon(
-        "floatpile",
+        "honestspend",
         make_icon_image(),
-        "Floatpile",
+        "HonestSpend",
         menu,
     )
 
@@ -322,6 +327,6 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         t = threading.Thread(target=poll_loop, args=(icon,), daemon=True)
         t.start()
 
-    print(f"Floatpile tray — polling {_base()}/api/ifpp + digest")
+    print(f"HonestSpend tray — polling {_base()}/api/ifpp + digest")
     print("Hover for Safe to spend. Critical alerts toast once.")
     icon.run(setup=setup)
