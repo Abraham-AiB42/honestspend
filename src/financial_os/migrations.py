@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("lederring.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 9
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -109,12 +109,65 @@ def _mig_4_profile_tax_geo(conn) -> None:
     _exec_ignore(conn, "ALTER TABLE profiles ADD COLUMN state_allocation_json TEXT")
 
 
+def _mig_5_generic_entities(conn) -> None:
+    """Public multi-entity: parent link, archive, never-neg enforcement setting."""
+    _exec_ignore(conn, "ALTER TABLE profiles ADD COLUMN parent_profile_id INTEGER")
+    _exec_ignore(conn, "ALTER TABLE profiles ADD COLUMN archived_at DATETIME")
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN never_negative_enforcement "
+        "VARCHAR(16) DEFAULT 'warn'",
+    )
+
+
+def _mig_6_fee_status(conn) -> None:
+    _exec_ignore(conn, "ALTER TABLE transactions ADD COLUMN fee_status VARCHAR(32)")
+
+
+def _mig_7_import_presets(conn) -> None:
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS import_presets ("
+            "id INTEGER PRIMARY KEY, "
+            "institution_key VARCHAR(128) UNIQUE NOT NULL, "
+            "amount_sign VARCHAR(16) DEFAULT 'bank', "
+            "mapping_json TEXT, "
+            "notes TEXT, "
+            "account_id INTEGER)"
+        )
+    )
+
+
+def _mig_8_audit_events(conn) -> None:
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS audit_events ("
+            "id INTEGER PRIMARY KEY, "
+            "username VARCHAR(64) DEFAULT 'owner', "
+            "role VARCHAR(32) DEFAULT 'owner', "
+            "action VARCHAR(64) NOT NULL, "
+            "path VARCHAR(256), "
+            "detail VARCHAR(512), "
+            "created_at DATETIME)"
+        )
+    )
+
+
+def _mig_9_autopay_policy(conn) -> None:
+    _exec_ignore(conn, "ALTER TABLE accounts ADD COLUMN autopay_policy VARCHAR(32)")
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
     2: _mig_2_ifpp_scope_and_archive,
     3: _mig_3_reconcile_and_cleared,
     4: _mig_4_profile_tax_geo,
+    5: _mig_5_generic_entities,
+    6: _mig_6_fee_status,
+    7: _mig_7_import_presets,
+    8: _mig_8_audit_events,
+    9: _mig_9_autopay_policy,
 }
 
 

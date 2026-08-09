@@ -22,13 +22,16 @@ from financial_os.services.debt_strategy import (
 )
 
 
-def accounts_to_debts(session: Session) -> list[DebtView]:
-    rows = (
-        session.query(Account)
-        .filter(Account.kind.in_(("credit", "loan")))
-        .order_by(Account.id)
-        .all()
-    )
+def accounts_to_debts(
+    session: Session,
+    *,
+    profile_id: int | None = None,
+    scope: str | None = None,
+) -> list[DebtView]:
+    q = session.query(Account).filter(Account.kind.in_(("credit", "loan")))
+    if (scope or "entity") == "entity" and profile_id is not None:
+        q = q.filter(Account.profile_id == profile_id)
+    rows = q.order_by(Account.id).all()
     debts: list[DebtView] = []
     for a in rows:
         bal = Decimal(a.current_balance or 0)
@@ -54,10 +57,18 @@ def accounts_to_debts(session: Session) -> list[DebtView]:
     return debts
 
 
-def accounts_to_yields(session: Session) -> list[YieldAccountView]:
-    rows = session.query(Account).filter(
+def accounts_to_yields(
+    session: Session,
+    *,
+    profile_id: int | None = None,
+    scope: str | None = None,
+) -> list[YieldAccountView]:
+    q = session.query(Account).filter(
         Account.kind.in_(("checking", "savings", "cash", "other"))
-    ).all()
+    )
+    if (scope or "entity") == "entity" and profile_id is not None:
+        q = q.filter(Account.profile_id == profile_id)
+    rows = q.all()
     out: list[YieldAccountView] = []
     for a in rows:
         apy = getattr(a, "apy", None)

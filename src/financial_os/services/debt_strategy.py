@@ -1,6 +1,6 @@
 """Debt payoff prioritization — selectable strategies + opportunity cost.
 
-If cash yields 6% (e.g. X Money) and a mortgage costs 2.625%, extra principal
+If cash yields 6% (e.g. high-yield savings) and a mortgage costs 2.625%, extra principal
 on the mortgage is usually worse than keeping money in the yield account.
 
 Strategies (among debts that beat the hurdle when opportunity-aware):
@@ -149,7 +149,7 @@ def resolve_opportunity_rate(
             src = f"{best_name} APY {float(rate)*100:.3f}%"
         else:
             rate = ZERO
-            src = "no yield accounts — set APY on savings/X Money or a manual hurdle"
+            src = "no yield accounts — set APY on savings/HYSA or a manual hurdle"
 
     if tax_rate is not None and _d(tax_rate) > ZERO:
         after = rate * (Decimal("1") - _d(tax_rate))
@@ -378,7 +378,7 @@ def simulate_payoff(
         )
     elif opportunity_cost_aware:
         notes.append(
-            "Opportunity-cost on, but no APY/hurdle set — add APY on X Money/savings or a manual rate."
+            "Opportunity-cost on, but no APY/hurdle set — add APY on savings/HYSA or a manual rate."
         )
 
     if strategy == "avalanche":

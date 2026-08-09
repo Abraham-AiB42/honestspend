@@ -46,6 +46,24 @@ public sealed partial class ImportPage : Page
             }
             if (AccountBox.Items.Count > 0) AccountBox.SelectedIndex = 0;
 
+            var profiles = await api.GetProfilesAsync();
+            ProfileSlugBox.Items.Clear();
+            var idx = 0;
+            var i = 0;
+            foreach (var p in profiles.EnumerateArray())
+            {
+                var slug = JsonUi.Str(p, "slug");
+                ProfileSlugBox.Items.Add(new ComboBoxItem
+                {
+                    Content = $"{JsonUi.Str(p, "display_name")} ({slug})",
+                    Tag = slug,
+                });
+                if (slug == "personal") idx = i;
+                i++;
+            }
+            if (ProfileSlugBox.Items.Count > 0)
+                ProfileSlugBox.SelectedIndex = idx;
+
             await RefreshPlaidAsync(api);
         }
         catch (Exception ex)

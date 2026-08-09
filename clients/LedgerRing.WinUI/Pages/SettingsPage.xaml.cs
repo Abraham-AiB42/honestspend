@@ -287,6 +287,7 @@ public sealed partial class SettingsPage : Page
             SelectTag(ModeBox, JsonUi.Str(s, "ifpp_mode", "conservative"));
             BufferBox.Value = ParseD(s, "safety_buffer", 1000);
             SelectTag(ScopeBox, JsonUi.Str(s, "never_negative_scope", "checking"));
+            SelectTag(NeverNegEnforceBox, JsonUi.Str(s, "never_negative_enforcement", "warn"));
             HorizonBox.Value = ParseD(s, "horizon_days", 45);
             OppRateBox.Value = ParseD(s, "opportunity_rate", double.NaN);
             OppAwareBox.IsChecked = s.TryGetProperty("opportunity_cost_aware", out var o) && o.GetBoolean();
@@ -327,6 +328,7 @@ public sealed partial class SettingsPage : Page
             dict["ifpp_mode"] = TagOf(ModeBox) ?? "conservative";
             dict["safety_buffer"] = double.IsNaN(BufferBox.Value) ? 1000m : (decimal)BufferBox.Value;
             dict["never_negative_scope"] = TagOf(ScopeBox) ?? "checking";
+            dict["never_negative_enforcement"] = TagOf(NeverNegEnforceBox) ?? "warn";
             dict["horizon_days"] = double.IsNaN(HorizonBox.Value) ? 45 : (int)HorizonBox.Value;
             dict["opportunity_cost_aware"] = OppAwareBox.IsChecked == true;
             dict["debt_strategy"] = TagOf(DebtBox) ?? "avalanche";
@@ -342,6 +344,7 @@ public sealed partial class SettingsPage : Page
                 ["ifpp_mode"] = dict["ifpp_mode"],
                 ["safety_buffer"] = dict["safety_buffer"],
                 ["never_negative_scope"] = dict["never_negative_scope"],
+                ["never_negative_enforcement"] = dict["never_negative_enforcement"],
                 ["horizon_days"] = dict["horizon_days"],
                 ["opportunity_cost_aware"] = dict["opportunity_cost_aware"],
                 ["debt_strategy"] = dict["debt_strategy"],

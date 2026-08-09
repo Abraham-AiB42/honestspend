@@ -14,20 +14,6 @@
       "entity_type": "individual",
       "tax_form_primary": "1040",
       "is_default": true
-    },
-    {
-      "slug": "ap_agency",
-      "display_name": "AP Agency",
-      "entity_type": "s_corp",
-      "tax_form_primary": "1120S",
-      "is_default": false
-    },
-    {
-      "slug": "aib42",
-      "display_name": "AiB42",
-      "entity_type": "s_corp",
-      "tax_form_primary": "1120S",
-      "is_default": false
     }
   ],
   "system_categories": [
@@ -557,7 +543,7 @@
       "tax_line": null,
       "deductibility": "none",
       "budget_group": "family",
-      "notes": "Alex mental balance tracking lives here if used"
+      "notes": "Transfers and support to child entities; use Add Child for siloed books"
     },
     {
       "code": "PER_VACATION",
@@ -695,6 +681,64 @@
       "tax_line": "payments",
       "deductibility": "n/a",
       "budget_group": "tax_payment"
+    }
+  ],
+  "child_budget": [
+    {
+      "code": "CHILD_ALLOWANCE",
+      "display_name": "Allowance received",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "income"
+    },
+    {
+      "code": "CHILD_GIFTS_IN",
+      "display_name": "Gifts received",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "income"
+    },
+    {
+      "code": "CHILD_EARNINGS",
+      "display_name": "Job / chore earnings",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "income"
+    },
+    {
+      "code": "CHILD_SPEND",
+      "display_name": "Spending",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle"
+    },
+    {
+      "code": "CHILD_SAVINGS",
+      "display_name": "Savings set-aside",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "savings"
+    },
+    {
+      "code": "CHILD_ACTIVITIES",
+      "display_name": "Activities / sports / lessons",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "lifestyle"
+    },
+    {
+      "code": "CHILD_TRANSFER",
+      "display_name": "Transfer (family)",
+      "tax_form": "transfer",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "transfer"
     }
   ]
 }

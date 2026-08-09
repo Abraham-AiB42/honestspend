@@ -50,6 +50,24 @@
                 </ListView.ItemTemplate>
             </ListView>
 
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Card payment matches" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Cash outflows that look like card payments — confirm as transfers so books stay clean." />
+                    <ItemsControl x:Name="PayList" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <NumberBox x:Name="CashTxnBox" Header="Cash txn #" Minimum="1" Width="120" />
+                        <NumberBox x:Name="CardTxnBox" Header="Card txn #" Minimum="1" Width="120" />
+                        <Button Content="Confirm transfer" Click="ConfirmPay_Click" VerticalAlignment="Bottom"
+                                Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                    <TextBlock x:Name="PayMsg" Opacity="0.85" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
             <TextBlock x:Name="MsgText" Opacity="0.85" TextWrapping="Wrap" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>

@@ -21,37 +21,66 @@ def build_digest(
 ) -> dict[str, Any]:
     as_of = as_of or date.today()
     desk = build_capital_desk(session, as_of=as_of, profile_id=profile_id, scope=scope)
-    promos = promo_death_clock(session, as_of=as_of)
-    uncat = (
-        session.query(Transaction)
-        .filter(Transaction.category_id.is_(None))
-        .count()
+    sc = scope or desk.get("ifpp", {}).get("ifpp_scope") or "entity"
+    # Resolve profile for entity silo counts
+    resolved_pid = profile_id
+    if sc == "entity" and resolved_pid is None:
+        resolved_pid = desk.get("ifpp", {}).get("profile_id")
+
+    promos = promo_death_clock(
+        session, as_of=as_of, profile_id=resolved_pid if sc == "entity" else None, scope=sc
     )
-    pending = (
-        session.query(Transaction)
-        .filter(Transaction.status == "pending")
-        .count()
-    )
+
+    uncat_q = session.query(Transaction).filter(Transaction.category_id.is_(None))
+    pending_q = session.query(Transaction).filter(Transaction.status == "pending")
+    if sc == "entity" and resolved_pid is not None:
+        uncat_q = uncat_q.filter(Transaction.profile_id == resolved_pid)
+        pending_q = pending_q.filter(Transaction.profile_id == resolved_pid)
+    uncat = uncat_q.count()
+    pending = pending_q.count()
+
     critical_promos = [p for p in promos["items"] if p["urgency"] in ("critical", "soon", "expired")]
 
     alerts = []
-    if desk["ifpp"].get("next_red_day"):
+    ifpp = desk["ifpp"]
+    if ifpp.get("is_red_now"):
+        alerts.append(
+            {
+                "level": "critical",
+                "code": "red_now",
+                "message": "Checking is negative or runway is already red — open rescue options",
+                "action": "rescue",
+            }
+        )
+    if ifpp.get("next_red_day") and not ifpp.get("is_red_now"):
         alerts.append(
             {
                 "level": "critical",
                 "code": "red_day",
-                "message": f"Red day {desk['ifpp']['next_red_day']} — protect checking",
+                "message": f"Red day {ifpp['next_red_day']} — protect checking",
+                "action": "bills",
+                "next_red_day": ifpp["next_red_day"],
             }
         )
-    for w in desk["ifpp"].get("warnings") or []:
+    for w in ifpp.get("warnings") or []:
         if "CHECKING NEGATIVE" in w or "negative" in w.lower():
-            alerts.append({"level": "critical", "code": "neg_check", "message": w})
+            if not any(a.get("code") == "red_now" for a in alerts):
+                alerts.append(
+                    {
+                        "level": "critical",
+                        "code": "neg_check",
+                        "message": w,
+                        "action": "rescue",
+                    }
+                )
     for p in critical_promos:
         alerts.append(
             {
                 "level": "warn" if p["urgency"] != "expired" else "critical",
                 "code": "promo",
                 "message": f"{p['name']}: 0% ends in {p['days_left']}d — sink ${p['sinking_fund']['monthly']}/mo",
+                "action": "promo_sink",
+                "account_id": p.get("account_id"),
             }
         )
     if uncat > 20:
@@ -60,21 +89,53 @@ def build_digest(
                 "level": "info",
                 "code": "uncategorized",
                 "message": f"{uncat} uncategorized transactions — Review tab",
+                "action": "review",
+                "count": uncat,
             }
         )
     if pending > 0:
+        # Sum pending outflows for loud Spendable warning
+        pend_rows = (
+            session.query(Transaction)
+            .filter(Transaction.status == "pending")
+        )
+        if sc == "entity" and resolved_pid is not None:
+            pend_rows = pend_rows.filter(Transaction.profile_id == resolved_pid)
+        from decimal import Decimal as D
+
+        pend_out = sum(
+            (
+                abs(D(str(t.amount)))
+                for t in pend_rows.all()
+                if D(str(t.amount)) < 0
+            ),
+            D("0"),
+        )
+        level = "warn" if pend_out >= D("100") else "info"
         alerts.append(
             {
-                "level": "info",
+                "level": level,
                 "code": "pending_txns",
-                "message": f"{pending} pending transaction(s) — confirm clears before trusting books drift",
+                "message": (
+                    f"{pending} pending · ${pend_out} outflow may clear soon — "
+                    f"Spendable uses books balances; toggle cleared-only in Settings"
+                ),
+                "action": "ledger",
+                "count": pending,
+                "pending_outflows_abs": str(pend_out.quantize(D("0.01"))),
             }
         )
 
     try:
         from financial_os.services.fee_scan import scan_fees
 
-        fees = scan_fees(session, days=45, limit=20, as_of=as_of)
+        fees = scan_fees(
+            session,
+            days=45,
+            limit=20,
+            as_of=as_of,
+            profile_id=resolved_pid if sc == "entity" else None,
+        )
         if fees["count"] > 0:
             alerts.append(
                 {
@@ -86,6 +147,7 @@ def build_digest(
                     ),
                     "count": fees["count"],
                     "total_abs": fees["total_abs"],
+                    "action": "fees",
                 }
             )
     except Exception:
@@ -101,6 +163,7 @@ def build_digest(
             "critical": critical_promos,
         },
         "uncategorized_count": uncat,
+        "pending_count": pending,
         "alerts": alerts,
         "minutes_needed": 0 if not alerts else (2 if len(alerts) < 3 else 5),
         "message": (
@@ -108,4 +171,6 @@ def build_digest(
             if not alerts
             else f"{len(alerts)} item(s) need attention (~{2 if len(alerts) < 3 else 5} min)."
         ),
+        "ifpp_scope": sc,
+        "profile_id": resolved_pid,
     }

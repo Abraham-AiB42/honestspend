@@ -1,6 +1,6 @@
-# Install LedgerRing (Windows)
+# Install LedgerRing
 
-Freeware · local-first · native WinUI + Python fiscal engine.
+Freeware · local-first · Python fiscal engine · **WinUI** (Windows primary) · **Glance** (Mac/Linux/phone browser).
 
 ## Recommended layout
 
@@ -77,6 +77,43 @@ Unzip anywhere, run `LedgerRing.WinUI.exe`.
 4. Output: `dist\LedgerRing-Setup-x64.exe`  
 
 Signing: set `SignTool` / certificate in the `.iss` if you ship publicly.
+
+---
+
+## macOS / Linux — Glance shell
+
+There is no native Mac/Linux app yet. Use the **same engine + Glance UI**:
+
+```bash
+cd path/to/financial-os
+chmod +x scripts/start.sh scripts/start-glance.sh
+./scripts/start-glance.sh
+# → starts engine if needed, opens http://127.0.0.1:7420/glance
+```
+
+Or manually:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+python -m financial_os.cli serve
+# browser: http://127.0.0.1:7420/glance
+# CLI:     ledgerring glance          # JSON
+#          ledgerring glance --open   # browser
+```
+
+Data: `~/.financial-os/` (override with `FOS_DATA_DIR`).
+
+**Phone on LAN:** bind with care (`FOS_HOST=0.0.0.0` requires API key unless `FOS_ALLOW_NON_LOOPBACK=1` for lab only). Prefer multi-user tokens + encrypted backups for real sharing.
+
+---
+
+## Multi-user & encrypted backups
+
+- Second user → **X-API-Key required** (Users page / `ledgerring token`)  
+- Encrypted snapshots: WinUI Data page or `POST /api/backup/create-encrypted`  
+- See `docs/CLIENTS.md`
 
 ---
 

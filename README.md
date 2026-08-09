@@ -15,7 +15,7 @@
 
 Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md)
 
-Everything lives in the app: accounts, cards, recurrences, live bank links/CSV, IRS-mapped categories, tax packets, multi-entity books.
+Everything lives in the app: accounts, cards, recurrences, live bank links/CSV, IRS-mapped categories, tax packets, multi-entity books (**Personal** + **Add Business(es)** + **Add Child(ren)**).
 
 Legacy spreadsheet import is **optional one-time migration only**.
 
@@ -30,6 +30,14 @@ Legacy spreadsheet import is **optional one-time migration only**.
 ```
 
 **Install / distribute:** see [`docs/INSTALL.md`](docs/INSTALL.md)
+
+**Mac / Linux / phone:** Glance UI (same engine, no fiscal fork)
+
+```bash
+./scripts/start-glance.sh
+# → http://127.0.0.1:7420/glance
+# ledgerring glance --open
+```
 
 ```powershell
 # Self-contained UI + engine folder + zip

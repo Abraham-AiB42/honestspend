@@ -38,6 +38,29 @@
             IsSettingsVisible="True"
             Loaded="NavView_Loaded"
             SelectionChanged="NavView_SelectionChanged">
+            <NavigationView.Header>
+                <Grid Padding="12,8,12,4" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center" Opacity="0.75" Text="Entity" />
+                    <ComboBox x:Name="ShellEntityBox" Grid.Column="1" MinWidth="180"
+                              PlaceholderText="Entity" SelectionChanged="ShellScope_Changed" />
+                    <ComboBox x:Name="ShellScopeBox" Grid.Column="2" MinWidth="140"
+                              SelectionChanged="ShellScope_Changed">
+                        <ComboBoxItem Content="Entity (silo)" Tag="entity" IsSelected="True" />
+                        <ComboBoxItem Content="Combined" Tag="group" />
+                    </ComboBox>
+                    <TextBlock x:Name="ShellModeText" Grid.Column="3" VerticalAlignment="Center"
+                               Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                    <Button x:Name="CpaModeBtn" Grid.Column="4" Content="CPA mode"
+                            Click="CpaMode_Click" />
+                </Grid>
+            </NavigationView.Header>
             <NavigationView.MenuItems>
                 <NavigationViewItem Content="Spendable" IsSelected="True" Tag="home">
                     <NavigationViewItem.Icon>
@@ -47,6 +70,11 @@
                 <NavigationViewItem Content="Setup" Tag="setup">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7AD;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Entities" Tag="entities">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE716;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Accounts" Tag="accounts">

@@ -82,24 +82,37 @@ Architecture must not hard-lock to Windows-only (local API + multi-client later)
 
 ## Explicitly out of scope (for now)
 
-- Kids / family sub-products (e.g. Alex)  
-- Investment / brokerage product surface  
+- Investment / brokerage trading product (rescue coach may advise sell-to-cash only)  
 - Affiliate loan/card marketplaces (Credit Karma model)  
 - Payroll system connectors  
+- Live multi-writer SQLite on cloud sync folders (use encrypted snapshots instead)  
+
+---
+
+## Entities (public model)
+
+| Entity | How | IFPP |
+|--------|-----|------|
+| **Personal** | Seeded by default | Silo Spendable |
+| **Business(es)** | Add Business — user names; tax form 1120S/1065/SchC/… | Silo Spendable |
+| **Child(ren)** | Add Child — allowance COA, not a filing entity | Silo Spendable |
+
+Combined (group) view is an explicit toggle. Never hardcode private business names in product.
 
 ---
 
 ## Entity money events (owner ops)
 
-When personal and business intermix, **figure out best practice** and ship as guided tools:
+When personal and business (or child) money crosses:
 
 | Event | Direction |
 |-------|-----------|
-| Owner distribution | Equity / transfer — not expense; configurable impact on personal Spendable |
+| Owner distribution | Equity / transfer — not expense |
 | Reimbursement | Pair personal charge → business repayment |
-| Capital inject | Personal → business; tracked, optional Spendable impact |
+| Capital inject | Personal → business |
+| Child allowance | Personal → child transfer |
 
-Default recommendation: **fiscal clarity first** (correct books) + clear toggle for whether cash movement changes personal “safe to spend.”
+Default: **fiscal clarity first** + clear Spendable impact per entity silo.
 
 ---
 
@@ -160,4 +173,5 @@ A user can open the app **rarely** and still:
 18. Permission stack for multi-party access  
 19. Best-practice intermix tools (TBD implement)  
 20. Commission cliffs optional + fully configurable  
-21. Kids/Alex — ignore for now  
+21. Children — first-class siloed entities (Add Child); allowance books, not tax filing  
+

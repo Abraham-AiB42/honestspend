@@ -102,6 +102,9 @@ def apply_quick_setup(
         promo_end = None
         if card_promo_end:
             promo_end = date_cls.fromisoformat(card_promo_end[:10])
+        # Defaults so interest-free IFPP path works day one
+        due = card_due_day if card_due_day is not None else 15
+        close = card_close_day if card_close_day is not None else 1
         card = Account(
             profile_id=profile.id,
             kind="credit",
@@ -110,8 +113,8 @@ def apply_quick_setup(
             current_balance=bal,
             credit_limit=limit if limit else None,
             available_credit=avail,
-            statement_close_day=card_close_day,
-            payment_due_day=card_due_day,
+            statement_close_day=close,
+            payment_due_day=due,
             promo_apr=card_promo_apr,
             promo_end_date=promo_end,
             promo_balance=bal if card_promo_apr is not None and card_promo_apr == 0 else None,

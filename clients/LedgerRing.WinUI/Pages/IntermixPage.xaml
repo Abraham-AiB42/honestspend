@@ -18,6 +18,7 @@
                 <Button Content="Reimburse card from biz" Click="Play_Reimburse" />
                 <Button Content="Quarterly distribution" Click="Play_Dist" />
                 <Button Content="Capital inject" Click="Play_Inject" />
+                <Button Content="Child allowance" Click="Play_Allowance" />
             </StackPanel>
             <TextBlock x:Name="PlaybookHint" Opacity="0.7" TextWrapping="Wrap" FontSize="12" />
 
@@ -26,6 +27,7 @@
                 <ComboBoxItem Content="Distribution (biz → personal)" Tag="distribution" />
                 <ComboBoxItem Content="Capital inject (personal → biz)" Tag="capital_inject" />
                 <ComboBoxItem Content="Owner draw (biz → personal)" Tag="owner_draw" />
+                <ComboBoxItem Content="Child allowance (personal → child)" Tag="child_allowance" />
             </ComboBox>
 
             <NumberBox x:Name="AmtBox" Header="Amount ($)" Minimum="0.01" Value="100" />
@@ -35,6 +37,12 @@
 
             <Button Content="Record intermix" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
             <TextBlock x:Name="ResultText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Money map (transfer edges)" />
+            <Button Content="Refresh graph" Click="Graph_Click" />
+            <ItemsControl x:Name="GraphList" />
+            <TextBlock x:Name="GraphMsg" Opacity="0.75" TextWrapping="Wrap" />
+
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

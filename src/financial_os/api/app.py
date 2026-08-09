@@ -108,28 +108,36 @@ def get_db():
 
 @app.middleware("http")
 async def permission_middleware(request: Request, call_next):
-    """X-API-Key → role enforcement. Loopback: no key = owner. Non-loopback: key required."""
+    """X-API-Key → role enforcement.
+
+    Loopback single-user: no key = owner.
+    Non-loopback or multi-user (2+ active users): key required.
+    """
     path = request.url.path
     if not path.startswith("/api/") or path in ("/api/health",):
         return await call_next(request)
     token = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
-    if app_settings.effective_require_api_key and not token:
-        return JSONResponse(
-            {
-                "detail": (
-                    "X-API-Key required (FOS_REQUIRE_API_KEY or non-loopback bind). "
-                    "Create a token via CLI: financial-os token"
-                )
-            },
-            status_code=401,
-        )
     session = SessionLocal()
     try:
         from financial_os.services.permissions import (
             capability_for_request,
+            multi_user_mode,
             resolve_context,
         )
 
+        need_key = app_settings.effective_require_api_key or multi_user_mode(session)
+        if need_key and not token:
+            return JSONResponse(
+                {
+                    "detail": (
+                        "X-API-Key required "
+                        "(multi-user mode, FOS_REQUIRE_API_KEY, or non-loopback bind). "
+                        "Create a token via Users page or: ledgerring token"
+                    ),
+                    "multi_user_mode": multi_user_mode(session),
+                },
+                status_code=401,
+            )
         try:
             ctx = resolve_context(session, token)
         except PermissionError as e:
@@ -141,6 +149,21 @@ async def permission_middleware(request: Request, call_next):
                 status_code=403,
             )
         request.state.access = ctx
+        # Lite audit for mutating calls
+        if request.method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
+            try:
+                from financial_os.services.audit import log_event
+
+                log_event(
+                    session,
+                    username=ctx.username,
+                    role=ctx.role.value,
+                    action=request.method.upper(),
+                    path=path[:256],
+                )
+                session.commit()
+            except Exception:
+                session.rollback()
     finally:
         session.close()
     return await call_next(request)
@@ -158,10 +181,20 @@ class ProfileOut(BaseModel):
     entity_type: str
     tax_form_primary: str
     is_default: bool
+    parent_profile_id: int | None = None
     home_state: str | None = None
     multi_state: bool = False
     filing_notes: str | None = None
     state_allocation_json: str | None = None
+    archived_at: datetime | None = None
+
+
+class ProfileCreate(BaseModel):
+    display_name: str
+    entity_type: str = "business"  # personal | business | child
+    tax_form_primary: str | None = None
+    parent_profile_id: int | None = None
+    slug: str | None = None
 
 
 class ProfilePatch(BaseModel):
@@ -255,12 +288,24 @@ class TransactionIn(BaseModel):
     memo: str | None = None
     status: str = "cleared"
     is_transfer: bool = False
+    # When never_negative_enforcement=warn, set true to allow checking to go negative
+    confirm_unsafe: bool = False
 
 
-class TransactionOut(TransactionIn):
+class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    profile_id: int
+    account_id: int
+    category_id: int | None = None
+    txn_date: date
+    amount: Decimal
+    payee: str | None = None
+    memo: str | None = None
+    status: str = "cleared"
+    is_transfer: bool = False
+    fee_status: str | None = None
 
 
 class TransactionPatch(BaseModel):
@@ -370,6 +415,7 @@ class SettingsIn(BaseModel):
     auto_backup_keep: int | None = None
     ifpp_scope: str | None = None  # entity | group
     ifpp_cleared_only: bool | None = None
+    never_negative_enforcement: str | None = None  # off | warn | hard
 
 
 class SettingsPatch(BaseModel):
@@ -408,6 +454,7 @@ class SettingsPatch(BaseModel):
     auto_backup_keep: int | None = None
     ifpp_scope: str | None = None
     ifpp_cleared_only: bool | None = None
+    never_negative_enforcement: str | None = None
 
 
 class SettingsOut(BaseModel):
@@ -446,6 +493,7 @@ class SettingsOut(BaseModel):
     auto_backup_last_at: datetime | None = None
     ifpp_scope: str = "entity"
     ifpp_cleared_only: bool = True
+    never_negative_enforcement: str = "warn"
 
 
 class QuickSetupIn(BaseModel):
@@ -516,8 +564,47 @@ def onboarding_quick_setup(body: QuickSetupIn, db: Session = Depends(get_db)):
 
 
 @app.get("/api/profiles", response_model=list[ProfileOut])
-def list_profiles(db: Session = Depends(get_db)):
-    return db.query(Profile).order_by(Profile.id).all()
+def list_profiles(
+    include_archived: bool = False,
+    db: Session = Depends(get_db),
+):
+    q = db.query(Profile)
+    if not include_archived:
+        q = q.filter(Profile.archived_at.is_(None))
+    return q.order_by(Profile.id).all()
+
+
+@app.post("/api/profiles", response_model=ProfileOut)
+def create_profile_api(body: ProfileCreate, db: Session = Depends(get_db)):
+    from financial_os.services.profiles import create_profile
+
+    try:
+        row = create_profile(
+            db,
+            display_name=body.display_name,
+            entity_type=body.entity_type,
+            tax_form_primary=body.tax_form_primary,
+            parent_profile_id=body.parent_profile_id,
+            slug=body.slug,
+        )
+        db.flush()
+        db.refresh(row)
+        return row
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/profiles/{profile_id}/archive", response_model=ProfileOut)
+def archive_profile_api(profile_id: int, db: Session = Depends(get_db)):
+    from financial_os.services.profiles import archive_profile
+
+    try:
+        row = archive_profile(db, profile_id)
+        db.flush()
+        db.refresh(row)
+        return row
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @app.patch("/api/profiles/{profile_id}", response_model=ProfileOut)
@@ -673,9 +760,22 @@ def list_transactions(
 
 @app.post("/api/transactions", response_model=TransactionOut)
 def create_transaction(body: TransactionIn, db: Session = Depends(get_db)):
-    row = Transaction(**body.model_dump())
-    db.add(row)
+    from financial_os.services.never_neg import WouldGoNegative, check_cash_outflow
+
+    data = body.model_dump(exclude={"confirm_unsafe"})
     acct = db.get(Account, body.account_id)
+    try:
+        check_cash_outflow(
+            db,
+            account=acct,
+            amount=Decimal(body.amount),
+            confirm_unsafe=bool(body.confirm_unsafe),
+        )
+    except WouldGoNegative as e:
+        raise HTTPException(status_code=409, detail=e.payload) from e
+
+    row = Transaction(**data)
+    db.add(row)
     if acct and acct.kind != "credit":
         # Credit balances are "amount owed"; cash accounts move with signed amount
         acct.current_balance = Decimal(acct.current_balance or 0) + Decimal(body.amount)
@@ -690,6 +790,20 @@ def create_transaction(body: TransactionIn, db: Session = Depends(get_db)):
     return row
 
 
+class VoidTxnIn(BaseModel):
+    reason: str | None = None
+
+
+@app.post("/api/transactions/{txn_id}/void")
+def void_transaction_api(txn_id: int, body: VoidTxnIn | None = None, db: Session = Depends(get_db)):
+    from financial_os.services.txn_void import void_transaction
+
+    try:
+        return void_transaction(db, txn_id, reason=(body.reason if body else None))
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
 @app.patch("/api/transactions/{txn_id}", response_model=TransactionOut)
 def patch_transaction(
     txn_id: int,
@@ -700,6 +814,8 @@ def patch_transaction(
     row = db.get(Transaction, txn_id)
     if not row:
         raise HTTPException(404, "Transaction not found")
+    if (row.status or "").lower() == "void":
+        raise HTTPException(400, "Transaction is void — cannot edit")
     data = body.model_dump(exclude_unset=True)
     prev_cat = row.category_id
     for k, v in data.items():
@@ -874,6 +990,9 @@ def patch_settings(body: SettingsPatch, db: Session = Depends(get_db)):
     if "ifpp_scope" in data and data["ifpp_scope"] is not None:
         if data["ifpp_scope"] not in ("entity", "group"):
             raise HTTPException(400, "ifpp_scope must be entity or group")
+    if "never_negative_enforcement" in data and data["never_negative_enforcement"] is not None:
+        if data["never_negative_enforcement"] not in ("off", "warn", "hard"):
+            raise HTTPException(400, "never_negative_enforcement must be off, warn, or hard")
     for k, v in data.items():
         setattr(row, k, v)
     db.flush()
@@ -894,6 +1013,95 @@ def get_ifpp(
         run_ifpp(db, as_of=as_of, mode=mode, profile_id=profile_id, scope=scope),
         session=db,
     )
+
+
+class SimulateOutflow(BaseModel):
+    on_date: date | None = None  # not named "date" — shadows datetime.date in annotations
+    amount: Decimal
+    name: str | None = None
+
+
+class SimulateIn(BaseModel):
+    extra_outflows: list[SimulateOutflow] = []
+    profile_id: int | None = None
+    scope: str | None = None
+    mode: str | None = None
+
+
+@app.post("/api/ifpp/simulate")
+def ifpp_simulate(body: SimulateIn, db: Session = Depends(get_db)):
+    from financial_os.services.ifpp_simulate import simulate_ifpp
+
+    extras = []
+    for e in body.extra_outflows:
+        d = e.model_dump()
+        d["date"] = d.pop("on_date", None)
+        extras.append(d)
+    return simulate_ifpp(
+        db,
+        extra_outflows=extras,
+        profile_id=body.profile_id,
+        scope=body.scope,
+        mode=body.mode,
+    )
+
+
+@app.get("/api/transfers/candidates")
+def transfer_candidates(
+    days: int = Query(7, ge=1, le=60),
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.transfer_match import find_transfer_candidates
+
+    return find_transfer_candidates(db, days=days, profile_id=profile_id)
+
+
+class TransferConfirmIn(BaseModel):
+    out_txn_id: int
+    in_txn_id: int
+
+
+@app.post("/api/transfers/confirm")
+def transfer_confirm(body: TransferConfirmIn, db: Session = Depends(get_db)):
+    from financial_os.services.transfer_match import confirm_transfer_pair
+
+    try:
+        return confirm_transfer_pair(db, out_txn_id=body.out_txn_id, in_txn_id=body.in_txn_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/import/presets")
+def import_presets_list(db: Session = Depends(get_db)):
+    from financial_os.services.import_presets import list_presets
+
+    return {"presets": list_presets(db)}
+
+
+class ImportPresetIn(BaseModel):
+    institution_key: str
+    amount_sign: str = "bank"
+    mapping: dict | None = None
+    notes: str | None = None
+    account_id: int | None = None
+
+
+@app.put("/api/import/presets")
+def import_presets_put(body: ImportPresetIn, db: Session = Depends(get_db)):
+    from financial_os.services.import_presets import upsert_preset
+
+    try:
+        return upsert_preset(
+            db,
+            institution_key=body.institution_key,
+            amount_sign=body.amount_sign,
+            mapping_json=body.mapping,
+            notes=body.notes,
+            account_id=body.account_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
 
 @app.get("/api/capital-desk")
@@ -972,15 +1180,71 @@ def pre_purchase(body: PrePurchaseIn, db: Session = Depends(get_db)):
     )
 
 
+class RescueIn(BaseModel):
+    shortfall: Decimal | None = None
+    amount: Decimal | None = None
+    account_id: int | None = None
+    profile_id: int | None = None
+    scope: str | None = None
+
+
+@app.post("/api/liquidity/rescue")
+def liquidity_rescue(body: RescueIn, db: Session = Depends(get_db)):
+    """Avoid-negative coach: ranked options with estimated costs."""
+    from financial_os.services.liquidity_rescue import build_rescue_plan
+
+    return build_rescue_plan(
+        db,
+        shortfall=body.shortfall,
+        amount=body.amount,
+        account_id=body.account_id,
+        profile_id=body.profile_id,
+        scope=body.scope,
+    )
+
+
 @app.get("/api/fees/candidates")
 def fees_candidates(
     days: int = Query(90, ge=1, le=365),
     limit: int = Query(50, ge=1, le=200),
+    profile_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     from financial_os.services.fee_scan import scan_fees
 
-    return scan_fees(db, days=days, limit=limit)
+    return scan_fees(db, days=days, limit=limit, profile_id=profile_id)
+
+
+class FeeConfirmIn(BaseModel):
+    transaction_id: int
+    action: str  # mark_fee | dismiss | recategorize
+    category_id: int | None = None
+
+
+@app.post("/api/fees/confirm")
+def fees_confirm(body: FeeConfirmIn, db: Session = Depends(get_db)):
+    from financial_os.services.fee_scan import confirm_fee
+
+    try:
+        return confirm_fee(
+            db,
+            transaction_id=body.transaction_id,
+            action=body.action,
+            category_id=body.category_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/fees/summary")
+def fees_summary(
+    days: int = Query(365, ge=1, le=730),
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.fee_scan import fee_summary
+
+    return fee_summary(db, days=days, profile_id=profile_id)
 
 
 @app.post("/api/promo-clock/{account_id}/sink-bill")
@@ -994,15 +1258,109 @@ def promo_sink_bill(account_id: int, db: Session = Depends(get_db)):
         raise HTTPException(400, str(e)) from e
 
 
+@app.get("/api/autopay")
+def autopay_list(profile_id: Optional[int] = None, db: Session = Depends(get_db)):
+    from financial_os.services.autopay import list_autopay
+
+    return list_autopay(db, profile_id=profile_id)
+
+
+class AutopayIn(BaseModel):
+    policy: str  # none | min | statement | promo_sink
+    apply_schedule: bool = True
+
+
+@app.put("/api/autopay/{account_id}")
+def autopay_set(account_id: int, body: AutopayIn, db: Session = Depends(get_db)):
+    from financial_os.services.autopay import set_autopay
+
+    try:
+        return set_autopay(
+            db,
+            account_id=account_id,
+            policy=body.policy,
+            apply_schedule=body.apply_schedule,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/intermix/graph")
+def intermix_graph(
+    days: int = Query(365, ge=1, le=2000),
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.intermix_graph import build_money_map
+
+    return build_money_map(db, days=days)
+
+
+@app.get("/api/digest/brief")
+def digest_brief(
+    profile_id: Optional[int] = None,
+    scope: Optional[str] = None,
+    use_grok: bool = True,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.digest_brief import build_fiscal_brief
+
+    return build_fiscal_brief(db, profile_id=profile_id, scope=scope, use_grok=use_grok)
+
+
+@app.get("/api/glance")
+def glance(
+    profile_id: Optional[int] = None,
+    scope: Optional[str] = None,
+    mode: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Mobile / multi-client one-shot Spendable + alerts (no fiscal logic in clients)."""
+    from financial_os.services.glance import build_glance
+
+    return build_glance(db, profile_id=profile_id, scope=scope, mode=mode)
+
+
+@app.get("/api/payments/candidates")
+def payment_candidates(
+    days: int = Query(14, ge=1, le=60),
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.payment_match import find_payment_candidates
+
+    return find_payment_candidates(db, days=days, profile_id=profile_id)
+
+
+class PaymentConfirmIn(BaseModel):
+    cash_txn_id: int
+    card_txn_id: int
+
+
+@app.post("/api/payments/confirm")
+def payment_confirm(body: PaymentConfirmIn, db: Session = Depends(get_db)):
+    from financial_os.services.payment_match import apply_payment_as_transfer
+
+    try:
+        return apply_payment_as_transfer(
+            db, cash_txn_id=body.cash_txn_id, card_txn_id=body.card_txn_id
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.get("/api/promo-clock")
-def promo_clock(db: Session = Depends(get_db)):
+def promo_clock(
+    profile_id: Optional[int] = None,
+    scope: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
     from financial_os.services.promo_clock import promo_death_clock
 
-    return promo_death_clock(db)
+    return promo_death_clock(db, profile_id=profile_id, scope=scope)
 
 
 class IntermixIn(BaseModel):
-    kind: str  # reimburse | distribution | capital_inject | owner_draw
+    kind: str  # reimburse | distribution | capital_inject | owner_draw | child_allowance
     amount: Decimal
     from_account_id: int
     to_account_id: int
@@ -1047,36 +1405,60 @@ def permission_roles():
 
 
 @app.get("/api/permissions/me")
-def permission_me(db: Session = Depends(get_db)):
-    from financial_os.db import AppUser
-    from financial_os.services.permissions import CAPS, Role
+def permission_me(request: Request, db: Session = Depends(get_db)):
+    from financial_os.services.permissions import CAPS, auth_status
 
-    user = db.query(AppUser).filter(AppUser.username == "owner").first()
-    role = Role(user.role) if user else Role.owner
+    ctx = getattr(request.state, "access", None)
+    if ctx is None:
+        from financial_os.services.permissions import default_context
+
+        ctx = default_context()
+    status = auth_status(db)
     return {
-        "user_id": user.id if user else None,
-        "username": user.username if user else "owner",
-        "display_name": user.display_name if user else "Owner",
-        "role": role.value,
-        "capabilities": sorted(CAPS[role]),
+        "user_id": ctx.user_id,
+        "username": ctx.username,
+        "display_name": ctx.display_name,
+        "role": ctx.role.value,
+        "authenticated": ctx.authenticated,
+        "capabilities": sorted(CAPS.get(ctx.role, set())),
+        **status,
     }
+
+
+@app.get("/api/permissions/auth-status")
+def permission_auth_status(db: Session = Depends(get_db)):
+    from financial_os.services.permissions import auth_status
+
+    return auth_status(db)
+
+
+@app.get("/api/permissions/audit")
+def permission_audit(limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
+    from financial_os.services.audit import list_events
+
+    return {"events": list_events(db, limit=limit)}
 
 
 @app.get("/api/permissions/users")
 def permission_users(db: Session = Depends(get_db)):
     from financial_os.db import AppUser
+    from financial_os.services.permissions import auth_status
 
     rows = db.query(AppUser).order_by(AppUser.id).all()
-    return [
-        {
-            "id": r.id,
-            "username": r.username,
-            "display_name": r.display_name,
-            "role": r.role,
-            "active": r.active,
-        }
-        for r in rows
-    ]
+    return {
+        "users": [
+            {
+                "id": r.id,
+                "username": r.username,
+                "display_name": r.display_name,
+                "role": r.role,
+                "active": r.active,
+                "has_token": bool(r.api_token),
+            }
+            for r in rows
+        ],
+        **auth_status(db),
+    }
 
 
 class UserIn(BaseModel):
@@ -1105,12 +1487,38 @@ def create_user(body: UserIn, db: Session = Depends(get_db)):
     )
     db.add(row)
     db.flush()
+    from financial_os.services.permissions import auth_status, generate_api_token as _gen
+
+    # When multi-user flips on, ensure the default owner also has a token to continue.
+    owner_token = None
+    status = auth_status(db)
+    if status["multi_user_mode"]:
+        owner = db.query(AppUser).filter(AppUser.username == "owner").first()
+        if owner and not owner.api_token:
+            owner_token = _gen()
+            owner.api_token = owner_token
+            db.flush()
+    status = auth_status(db)
     return {
         "id": row.id,
         "username": row.username,
         "role": row.role,
         "api_token": token,
-        "hint": "Store this token — send as X-API-Key on API requests. Shown once.",
+        "owner_api_token": owner_token,
+        "hint": (
+            "Store this token — send as X-API-Key on API requests. Shown once. "
+            + (
+                "Multi-user mode is ON: all clients must use an API key."
+                if status["multi_user_mode"]
+                else ""
+            )
+            + (
+                " Owner token was minted (owner_api_token) because owner had none."
+                if owner_token
+                else ""
+            )
+        ),
+        **status,
     }
 
 
@@ -1905,6 +2313,83 @@ def backup_create(body: BackupCreateIn | None = None):
         raise HTTPException(404, str(e)) from e
 
 
+class EncryptedBackupIn(BaseModel):
+    password: str
+    note: str | None = None
+    copy_to_remote: bool = True
+
+
+@app.post("/api/backup/create-encrypted")
+def backup_create_encrypted(body: EncryptedBackupIn):
+    from financial_os.services.encrypted_backup import create_encrypted_backup
+
+    try:
+        return create_encrypted_backup(
+            password=body.password,
+            note=body.note,
+            copy_to_remote=body.copy_to_remote,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/backup/encrypted")
+def backup_list_encrypted():
+    from financial_os.services.encrypted_backup import list_encrypted
+
+    return {"items": list_encrypted()}
+
+
+class DecryptBackupIn(BaseModel):
+    path: str | None = None
+    name: str | None = None  # under backups/
+    password: str
+
+
+@app.post("/api/backup/decrypt")
+def backup_decrypt(body: DecryptBackupIn):
+    from financial_os.services.backup import backups_dir
+    from financial_os.services.encrypted_backup import decrypt_file_to_backup
+
+    if body.path:
+        p = body.path
+    elif body.name:
+        safe = Path(body.name).name
+        p = str(backups_dir() / safe)
+    else:
+        raise HTTPException(400, "path or name required")
+    try:
+        return decrypt_file_to_backup(path=p, password=body.password)
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+class RemoteBackupConfigIn(BaseModel):
+    destination_folder: str | None = None
+    auto_copy_encrypted: bool = False
+
+
+@app.get("/api/backup/remote-config")
+def backup_remote_get():
+    from financial_os.services.encrypted_backup import get_remote_config
+
+    return get_remote_config()
+
+
+@app.put("/api/backup/remote-config")
+def backup_remote_put(body: RemoteBackupConfigIn):
+    from financial_os.services.encrypted_backup import set_remote_config
+
+    return set_remote_config(
+        destination_folder=body.destination_folder,
+        auto_copy_encrypted=body.auto_copy_encrypted,
+    )
+
+
 @app.get("/api/backup/download/{name}")
 def backup_download(name: str):
     from financial_os.services.backup import read_backup_bytes
@@ -1973,5 +2458,14 @@ if WEB_DIR.exists():
 def index():
     index_path = WEB_DIR / "index.html"
     if not index_path.exists():
-        return {"message": "API up. UI missing.", "docs": "/docs"}
+        return {"message": "API up. UI missing.", "docs": "/docs", "glance": "/glance"}
     return FileResponse(index_path)
+
+
+@app.get("/glance")
+def glance_page():
+    """Mobile / Mac / Linux shell — polls /api/glance (no fiscal logic in browser)."""
+    path = WEB_DIR / "glance.html"
+    if not path.exists():
+        return {"message": "glance.html missing", "api": "/api/glance"}
+    return FileResponse(path)

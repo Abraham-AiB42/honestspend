@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 from financial_os.db import Account, Category, Profile, Transaction
 
 ZERO = Decimal("0")
-IntermixKind = Literal["reimburse", "distribution", "capital_inject", "owner_draw"]
+IntermixKind = Literal[
+    "reimburse",
+    "distribution",
+    "capital_inject",
+    "owner_draw",
+    "child_allowance",
+]
 
 
 def _d(v: Any) -> Decimal:
@@ -73,6 +79,18 @@ def apply_intermix(
     elif kind == "capital_inject":
         cat = contrib_cat or transfer_cat
         label = "Capital inject"
+    elif kind == "child_allowance":
+        # Prefer child allowance category on destination profile
+        child_cat = (
+            session.query(Category)
+            .filter(
+                Category.profile_id == dst.profile_id,
+                Category.code.like("CHILD_ALLOWANCE%"),
+            )
+            .first()
+        )
+        cat = child_cat or transfer_cat
+        label = "Child allowance"
     else:
         raise ValueError(f"Unknown intermix kind: {kind}")
 
@@ -157,4 +175,8 @@ def _guidance(kind: str) -> str:
         "distribution": "Owner distribution — equity/AAA, not a business expense on 1120-S.",
         "owner_draw": "Owner draw — treat carefully for S-corp; often better as W-2 or distribution.",
         "capital_inject": "Owner put personal cash into the business — capital contribution, not revenue.",
+        "child_allowance": (
+            "Personal → child transfer for allowance. Not a business expense. "
+            "Tracks siloed Spendable for the child entity."
+        ),
     }.get(kind, "")

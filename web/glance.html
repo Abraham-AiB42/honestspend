@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0b0f14" />
+  <title>LedgerRing Glance</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --card: #121a24;
+      --border: #1e2a3a;
+      --text: #e8eef6;
+      --muted: #8b9bb0;
+      --accent: #3dd6c6;
+      --warn: #ffb020;
+      --danger: #ff6b6b;
+      --good: #3dd68c;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(900px 400px at 50% -20%, #1a2a40 0%, var(--bg) 50%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 1rem;
+      padding-bottom: 2.5rem;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    h1 { margin: 0; font-size: 1.15rem; letter-spacing: 0.02em; }
+    .sub { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.85rem;
+    }
+    .big {
+      font-size: 2.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .label { color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; }
+    .val { font-size: 1.15rem; font-weight: 600; }
+    .danger { color: var(--danger); }
+    .warn { color: var(--warn); }
+    .good { color: var(--good); }
+    .alert {
+      border-left: 3px solid var(--warn);
+      padding: 0.55rem 0.75rem;
+      margin: 0.4rem 0;
+      background: rgba(255,176,32,0.06);
+      border-radius: 0 10px 10px 0;
+      font-size: 0.9rem;
+    }
+    .alert.critical { border-left-color: var(--danger); background: rgba(255,107,107,0.08); }
+    .alert.info { border-left-color: var(--accent); background: rgba(61,214,198,0.06); }
+    button, select, input {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.9rem;
+    }
+    button.primary {
+      background: var(--accent);
+      color: #0b0f14;
+      border-color: var(--accent);
+      font-weight: 700;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .toolbar select, .toolbar input { flex: 1; min-width: 120px; }
+    .muted { color: var(--muted); font-size: 0.8rem; }
+    .err { color: var(--danger); font-size: 0.85rem; margin: 0.5rem 0; }
+    details { margin-top: 0.75rem; }
+    summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+    #rescue .opt {
+      font-size: 0.85rem;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>◎ LedgerRing Glance</h1>
+      <div class="sub" id="meta">Connecting…</div>
+    </div>
+    <button type="button" id="btn-refresh" title="Refresh">↻</button>
+  </header>
+
+  <div class="toolbar">
+    <select id="scope">
+      <option value="entity">Entity (silo)</option>
+      <option value="group">Combined</option>
+    </select>
+    <select id="profile" disabled>
+      <option value="">Default entity</option>
+    </select>
+  </div>
+  <div class="toolbar">
+    <input id="api-key" type="password" placeholder="X-API-Key (if multi-user)" autocomplete="off" />
+    <input id="base-url" type="url" placeholder="API base (empty = this host)" />
+  </div>
+
+  <p class="err" id="error" hidden></p>
+
+  <div class="card">
+    <div class="label">Purchasing power</div>
+    <div class="big" id="combined">—</div>
+    <div class="row" style="margin-top:0.85rem">
+      <div>
+        <div class="label">Cash spendable</div>
+        <div class="val" id="cash">—</div>
+      </div>
+      <div>
+        <div class="label">0% card float</div>
+        <div class="val" id="float">—</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:0.75rem">
+      <div>
+        <div class="label">Red day</div>
+        <div class="val" id="red">—</div>
+      </div>
+      <div>
+        <div class="label">Pending outflows</div>
+        <div class="val" id="pending">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Capital desk</div>
+    <div class="val" id="headline" style="font-size:1rem">—</div>
+    <div class="muted" id="digest-msg" style="margin-top:0.4rem"></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Alerts</div>
+    <div id="alerts"><div class="muted">Loading…</div></div>
+    <button type="button" class="primary" id="btn-rescue">Analyze rescue options</button>
+    <div id="rescue" hidden></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Fiscal brief</div>
+    <button type="button" id="btn-brief" style="width:100%">Load brief</button>
+    <pre id="brief" class="muted" style="white-space:pre-wrap;margin:0.6rem 0 0;font-family:inherit"></pre>
+  </div>
+
+  <details>
+    <summary>About this client</summary>
+    <p class="muted">
+      Glance is the multi-platform shell (phone browser, Mac/Linux). Fiscal math stays on the Python engine.
+      Primary Windows client is WinUI. Polls <code>/api/glance</code>.
+    </p>
+  </details>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const money = (s) => {
+      const n = Number(s);
+      if (Number.isNaN(n)) return s || "—";
+      return n.toLocaleString(undefined, { style: "currency", currency: "USD" });
+    };
+
+    function base() {
+      const b = $("base-url").value.trim().replace(/\/$/, "");
+      return b || "";
+    }
+
+    function headers() {
+      const h = { Accept: "application/json" };
+      const k = $("api-key").value.trim();
+      if (k) h["X-API-Key"] = k;
+      return h;
+    }
+
+    async function api(path) {
+      const url = base() + path;
+      const r = await fetch(url, { headers: headers() });
+      if (!r.ok) {
+        let detail = r.statusText;
+        try {
+          const j = await r.json();
+          detail = j.detail ? (typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail)) : detail;
+        } catch (_) {}
+        throw new Error(`${r.status}: ${detail}`);
+      }
+      return r.json();
+    }
+
+    function qs() {
+      const sc = $("scope").value;
+      let q = `scope=${encodeURIComponent(sc)}`;
+      const pid = $("profile").value;
+      if (pid && sc === "entity") q += `&profile_id=${encodeURIComponent(pid)}`;
+      return q;
+    }
+
+    async function loadProfiles() {
+      try {
+        const profiles = await api("/api/profiles");
+        const sel = $("profile");
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">Default entity</option>';
+        for (const p of profiles) {
+          const o = document.createElement("option");
+          o.value = p.id;
+          o.textContent = `${p.display_name} (${p.entity_type})`;
+          sel.appendChild(o);
+        }
+        sel.disabled = $("scope").value !== "entity";
+        if (cur) sel.value = cur;
+      } catch (_) {
+        /* optional */
+      }
+    }
+
+    async function refresh() {
+      $("error").hidden = true;
+      $("meta").textContent = "Loading…";
+      try {
+        await loadProfiles();
+        const g = await api(`/api/glance?${qs()}`);
+        $("combined").textContent = money(g.combined_purchasing_power);
+        $("cash").textContent = money(g.cash_spendable);
+        $("float").textContent = money(g.card_float_interest_free);
+        if (g.is_red_now) {
+          $("red").textContent = "NOW";
+          $("red").className = "val danger";
+        } else {
+          $("red").textContent = g.next_red_day || "None";
+          $("red").className = "val";
+        }
+        const pend = g.pending || {};
+        $("pending").textContent = pend.count
+          ? `${pend.count} · ${money(pend.outflows_abs)}`
+          : "0";
+        $("pending").className = pend.count ? "val warn" : "val";
+        const head = g.headline || {};
+        $("headline").textContent = head.title
+          ? `${(head.action || "").replace(/_/g, " ")} — ${head.title}`
+          : "—";
+        $("digest-msg").textContent = g.digest_message || "";
+        const alerts = g.alerts || [];
+        if (!alerts.length) {
+          $("alerts").innerHTML = '<div class="good">All clear</div>';
+        } else {
+          $("alerts").innerHTML = alerts
+            .map(
+              (a) =>
+                `<div class="alert ${a.level || ""}">[${a.level || "info"}] ${a.message || ""}</div>`
+            )
+            .join("");
+        }
+        $("meta").textContent = `As of ${g.as_of || "?"} · ${g.ifpp_scope || ""} · profile ${g.profile_id ?? "default"}`;
+        try {
+          localStorage.setItem("lr_api_key", $("api-key").value);
+          localStorage.setItem("lr_base", $("base-url").value);
+          localStorage.setItem("lr_scope", $("scope").value);
+        } catch (_) {}
+      } catch (e) {
+        $("error").hidden = false;
+        $("error").textContent = e.message || String(e);
+        $("meta").textContent = "Offline or auth required";
+      }
+    }
+
+    async function rescue() {
+      $("rescue").hidden = false;
+      $("rescue").innerHTML = '<div class="muted">Analyzing…</div>';
+      try {
+        const body = {
+          amount: 500,
+          scope: $("scope").value,
+          profile_id: $("profile").value ? Number($("profile").value) : null,
+        };
+        const r = await fetch(base() + "/api/liquidity/rescue", {
+          method: "POST",
+          headers: { ...headers(), "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.detail ? JSON.stringify(j.detail) : r.statusText);
+        const opts = j.options || [];
+        $("rescue").innerHTML =
+          `<div class="muted">${j.message || ""}</div>` +
+          opts
+            .slice(0, 8)
+            .map(
+              (o) =>
+                `<div class="opt"><strong>#${o.rank}</strong> ${o.safe ? "✓" : "!"} ${o.title}<br/><span class="muted">${o.reason || ""} · cost ${o.cost_estimate} ${o.cost_unit || ""}</span></div>`
+            )
+            .join("") || "<div class='muted'>No options</div>";
+      } catch (e) {
+        $("rescue").innerHTML = `<div class="err">${e.message}</div>`;
+      }
+    }
+
+    async function brief() {
+      $("brief").textContent = "…";
+      try {
+        const j = await api(`/api/digest/brief?use_grok=true&${qs()}`);
+        $("brief").textContent = `[${j.source}] ${j.brief || ""}`;
+      } catch (e) {
+        $("brief").textContent = e.message;
+      }
+    }
+
+    $("btn-refresh").onclick = refresh;
+    $("btn-rescue").onclick = rescue;
+    $("btn-brief").onclick = brief;
+    $("scope").onchange = () => {
+      $("profile").disabled = $("scope").value !== "entity";
+      refresh();
+    };
+    $("profile").onchange = refresh;
+
+    try {
+      $("api-key").value = localStorage.getItem("lr_api_key") || "";
+      $("base-url").value = localStorage.getItem("lr_base") || "";
+      const sc = localStorage.getItem("lr_scope");
+      if (sc) $("scope").value = sc;
+    } catch (_) {}
+
+    refresh();
+    setInterval(refresh, 60000);
+  </script>
+</body>
+</html>

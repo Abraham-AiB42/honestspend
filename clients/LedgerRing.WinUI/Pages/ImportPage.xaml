@@ -43,11 +43,7 @@
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="12">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Legacy Budget.xlsx" />
-                    <ComboBox x:Name="ProfileSlugBox" Header="Profile slug" SelectedIndex="0">
-                        <ComboBoxItem Content="personal" Tag="personal" />
-                        <ComboBoxItem Content="ap_agency" Tag="ap_agency" />
-                        <ComboBoxItem Content="aib42" Tag="aib42" />
-                    </ComboBox>
+                    <ComboBox x:Name="ProfileSlugBox" Header="Entity" SelectedIndex="0" HorizontalAlignment="Stretch" />
                     <CheckBox x:Name="DryRunBox" Content="Dry run (scan only)" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Pick xlsx…" Click="PickXlsx_Click" Style="{StaticResource AccentButtonStyle}" />

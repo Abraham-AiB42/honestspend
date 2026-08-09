@@ -113,13 +113,14 @@ public sealed partial class LedgerPage : Page
             {
                 var id = t.GetProperty("id").GetInt32();
                 var payee = JsonUi.Str(t, "payee", "(no payee)");
-                var title = $"{JsonUi.Str(t, "txn_date")} · {payee} · {JsonUi.Money(t, "amount")}";
+                var title = $"#{id} · {JsonUi.Str(t, "txn_date")} · {payee} · {JsonUi.Money(t, "amount")}";
                 int? catId = null;
                 if (t.TryGetProperty("category_id", out var c) && c.ValueKind != JsonValueKind.Null)
                     catId = c.GetInt32();
                 var selected = _allCats.FirstOrDefault(x => x.Id == catId) ?? _allCats[0];
                 var cats = new ObservableCollection<CatOpt>(_allCats);
-                _rows.Add(new TxnRow(id, title, $"profile {JsonUi.Str(t, "profile_id")} · acct {JsonUi.Str(t, "account_id")}", cats, selected));
+                var st = JsonUi.Str(t, "status", "cleared");
+                _rows.Add(new TxnRow(id, title, $"profile {JsonUi.Str(t, "profile_id")} · acct {JsonUi.Str(t, "account_id")} · {st}", cats, selected));
             }
             MsgText.Text = $"{_rows.Count} transactions";
         }
@@ -176,6 +177,29 @@ public sealed partial class LedgerPage : Page
             await api.CreateTransactionAsync(body);
             MsgText.Text = "Transaction added.";
             PayeeBox.Text = "";
+            await LoadTxnsAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void Void_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (double.IsNaN(VoidIdBox.Value) || VoidIdBox.Value < 1)
+                throw new InvalidOperationException("Enter a transaction id to void (shown in list).");
+            var id = (int)VoidIdBox.Value;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.VoidTransactionAsync(id, "user void from Ledger");
+            MsgText.Text =
+                $"Voided #{id} · status {JsonUi.Str(res, "status")} · " +
+                $"balance now {JsonUi.Str(res, "account_balance", "—")}";
             await LoadTxnsAsync();
         }
         catch (Exception ex)

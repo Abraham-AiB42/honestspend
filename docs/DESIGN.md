@@ -80,7 +80,7 @@ A local multi-entity financial OS for small business owners: books + liquidity c
 ## 4. Data model (core)
 
 ### 4.1 Profiles
-`id`, `slug` (personal | ap_agency | aib42), `display_name`, `entity_type`, `tax_form_primary` (1120S | 1040)
+`id`, `slug` (auto from display name), `display_name`, `entity_type` (individual | business | child), `tax_form_primary` (1040 | 1120S | 1065 | SchC | none), optional `parent_profile_id` for children. Fresh install seeds **Personal only**; businesses and children via Add Business / Add Child.
 
 ### 4.2 Accounts
 Bank, credit, cash, liability, investment.  

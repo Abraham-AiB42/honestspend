@@ -74,6 +74,15 @@ WRITE_CAPS = {
     "/api/debt": "write_settings",
     "/api/backup": "write_settings",
     "/api/credit/profile": "write_settings",
+    "/api/liquidity": "read",  # rescue is advisory; still requires auth identity
+    "/api/fees": "write_txns",
+    "/api/transfers": "write_txns",
+    "/api/ifpp/simulate": "read",
+    "/api/reconcile": "write_txns",
+    "/api/promo-clock": "write_txns",
+    "/api/tax-vault": "write_settings",
+    "/api/autopay": "write_txns",
+    "/api/payments": "write_txns",
 }
 
 
@@ -152,7 +161,13 @@ def resolve_context(session: Session, api_token: str | None) -> AccessContext:
 
 def capability_for_request(method: str, path: str) -> str | None:
     """Return required capability for mutating requests; None if read-only open."""
+    # User admin + audit: owner only
+    if path.startswith("/api/permissions/users") or path.startswith("/api/permissions/audit"):
+        return "manage_users"
     if method.upper() in ("GET", "HEAD", "OPTIONS"):
+        return "read"
+    # Special-case simulate (POST but read-level)
+    if path.startswith("/api/ifpp/simulate") or path.startswith("/api/liquidity"):
         return "read"
     for prefix, cap in WRITE_CAPS.items():
         if path.startswith(prefix):
@@ -161,3 +176,28 @@ def capability_for_request(method: str, path: str) -> str | None:
     if method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
         return "write_txns"
     return "read"
+
+
+def active_user_count(session: Session) -> int:
+    from financial_os.db import AppUser
+
+    return session.query(AppUser).filter(AppUser.active.is_(True)).count()
+
+
+def multi_user_mode(session: Session) -> bool:
+    """When more than one active user exists, API keys are mandatory (even on loopback)."""
+    return active_user_count(session) > 1
+
+
+def auth_status(session: Session) -> dict:
+    n = active_user_count(session)
+    return {
+        "active_users": n,
+        "multi_user_mode": n > 1,
+        "api_key_required": n > 1,
+        "hint": (
+            "Second active user enables multi-user mode: all API calls need X-API-Key."
+            if n > 1
+            else "Single-user local mode: loopback may omit X-API-Key (owner)."
+        ),
+    }

@@ -67,8 +67,13 @@ def check_purchase(
         )
     )
 
-    # Card paths
-    accounts = session.query(Account).filter(Account.kind == "credit").all()
+    # Card paths (entity-scoped when IFPP is entity)
+    cq = session.query(Account).filter(Account.kind == "credit", Account.archived_at.is_(None))
+    sc = (ifpp.details or {}).get("ifpp_scope") or scope or "entity"
+    pid = (ifpp.details or {}).get("profile_id")
+    if sc == "entity" and pid is not None:
+        cq = cq.filter(Account.profile_id == pid)
+    accounts = cq.all()
     card_views: list[CardView] = []
     for a in accounts:
         if account_id and a.id != account_id:

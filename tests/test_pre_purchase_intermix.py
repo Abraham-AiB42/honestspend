@@ -93,8 +93,11 @@ def test_promo_clock_sinking_fund(tmp_path: Path):
 
 def test_intermix_capital_inject(tmp_path: Path):
     s = _session(tmp_path)
+    from financial_os.services.profiles import create_profile
+
     personal = s.query(Profile).filter(Profile.slug == "personal").one()
-    biz = s.query(Profile).filter(Profile.slug == "aib42").one()
+    biz = create_profile(s, display_name="Demo Business", entity_type="business")
+    s.flush()
     p_acct = Account(
         profile_id=personal.id,
         kind="checking",
@@ -105,7 +108,7 @@ def test_intermix_capital_inject(tmp_path: Path):
     b_acct = Account(
         profile_id=biz.id,
         kind="checking",
-        nickname="AiB Ops",
+        nickname="Business ops",
         current_balance=Decimal("100"),
         is_cash_for_ifpp=True,
     )

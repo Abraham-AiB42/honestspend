@@ -22,6 +22,7 @@ public sealed partial class HomePage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        AppState.ScopeChanged += OnAppScopeChanged;
         try
         {
             var ls = ApplicationData.Current.LocalSettings.Values;
@@ -35,6 +36,14 @@ public sealed partial class HomePage : Page
         ApplyViewMode();
         await RefreshAsync();
     }
+
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        base.OnNavigatedFrom(e);
+        AppState.ScopeChanged -= OnAppScopeChanged;
+    }
+
+    private async void OnAppScopeChanged() => await RefreshAsync();
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
 
@@ -63,6 +72,77 @@ public sealed partial class HomePage : Page
     private void Done_Click(object sender, RoutedEventArgs e)
     {
         DoneText.Text = $"Done · {DateTime.Now:t} — open rarely; engine + tray watch red days.";
+    }
+
+    private async void Rescue_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        RescueText.Text = "Analyzing…";
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            // Prefer covering a shortfall vs current cash spendable gap of $500 default planning amount
+            var res = await api.LiquidityRescueAsync(amount: 500m);
+            RescueText.Text = JsonUi.Str(res, "message");
+            var lines = new List<string>();
+            if (res.TryGetProperty("options", out var opts) && opts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var o in opts.EnumerateArray())
+                {
+                    var safe = o.TryGetProperty("safe", out var s) && s.ValueKind == JsonValueKind.True ? "✓" : "!";
+                    lines.Add(
+                        $"#{JsonUi.Str(o, "rank")} {safe} {JsonUi.Str(o, "title")} · " +
+                        $"cost {JsonUi.Str(o, "cost_estimate")} {JsonUi.Str(o, "cost_unit")} · " +
+                        JsonUi.Str(o, "reason"));
+                }
+            }
+            if (lines.Count == 0) lines.Add("No options returned.");
+            RescueList.ItemsSource = lines;
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+            RescueText.Text = "";
+        }
+    }
+
+    private async void Brief_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        BriefText.Text = "Writing brief…";
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.GetDigestBriefAsync(useGrok: true);
+            BriefText.Text =
+                $"[{JsonUi.Str(res, "source")}] {JsonUi.Str(res, "brief")}";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+            BriefText.Text = "";
+        }
+    }
+
+    private async void FeeSummary_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.GetFeeSummaryAsync(365);
+            BriefText.Text = JsonUi.Str(res, "message");
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private void ApplyViewMode()
@@ -170,9 +250,18 @@ public sealed partial class HomePage : Page
             var ifppScope = JsonUi.Str(ifpp, "ifpp_scope", AppState.IfppScope);
             var scopeNote = details.TryGetProperty("scope_note", out var sn) ? sn.GetString() : "";
             ScopeNote.Text = $"{ifppScope} · {scopeNote}";
+            var pendWarn = JsonUi.Str(ifpp, "pending_warning", "");
+            if (string.IsNullOrEmpty(pendWarn) || pendWarn == "—")
+                pendWarn = details.TryGetProperty("pending_warning", out var pw) && pw.ValueKind == JsonValueKind.String
+                    ? pw.GetString() ?? ""
+                    : "";
             MetaText.Text =
                 $"As of {ifpp.GetProperty("as_of").GetString()} · mode {ifpp.GetProperty("mode").GetString()} · " +
                 $"buffer ${buffer} · never-neg {neverNeg} · tax vault ${vault} · IFPP {ifppScope}";
+            if (!string.IsNullOrEmpty(pendWarn) && pendWarn != "—")
+                MetaText.Text += $" · ⚠ {pendWarn}";
+            if (ifpp.TryGetProperty("is_red_now", out var irn) && irn.ValueKind == JsonValueKind.True)
+                RedText.Text = "NOW";
 
             var desk = await api.GetCapitalDeskAsync();
             var head = desk.GetProperty("headline");

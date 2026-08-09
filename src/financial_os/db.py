@@ -55,15 +55,21 @@ class Profile(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     slug: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(128))
+    # individual | business | child (legacy: personal maps to individual)
     entity_type: Mapped[str] = mapped_column(String(32))
     tax_form_primary: Mapped[str] = mapped_column(String(16))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Child entities may link to a household/personal parent (optional)
+    parent_profile_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("profiles.id"), nullable=True
+    )
     # Tax geo (multi-state lite — notes for CPA, not filing engine)
     home_state: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)  # e.g. TX, CA
     multi_state: Mapped[bool] = mapped_column(Boolean, default=False)
     filing_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # JSON string: [{"state":"TX","pct":60},{"state":"CA","pct":40}]
     state_allocation_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     accounts: Mapped[list[Account]] = relationship(back_populates="profile")
     categories: Mapped[list[Category]] = relationship(back_populates="profile")
@@ -131,6 +137,8 @@ class Account(Base):
     )
     plaid_account_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Autopay desk: none | min | statement | promo_sink
+    autopay_policy: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="accounts")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
@@ -153,6 +161,8 @@ class Transaction(Base):
     receipt_path: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     is_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
     transfer_pair_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # null | confirmed_fee | dismissed | recategorized
+    fee_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(tz=None)
     )
@@ -225,6 +235,35 @@ class PlaidItem(Base):
     )
 
 
+class AuditEvent(Base):
+    """Lite multi-user audit trail."""
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), default="owner")
+    role: Mapped[str] = mapped_column(String(32), default="owner")
+    action: Mapped[str] = mapped_column(String(64))
+    path: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    detail: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(tz=None)
+    )
+
+
+class ImportPreset(Base):
+    """Remember bank CSV mapping / amount sign per institution key."""
+
+    __tablename__ = "import_presets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    institution_key: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    amount_sign: Mapped[str] = mapped_column(String(16), default="bank")  # bank | invert
+    mapping_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    account_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+
+
 class CategoryRule(Base):
     """Merchant/payee pattern → category. Priority: higher wins first."""
 
@@ -290,6 +329,8 @@ class AppSettings(Base):
     ifpp_scope: Mapped[str] = mapped_column(String(16), default="entity")
     # When true, IFPP ignores pending transactions if we ever project from ledger (balances still authoritative)
     ifpp_cleared_only: Mapped[bool] = mapped_column(Boolean, default=True)
+    # off | warn | hard — write path never-negative checking enforcement
+    never_negative_enforcement: Mapped[str] = mapped_column(String(16), default="warn")
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:

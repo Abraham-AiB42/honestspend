@@ -24,9 +24,18 @@ def _d(v: Any) -> Decimal:
     return Decimal(str(v))
 
 
-def promo_death_clock(session: Session, *, as_of: date | None = None) -> dict[str, Any]:
+def promo_death_clock(
+    session: Session,
+    *,
+    as_of: date | None = None,
+    profile_id: int | None = None,
+    scope: str | None = None,
+) -> dict[str, Any]:
     as_of = as_of or date.today()
-    cards = session.query(Account).filter(Account.kind == "credit").all()
+    q = session.query(Account).filter(Account.kind == "credit", Account.archived_at.is_(None))
+    if (scope or "entity") == "entity" and profile_id is not None:
+        q = q.filter(Account.profile_id == profile_id)
+    cards = q.all()
     items = []
     for a in cards:
         if a.promo_end_date is None:

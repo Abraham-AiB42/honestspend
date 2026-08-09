@@ -377,7 +377,59 @@ BUSINESS_RULE_SEEDS: list[tuple[str, str, str, int]] = [
 ]
 
 
+def seed_rules_for_profile(session: Session, profile: Profile) -> int:
+    """Add template rules for a business/child profile (idempotent per profile)."""
+    et = (profile.entity_type or "").lower()
+    if et not in ("business", "s_corp", "llc"):
+        # child: light rules later; personal handled at seed
+        if et == "child":
+            return 0
+        if et in ("individual", "personal"):
+            return 0
+        # treat unknown business-like as business if tax form is business
+        if (profile.tax_form_primary or "").upper() not in ("1120S", "1065", "SCHC", "1120"):
+            return 0
+
+    created = 0
+    for pattern, mt, code_base, prio in BUSINESS_RULE_SEEDS:
+        cat = (
+            session.query(Category)
+            .filter(
+                Category.profile_id == profile.id,
+                Category.code.like(f"{code_base}%"),
+            )
+            .first()
+        )
+        if not cat:
+            continue
+        exists = (
+            session.query(CategoryRule)
+            .filter(
+                CategoryRule.profile_id == profile.id,
+                CategoryRule.pattern == pattern,
+                CategoryRule.source == "seed",
+            )
+            .count()
+        )
+        if exists:
+            continue
+        session.add(
+            CategoryRule(
+                profile_id=profile.id,
+                match_type=mt,
+                pattern=pattern,
+                category_id=cat.id,
+                priority=prio,
+                source="seed",
+            )
+        )
+        created += 1
+    session.flush()
+    return created
+
+
 def seed_default_rules(session: Session) -> int:
+    """Seed personal + system rules once. Business rules attach when profiles are created."""
     if session.query(CategoryRule).filter(CategoryRule.source == "seed").count() > 0:
         return 0
 
@@ -401,33 +453,17 @@ def seed_default_rules(session: Session) -> int:
             )
             created += 1
 
-    for slug in ("ap_agency", "aib42"):
-        prof = session.query(Profile).filter(Profile.slug == slug).one_or_none()
-        if not prof:
+    # Any pre-existing business profiles (legacy DBs)
+    for prof in session.query(Profile).all():
+        if prof.slug == "personal":
             continue
-        for pattern, mt, code_base, prio in BUSINESS_RULE_SEEDS:
-            # business categories are stored as CODE__p{profile_id}
-            cat = (
-                session.query(Category)
-                .filter(
-                    Category.profile_id == prof.id,
-                    Category.code.like(f"{code_base}%"),
-                )
-                .first()
-            )
-            if not cat:
-                continue
-            session.add(
-                CategoryRule(
-                    profile_id=prof.id,
-                    match_type=mt,
-                    pattern=pattern,
-                    category_id=cat.id,
-                    priority=prio,
-                    source="seed",
-                )
-            )
-            created += 1
+        et = (prof.entity_type or "").lower()
+        if et in ("business", "s_corp", "llc") or (prof.tax_form_primary or "").upper() in (
+            "1120S",
+            "1065",
+            "1120",
+        ):
+            created += seed_rules_for_profile(session, prof)
 
     session.flush()
     return created

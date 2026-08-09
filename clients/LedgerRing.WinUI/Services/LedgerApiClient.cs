@@ -87,6 +87,49 @@ public sealed class LedgerApiClient : IDisposable
         return GetJsonAsync(q, ct);
     }
 
+    public Task<JsonElement> GetDigestBriefAsync(bool useGrok = true, CancellationToken ct = default)
+    {
+        var sc = AppState.IfppScope;
+        var q = $"api/digest/brief?scope={Uri.EscapeDataString(sc)}&use_grok={useGrok.ToString().ToLowerInvariant()}";
+        if (AppState.SelectedProfileId is int pid && sc == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> GetAutopayAsync(CancellationToken ct = default)
+    {
+        var q = "api/autopay";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> SetAutopayAsync(int accountId, string policy, bool applySchedule = true, CancellationToken ct = default)
+        => PutJsonAsync($"api/autopay/{accountId}", new { policy, apply_schedule = applySchedule }, ct);
+
+    public Task<JsonElement> GetIntermixGraphAsync(int days = 365, CancellationToken ct = default)
+        => GetJsonAsync($"api/intermix/graph?days={days}", ct);
+
+    public Task<JsonElement> GetGlanceAsync(CancellationToken ct = default)
+    {
+        var sc = AppState.IfppScope;
+        var q = $"api/glance?scope={Uri.EscapeDataString(sc)}";
+        if (AppState.SelectedProfileId is int pid && sc == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> GetPaymentCandidatesAsync(int days = 14, CancellationToken ct = default)
+    {
+        var q = $"api/payments/candidates?days={days}";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> ConfirmPaymentAsync(int cashTxnId, int cardTxnId, CancellationToken ct = default)
+        => PostJsonAsync("api/payments/confirm", new { cash_txn_id = cashTxnId, card_txn_id = cardTxnId }, ct);
+
 
     public Task<JsonElement> GetPromoClockAsync(CancellationToken ct = default)
         => GetJsonAsync("api/promo-clock", ct);
@@ -95,7 +138,37 @@ public sealed class LedgerApiClient : IDisposable
         => PostJsonAsync($"api/promo-clock/{accountId}/sink-bill", new { }, ct);
 
     public Task<JsonElement> GetFeeCandidatesAsync(int days = 90, int limit = 50, CancellationToken ct = default)
-        => GetJsonAsync($"api/fees/candidates?days={days}&limit={limit}", ct);
+    {
+        var q = $"api/fees/candidates?days={days}&limit={limit}";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> ConfirmFeeAsync(int transactionId, string action, int? categoryId = null, CancellationToken ct = default)
+        => PostJsonAsync("api/fees/confirm", new
+        {
+            transaction_id = transactionId,
+            action,
+            category_id = categoryId,
+        }, ct);
+
+    public Task<JsonElement> GetFeeSummaryAsync(int days = 365, CancellationToken ct = default)
+    {
+        var q = $"api/fees/summary?days={days}";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> LiquidityRescueAsync(decimal? amount = null, decimal? shortfall = null, CancellationToken ct = default)
+        => PostJsonAsync("api/liquidity/rescue", new
+        {
+            amount,
+            shortfall,
+            profile_id = AppState.SelectedProfileId,
+            scope = AppState.IfppScope,
+        }, ct);
 
     public Task<JsonElement> GetReconcileAsync(int? profileId = null, CancellationToken ct = default)
     {
@@ -156,6 +229,29 @@ public sealed class LedgerApiClient : IDisposable
 
     public Task<JsonElement> GetProfilesAsync(CancellationToken ct = default)
         => GetJsonAsync("api/profiles", ct);
+
+    public Task<JsonElement> CreateProfileAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/profiles", body, ct);
+
+    public Task<JsonElement> ArchiveProfileAsync(int id, CancellationToken ct = default)
+        => PostJsonAsync($"api/profiles/{id}/archive", new { }, ct);
+
+    public Task<JsonElement> VoidTransactionAsync(int id, string? reason = null, CancellationToken ct = default)
+        => PostJsonAsync($"api/transactions/{id}/void", new { reason }, ct);
+
+    public Task<JsonElement> GetTransferCandidatesAsync(int days = 7, CancellationToken ct = default)
+    {
+        var q = $"api/transfers/candidates?days={days}";
+        if (AppState.SelectedProfileId is int pid)
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> ConfirmTransferAsync(int outTxnId, int inTxnId, CancellationToken ct = default)
+        => PostJsonAsync("api/transfers/confirm", new { out_txn_id = outTxnId, in_txn_id = inTxnId }, ct);
+
+    public Task<JsonElement> SimulateIfppAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/ifpp/simulate", body, ct);
 
     public Task<JsonElement> GetAccountsAsync(int? profileId = null, CancellationToken ct = default)
         => GetJsonAsync(profileId is null ? "api/accounts" : $"api/accounts?profile_id={profileId}", ct);
@@ -343,6 +439,20 @@ public sealed class LedgerApiClient : IDisposable
 
     public Task<JsonElement> GetBackupStatusAsync(CancellationToken ct = default)
         => GetJsonAsync("api/backup/status", ct);
+
+    public Task<JsonElement> GetRemoteBackupConfigAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/backup/remote-config", ct);
+
+    public Task<JsonElement> PutRemoteBackupConfigAsync(object body, CancellationToken ct = default)
+        => PutJsonAsync("api/backup/remote-config", body, ct);
+
+    public Task<JsonElement> CreateEncryptedBackupAsync(string password, string? note = null, bool copyToRemote = true, CancellationToken ct = default)
+        => PostJsonAsync("api/backup/create-encrypted", new
+        {
+            password,
+            note,
+            copy_to_remote = copyToRemote,
+        }, ct);
 
     public Task<JsonElement> CreateBackupAsync(bool asZip = true, string? note = null, CancellationToken ct = default)
         => PostJsonAsync("api/backup/create", new { as_zip = asZip, note }, ct);

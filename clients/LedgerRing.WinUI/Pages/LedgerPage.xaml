@@ -73,7 +73,11 @@
                 <ComboBox x:Name="CatBox" Header="Category" Grid.Row="2" Grid.Column="1" />
             </Grid>
             <Button Content="Add transaction" Click="Add_Click" Style="{StaticResource AccentButtonStyle}" />
-            <TextBlock x:Name="MsgText" Opacity="0.8" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <NumberBox x:Name="VoidIdBox" Header="Void txn #" Minimum="1" Width="140" />
+                <Button Content="Void / reverse" Click="Void_Click" VerticalAlignment="Bottom" />
+            </StackPanel>
+            <TextBlock x:Name="MsgText" Opacity="0.8" TextWrapping="Wrap" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

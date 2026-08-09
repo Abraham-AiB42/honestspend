@@ -24,11 +24,7 @@
             </Border>
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Starter accounts" />
-            <ComboBox x:Name="ProfileSlugBox" Header="Entity" SelectedIndex="0" HorizontalAlignment="Stretch">
-                <ComboBoxItem Content="Personal" Tag="personal" />
-                <ComboBoxItem Content="AP Agency" Tag="ap_agency" />
-                <ComboBoxItem Content="AiB42" Tag="aib42" />
-            </ComboBox>
+            <ComboBox x:Name="ProfileSlugBox" Header="Entity (add more under Entities)" SelectedIndex="0" HorizontalAlignment="Stretch" />
             <TextBox x:Name="CashNameBox" Header="Checking nickname" Text="Primary checking" />
             <TextBox x:Name="InstBox" Header="Institution (optional)" PlaceholderText="Chase, Amex…" />
             <NumberBox x:Name="CashBalBox" Header="Checking balance ($)" Value="0" Minimum="0" />

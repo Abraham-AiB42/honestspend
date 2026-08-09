@@ -10,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from financial_os.db import Account, Profile, init_db
 from financial_os.seed import seed_all
 from financial_os.services.ifpp_service import run_ifpp
+from financial_os.services.profiles import create_profile
 
 
 def _session(tmp_path: Path):
@@ -25,8 +26,8 @@ def _session(tmp_path: Path):
 def test_entity_scope_isolates_cash(tmp_path: Path):
     s = _session(tmp_path)
     personal = s.query(Profile).filter(Profile.slug == "personal").one()
-    biz = s.query(Profile).filter(Profile.slug != "personal").first()
-    assert biz is not None
+    biz = create_profile(s, display_name="Demo Business", entity_type="business")
+    s.commit()
 
     s.add(
         Account(

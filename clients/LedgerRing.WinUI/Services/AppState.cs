@@ -1,6 +1,6 @@
 namespace LedgerRing_WinUI.Services;
 
-/// <summary>Shared UI selection for multi-entity Spendable scope.</summary>
+/// <summary>Shared UI selection for multi-entity Spendable scope + session mode.</summary>
 public static class AppState
 {
     /// <summary>null = use engine default profile for entity scope.</summary>
@@ -8,6 +8,14 @@ public static class AppState
 
     /// <summary>entity (silo, default) or group (combined).</summary>
     public static string IfppScope { get; set; } = "entity";
+
+    /// <summary>When true, hide write navigation (CPA / viewer session).</summary>
+    public static bool ReadOnlySession { get; set; }
+
+    /// <summary>Raised when shell entity/scope changes so pages can refresh.</summary>
+    public static event Action? ScopeChanged;
+
+    public static void NotifyScopeChanged() => ScopeChanged?.Invoke();
 
     public static string IfppQuery()
     {

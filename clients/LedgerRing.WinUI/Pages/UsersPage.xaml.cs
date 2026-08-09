@@ -29,14 +29,18 @@ public sealed partial class UsersPage : Page
             await api.EnsureBackendAsync();
 
             var me = await api.GetPermissionMeAsync();
+            var multi = me.TryGetProperty("multi_user_mode", out var mu) && mu.ValueKind == JsonValueKind.True;
             MeText.Text =
-                $"{JsonUi.Str(me, "display_name")} (@{JsonUi.Str(me, "username")}) · role {JsonUi.Str(me, "role")}";
+                $"{JsonUi.Str(me, "display_name")} (@{JsonUi.Str(me, "username")}) · role {JsonUi.Str(me, "role")}" +
+                (multi ? " · MULTI-USER (API key required)" : " · single-user local");
             var caps = new List<string>();
             if (me.TryGetProperty("capabilities", out var ca) && ca.ValueKind == JsonValueKind.Array)
             {
                 foreach (var c in ca.EnumerateArray())
                     caps.Add("• " + (c.GetString() ?? c.GetRawText()));
             }
+            if (me.TryGetProperty("hint", out var hint) && hint.ValueKind == JsonValueKind.String)
+                caps.Insert(0, hint.GetString() ?? "");
             CapList.ItemsSource = caps;
 
             var roles = await api.GetPermissionRolesAsync();
@@ -56,18 +60,27 @@ public sealed partial class UsersPage : Page
 
             var users = await api.GetPermissionUsersAsync();
             var rows = new List<UserRow>();
-            if (users.ValueKind == JsonValueKind.Array)
+            var arr = users.ValueKind == JsonValueKind.Array
+                ? users
+                : (users.TryGetProperty("users", out var ua) ? ua : default);
+            if (arr.ValueKind == JsonValueKind.Array)
             {
-                foreach (var u in users.EnumerateArray())
+                foreach (var u in arr.EnumerateArray())
                 {
                     rows.Add(new UserRow(
                         u.GetProperty("id").GetInt32(),
                         $"{JsonUi.Str(u, "display_name")} (@{JsonUi.Str(u, "username")})",
-                        $"role {JsonUi.Str(u, "role")} · active {JsonUi.Str(u, "active")}"));
+                        $"role {JsonUi.Str(u, "role")} · active {JsonUi.Str(u, "active")}" +
+                        (u.TryGetProperty("has_token", out var ht) && ht.ValueKind == JsonValueKind.True
+                            ? " · has token"
+                            : "")));
                 }
             }
             UserList.ItemsSource = rows;
-            MsgText.Text = $"{rows.Count} users";
+            var multi2 = users.TryGetProperty("multi_user_mode", out var m2) && m2.ValueKind == JsonValueKind.True;
+            MsgText.Text = multi2
+                ? $"{rows.Count} users · multi-user ON — set X-API-Key in Settings"
+                : $"{rows.Count} users";
         }
         catch (Exception ex)
         {

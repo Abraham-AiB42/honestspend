@@ -111,6 +111,26 @@
                 </StackPanel>
             </Border>
 
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Autopay desk" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Policies: none · min · statement · promo_sink. Creates/updates scheduled payments." />
+                    <ItemsControl x:Name="AutopayList" />
+                    <NumberBox x:Name="AutopayAcctBox" Header="Card account id" Minimum="1" />
+                    <ComboBox x:Name="AutopayPolicyBox" Header="Policy" SelectedIndex="0" MinWidth="240">
+                        <ComboBoxItem Content="none" Tag="none" />
+                        <ComboBoxItem Content="min" Tag="min" />
+                        <ComboBoxItem Content="statement (pay in full)" Tag="statement" />
+                        <ComboBoxItem Content="promo_sink" Tag="promo_sink" />
+                    </ComboBox>
+                    <Button Content="Apply autopay policy" Click="Autopay_Click" Style="{StaticResource AccentButtonStyle}" />
+                    <TextBlock x:Name="AutopayMsg" Opacity="0.85" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

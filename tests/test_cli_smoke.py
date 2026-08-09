@@ -5,4 +5,4 @@ def test_version_cli(capsys):
     assert main(["version"]) == 0
     out = capsys.readouterr().out
     assert "LedgerRing" in out
-    assert "0.5" in out
+    assert "0.6.0" in out

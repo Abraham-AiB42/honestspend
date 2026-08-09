@@ -46,6 +46,24 @@ public sealed partial class SetupPage : Page
                 $"Accounts: {JsonUi.Str(s, "account_count", "0")}",
                 $"Product: {JsonUi.Str(s, "product_name", "LedgerRing")}",
             };
+
+            var profiles = await api.GetProfilesAsync();
+            ProfileSlugBox.Items.Clear();
+            var idx = 0;
+            var i = 0;
+            foreach (var p in profiles.EnumerateArray())
+            {
+                var slug = JsonUi.Str(p, "slug");
+                ProfileSlugBox.Items.Add(new ComboBoxItem
+                {
+                    Content = $"{JsonUi.Str(p, "display_name")} ({JsonUi.Str(p, "entity_type")})",
+                    Tag = slug,
+                });
+                if (slug == "personal") idx = i;
+                i++;
+            }
+            if (ProfileSlugBox.Items.Count > 0)
+                ProfileSlugBox.SelectedIndex = idx;
         }
         catch (Exception ex)
         {

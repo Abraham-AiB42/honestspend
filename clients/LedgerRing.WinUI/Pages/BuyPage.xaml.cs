@@ -66,4 +66,35 @@ public sealed partial class BuyPage : Page
             ErrorBar.IsOpen = true;
         }
     }
+
+    private async void Simulate_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.SimulateIfppAsync(new
+            {
+                extra_outflows = new[]
+                {
+                    new
+                    {
+                        amount,
+                        name = "What-if purchase",
+                        on_date = DateTime.Today.ToString("yyyy-MM-dd"),
+                    },
+                },
+                profile_id = AppState.SelectedProfileId,
+                scope = AppState.IfppScope,
+            });
+            SimText.Text = JsonUi.Str(res, "message");
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
 }

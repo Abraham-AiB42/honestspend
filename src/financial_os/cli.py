@@ -19,7 +19,7 @@ def cmd_init_db(_args: argparse.Namespace) -> int:
     try:
         seed_all(session)
         print(f"Database ready at {settings.db_path}")
-        print("Profiles: Personal, AP Agency, AiB42")
+        print("Profiles: Personal (default). Add Business / Add Child via API or desktop app.")
         print("Tax COA seeded (1120-S / Sch C / Sch A maps).")
     finally:
         session.close()
@@ -244,6 +244,42 @@ def cmd_version(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_glance(args: argparse.Namespace) -> int:
+    """Print glance JSON or open the multi-platform glance UI in a browser."""
+    import json
+    import webbrowser
+
+    import httpx
+
+    host = args.host or settings.host
+    port = args.port or settings.port
+    base = f"http://{host}:{port}"
+    headers = {}
+    if args.api_key:
+        headers["X-API-Key"] = args.api_key
+
+    if args.open:
+        url = f"{base}/glance"
+        print(f"Opening {url}")
+        webbrowser.open(url)
+        return 0
+
+    params = {}
+    if args.scope:
+        params["scope"] = args.scope
+    if args.profile_id:
+        params["profile_id"] = args.profile_id
+    try:
+        r = httpx.get(f"{base}/api/glance", params=params, headers=headers, timeout=10.0)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"glance failed: {e}", file=sys.stderr)
+        print(f"Is the engine up? ledgerring serve → {base}", file=sys.stderr)
+        return 1
+    print(json.dumps(r.json(), indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ledgerring", description="LedgerRing liquidity cockpit")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -296,6 +332,15 @@ def main(argv: list[str] | None = None) -> int:
 
     p_ver = sub.add_parser("version", help="Print version")
     p_ver.set_defaults(func=cmd_version)
+
+    p_gl = sub.add_parser("glance", help="Mobile/Mac/Linux glance JSON or open UI")
+    p_gl.add_argument("--open", action="store_true", help="Open /glance in browser")
+    p_gl.add_argument("--host", default=None)
+    p_gl.add_argument("--port", type=int, default=None)
+    p_gl.add_argument("--api-key", default=None)
+    p_gl.add_argument("--scope", default="entity")
+    p_gl.add_argument("--profile-id", type=int, default=None)
+    p_gl.set_defaults(func=cmd_glance)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -976,7 +976,7 @@ async function runDebtPlan() {
   const iv = $("invest-vs-debt");
   if (iv) {
     if (!plan.invest_vs_debt?.length) {
-      iv.innerHTML = `<p class="fine">Set APY on X Money / savings (Accounts) or a manual hurdle to see invest-vs-prepay.</p>`;
+      iv.innerHTML = `<p class="fine">Set APY on savings/HYSA (Accounts) or a manual hurdle to see invest-vs-prepay.</p>`;
     } else {
       let html = `<table><thead><tr><th>Debt</th><th>Debt rate</th><th>Yield</th><th>Verdict</th><th>$1k edge keep cash</th></tr></thead><tbody>`;
       for (const r of plan.invest_vs_debt) {

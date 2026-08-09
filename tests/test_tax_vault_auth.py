@@ -25,7 +25,7 @@ def _session(tmp_path: Path):
 def test_tax_vault_reduces_spendable():
     as_of = date(2026, 8, 6)
     cash = [CashAccountView(1, "Checking", Decimal("5000"), True, "checking")]
-    spend, _, warnings = compute_cash_spendable(
+    spend, _, warnings, red_now = compute_cash_spendable(
         cash,
         [],
         as_of=as_of,
@@ -34,6 +34,7 @@ def test_tax_vault_reduces_spendable():
         tax_vault=Decimal("1500"),
         never_negative_scope="checking",
     )
+    assert red_now is False
     # 5000 - 1000 buffer - 1500 vault = 2500
     assert spend == Decimal("2500.00")
     assert any("Tax vault" in w for w in warnings)

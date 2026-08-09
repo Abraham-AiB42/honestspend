@@ -44,6 +44,7 @@ public sealed partial class CreditPage : Page
             }
 
             await LoadHistoryFormAsync(api);
+            await LoadAutopayAsync(api);
 
             var health = await api.GetCreditHealthAsync();
             ScoreText.Text = JsonUi.Str(health, "score");
@@ -246,7 +247,7 @@ public sealed partial class CreditPage : Page
                         $"{JsonUi.Str(r, "recommendation")} · $1k edge keep cash ${edge}");
                 }
             }
-            InvestVs.ItemsSource = iv.Count > 0 ? iv : new List<string> { "Set APY on savings/X Money for invest-vs-prepay." };
+            InvestVs.ItemsSource = iv.Count > 0 ? iv : new List<string> { "Set APY on savings/HYSA for invest-vs-prepay." };
         }
         catch (Exception ex)
         {
@@ -288,6 +289,57 @@ public sealed partial class CreditPage : Page
                 }
             }
             CompareList.ItemsSource = lines.Count > 0 ? lines : new List<string> { "No compare data." };
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async Task LoadAutopayAsync(LedgerApiClient api)
+    {
+        try
+        {
+            var ap = await api.GetAutopayAsync();
+            var lines = new List<string>();
+            if (ap.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var it in arr.EnumerateArray())
+                {
+                    var id = it.GetProperty("account_id").GetInt32();
+                    lines.Add(
+                        $"#{id} {JsonUi.Str(it, "name")} · policy {JsonUi.Str(it, "policy")} · " +
+                        $"suggest ${JsonUi.Str(it, "suggested_amount")} · bal ${JsonUi.Str(it, "balance")}");
+                    if (double.IsNaN(AutopayAcctBox.Value))
+                        AutopayAcctBox.Value = id;
+                }
+            }
+            AutopayList.ItemsSource = lines.Count > 0 ? lines : new List<string> { "No credit cards." };
+        }
+        catch
+        {
+            AutopayList.ItemsSource = new List<string> { "Autopay API unavailable." };
+        }
+    }
+
+    private async void Autopay_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (double.IsNaN(AutopayAcctBox.Value))
+                throw new InvalidOperationException("Enter a credit account id.");
+            var policy = "none";
+            if (AutopayPolicyBox.SelectedItem is ComboBoxItem ci && ci.Tag is string p)
+                policy = p;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.SetAutopayAsync((int)AutopayAcctBox.Value, policy);
+            AutopayMsg.Text =
+                $"#{JsonUi.Str(res, "account_id")} → {JsonUi.Str(res, "policy")} · " +
+                $"suggest ${JsonUi.Str(res, "suggested_amount")}";
+            await LoadAutopayAsync(api);
         }
         catch (Exception ex)
         {

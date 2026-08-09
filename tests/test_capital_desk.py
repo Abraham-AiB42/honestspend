@@ -26,7 +26,7 @@ def test_checking_scope_ignores_savings_for_spendable():
         CashAccountView(1, "Checking", Decimal("500"), True, "checking"),
         CashAccountView(2, "HYSA", Decimal("10000"), True, "savings"),
     ]
-    spend, _, _ = compute_cash_spendable(
+    spend, _, _, red_now = compute_cash_spendable(
         cash,
         [],
         as_of=as_of,
@@ -35,12 +35,13 @@ def test_checking_scope_ignores_savings_for_spendable():
         never_negative_scope="checking",
     )
     assert spend == Decimal("500.00")
+    assert red_now is False
 
 
 def test_negative_checking_warns():
     as_of = date(2026, 8, 6)
     cash = [CashAccountView(1, "Checking", Decimal("-50"), True, "checking")]
-    _, _, warnings = compute_cash_spendable(
+    _, red_day, warnings, red_now = compute_cash_spendable(
         cash,
         [],
         as_of=as_of,
@@ -49,6 +50,8 @@ def test_negative_checking_warns():
         never_negative_scope="checking",
     )
     assert any("CHECKING NEGATIVE" in w for w in warnings)
+    assert red_now is True
+    assert red_day == as_of
 
 
 def test_capital_desk_headline_protects_when_broke(tmp_path: Path):

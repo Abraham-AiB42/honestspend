@@ -115,7 +115,7 @@ def test_credit_sim_payment_history():
 
 
 def test_mortgage_below_cash_yield_is_minimum_only():
-    """2.625% mortgage vs 6% X Money → do not prepay mortgage."""
+    """2.625% mortgage vs 6% HYSA → do not prepay mortgage."""
     debts = [
         DebtView(
             id=1,
@@ -132,7 +132,7 @@ def test_mortgage_below_cash_yield_is_minimum_only():
         strategy="avalanche",
         extra_monthly=Decimal("1000"),
         opportunity_rate=Decimal("0.06"),
-        opportunity_rate_source="X Money 6%",
+        opportunity_rate_source="HYSA 6%",
         opportunity_cost_aware=True,
     )
     mortgage = next(o for o in plan.order if o.name == "Mortgage")
@@ -149,12 +149,12 @@ def test_mortgage_below_cash_yield_is_minimum_only():
 def test_resolve_opportunity_from_yield_accounts():
     rate, src = resolve_opportunity_rate(
         [
-            YieldAccountView(1, "Canvas", Decimal("1000"), Decimal("0.001")),
-            YieldAccountView(2, "X Money", Decimal("5000"), Decimal("0.06")),
+            YieldAccountView(1, "Primary checking", Decimal("1000"), Decimal("0.001")),
+            YieldAccountView(2, "High-yield savings", Decimal("5000"), Decimal("0.06")),
         ]
     )
     assert rate == Decimal("0.06")
-    assert "X Money" in src
+    assert "High-yield savings" in src
 
 
 def test_without_opportunity_avalanche_still_orders_apr():

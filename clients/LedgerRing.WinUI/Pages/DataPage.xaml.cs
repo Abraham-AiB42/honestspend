@@ -71,6 +71,82 @@ public sealed partial class DataPage : Page
             }
             BackupList.ItemsSource = rows;
             MsgText.Text = rows.Count == 0 ? "No backups yet — create one." : $"{rows.Count} recent backups.";
+
+            try
+            {
+                var remote = await api.GetRemoteBackupConfigAsync();
+                RemoteFolderBox.Text = JsonUi.Str(remote, "destination_folder", "");
+                AutoCopyEncBox.IsChecked =
+                    !remote.TryGetProperty("auto_copy_encrypted", out var ac) || ac.ValueKind != JsonValueKind.False;
+                RemoteHintText.Text = JsonUi.Str(remote, "hint");
+            }
+            catch
+            {
+                RemoteHintText.Text = "Encrypted remote config unavailable (update engine).";
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void SaveRemote_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.PutRemoteBackupConfigAsync(new
+            {
+                destination_folder = string.IsNullOrWhiteSpace(RemoteFolderBox.Text)
+                    ? null
+                    : RemoteFolderBox.Text.Trim(),
+                auto_copy_encrypted = AutoCopyEncBox.IsChecked == true,
+            });
+            RemoteHintText.Text = JsonUi.Str(res, "hint");
+            MsgText.Text = "Remote destination saved.";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void CreateEnc_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var pass = EncPassBox.Password ?? "";
+            if (pass.Length < 8)
+                throw new InvalidOperationException("Password must be at least 8 characters.");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            // save folder first if set
+            if (!string.IsNullOrWhiteSpace(RemoteFolderBox.Text))
+            {
+                await api.PutRemoteBackupConfigAsync(new
+                {
+                    destination_folder = RemoteFolderBox.Text.Trim(),
+                    auto_copy_encrypted = AutoCopyEncBox.IsChecked == true,
+                });
+            }
+            var note = string.IsNullOrWhiteSpace(NoteBox.Text) ? null : NoteBox.Text.Trim();
+            var res = await api.CreateEncryptedBackupAsync(
+                pass,
+                note,
+                AutoCopyEncBox.IsChecked == true);
+            MsgText.Text =
+                $"Encrypted {JsonUi.Str(res, "name")} · " +
+                (string.IsNullOrEmpty(JsonUi.Str(res, "remote_path"))
+                    ? "local only"
+                    : $"copied to {JsonUi.Str(res, "remote_path")}");
+            EncPassBox.Password = "";
+            await LoadAsync();
         }
         catch (Exception ex)
         {

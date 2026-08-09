@@ -1,4 +1,8 @@
-"""Optional demo accounts/schedule so IFPP is meaningful on first open."""
+"""Optional demo accounts/schedule so IFPP is meaningful on first open.
+
+Uses generic nicknames only — no private entity names. Optional demo business
+and child are created via the public profile API helpers.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from financial_os.db import Account, Profile, ScheduledItem
+from financial_os.services.profiles import create_profile
 
 
 def seed_demo_if_empty(session: Session) -> bool:
@@ -15,8 +20,18 @@ def seed_demo_if_empty(session: Session) -> bool:
         return False
 
     personal = session.query(Profile).filter(Profile.slug == "personal").one()
-    ap = session.query(Profile).filter(Profile.slug == "ap_agency").one()
-    aib = session.query(Profile).filter(Profile.slug == "aib42").one()
+    biz = create_profile(
+        session,
+        display_name="Demo Business",
+        entity_type="business",
+        tax_form_primary="1120S",
+    )
+    child = create_profile(
+        session,
+        display_name="Demo Child",
+        entity_type="child",
+        parent_profile_id=personal.id,
+    )
 
     today = date.today()
 
@@ -25,23 +40,24 @@ def seed_demo_if_empty(session: Session) -> bool:
             Account(
                 profile_id=personal.id,
                 kind="checking",
-                nickname="Canvas",
-                institution="Demo",
+                nickname="Primary checking",
+                institution="Demo Bank",
                 current_balance=Decimal("1913.25"),
                 is_cash_for_ifpp=True,
             ),
             Account(
                 profile_id=personal.id,
-                kind="checking",
-                nickname="X Money",
-                institution="Demo",
+                kind="savings",
+                nickname="High-yield savings",
+                institution="Demo Bank",
                 current_balance=Decimal("1506.21"),
+                apy=Decimal("0.045"),
                 is_cash_for_ifpp=True,
             ),
             Account(
                 profile_id=personal.id,
                 kind="credit",
-                nickname="Amex",
+                nickname="Rewards card",
                 institution="Demo",
                 current_balance=Decimal("2422.91"),
                 credit_limit=Decimal("8000"),
@@ -54,7 +70,7 @@ def seed_demo_if_empty(session: Session) -> bool:
             Account(
                 profile_id=personal.id,
                 kind="credit",
-                nickname="Discover 0% Promo",
+                nickname="0% promo card",
                 institution="Demo",
                 current_balance=Decimal("3000"),
                 credit_limit=Decimal("10000"),
@@ -69,17 +85,17 @@ def seed_demo_if_empty(session: Session) -> bool:
                 is_cash_for_ifpp=False,
             ),
             Account(
-                profile_id=ap.id,
+                profile_id=biz.id,
                 kind="checking",
-                nickname="AP Agency Operating",
-                institution="Demo",
+                nickname="Operating checking",
+                institution="Demo Bank",
                 current_balance=Decimal("12400"),
                 is_cash_for_ifpp=True,
             ),
             Account(
-                profile_id=aib.id,
+                profile_id=biz.id,
                 kind="credit",
-                nickname="AiB42 Azure Card",
+                nickname="Business card",
                 institution="Demo",
                 current_balance=Decimal("420.50"),
                 credit_limit=Decimal("5000"),
@@ -89,23 +105,34 @@ def seed_demo_if_empty(session: Session) -> bool:
                 apr=Decimal("0.1999"),
                 is_cash_for_ifpp=False,
             ),
+            Account(
+                profile_id=child.id,
+                kind="checking",
+                nickname="Allowance account",
+                institution="Demo",
+                current_balance=Decimal("85.00"),
+                is_cash_for_ifpp=True,
+            ),
         ]
     )
 
     session.flush()
-    canvas = (
+    checking = (
         session.query(Account)
-        .filter(Account.nickname == "Canvas", Account.profile_id == personal.id)
+        .filter(
+            Account.nickname == "Primary checking",
+            Account.profile_id == personal.id,
+        )
         .one()
     )
-    ap_ops = (
+    ops = (
         session.query(Account)
-        .filter(Account.nickname == "AP Agency Operating")
+        .filter(Account.nickname == "Operating checking", Account.profile_id == biz.id)
         .one()
     )
-    amex = (
+    rewards = (
         session.query(Account)
-        .filter(Account.nickname == "Amex", Account.profile_id == personal.id)
+        .filter(Account.nickname == "Rewards card", Account.profile_id == personal.id)
         .one()
     )
 
@@ -121,7 +148,7 @@ def seed_demo_if_empty(session: Session) -> bool:
         [
             ScheduledItem(
                 profile_id=personal.id,
-                account_id=canvas.id,
+                account_id=checking.id,
                 name="Housing",
                 amount=Decimal("-1100"),
                 next_date=housing_next,
@@ -131,7 +158,7 @@ def seed_demo_if_empty(session: Session) -> bool:
             ),
             ScheduledItem(
                 profile_id=personal.id,
-                account_id=canvas.id,
+                account_id=checking.id,
                 name="Paycheck (base)",
                 amount=Decimal("1955.25"),
                 next_date=today + timedelta(days=9),
@@ -141,19 +168,19 @@ def seed_demo_if_empty(session: Session) -> bool:
             ),
             ScheduledItem(
                 profile_id=personal.id,
-                account_id=amex.id,
+                account_id=rewards.id,
                 name="Utilities (on card)",
                 amount=Decimal("-250"),
                 next_date=today + timedelta(days=12),
                 cadence="monthly",
                 certainty="expected",
                 kind="expense",
-                notes="Charged to Amex — pay in full from Canvas",
+                notes="Charged to rewards card — pay in full from checking",
             ),
             ScheduledItem(
-                profile_id=ap.id,
-                account_id=ap_ops.id,
-                name="Agency operating expenses",
+                profile_id=biz.id,
+                account_id=ops.id,
+                name="Business operating expenses",
                 amount=Decimal("-800"),
                 next_date=today + timedelta(days=7),
                 cadence="monthly",

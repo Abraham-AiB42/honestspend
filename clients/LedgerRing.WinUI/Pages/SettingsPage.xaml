@@ -61,8 +61,13 @@
                 <ComboBoxItem Content="checking" Tag="checking" />
                 <ComboBoxItem Content="all_cash" Tag="all_cash" />
             </ComboBox>
+            <ComboBox x:Name="NeverNegEnforceBox" Header="Never-negative on write" SelectedIndex="1">
+                <ComboBoxItem Content="off (advisory only)" Tag="off" />
+                <ComboBoxItem Content="warn (confirm required)" Tag="warn" IsSelected="True" />
+                <ComboBoxItem Content="hard (always block)" Tag="hard" />
+            </ComboBox>
             <NumberBox x:Name="HorizonBox" Header="Horizon days" Minimum="7" Maximum="365" Value="45" />
-            <NumberBox x:Name="OppRateBox" Header="Opportunity rate (e.g. 0.06 for X Money)" Minimum="0" Maximum="1"
+            <NumberBox x:Name="OppRateBox" Header="Opportunity rate (e.g. 0.06 for HYSA)" Minimum="0" Maximum="1"
                        PlaceholderText="cash yield vs cheap debt" />
             <CheckBox x:Name="OppAwareBox" Content="Opportunity-cost aware debt plan" IsChecked="True" />
             <ComboBox x:Name="DebtBox" Header="Default debt strategy" SelectedIndex="0">

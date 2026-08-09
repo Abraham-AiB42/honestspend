@@ -21,11 +21,14 @@ def _session(tmp_path: Path):
 
 def test_meals_50_percent_in_packet(tmp_path: Path):
     s = _session(tmp_path)
-    personal = s.query(Profile).filter(Profile.slug == "ap_agency").one()
+    from financial_os.services.profiles import create_profile
+
+    personal = create_profile(s, display_name="Demo Business", entity_type="business")
+    s.flush()
     acct = Account(
         profile_id=personal.id,
         kind="checking",
-        nickname="AP",
+        nickname="Ops",
         current_balance=Decimal("1000"),
         is_cash_for_ifpp=True,
     )
@@ -65,7 +68,7 @@ def test_personal_nontax_still_in_transactions(tmp_path: Path):
     acct = Account(
         profile_id=personal.id,
         kind="checking",
-        nickname="Canvas",
+        nickname="Primary checking",
         current_balance=Decimal("500"),
         is_cash_for_ifpp=True,
     )

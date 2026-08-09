@@ -122,7 +122,7 @@ def test_end_scheduled_stops_ifpp(tmp_path: Path):
     acct = Account(
         profile_id=personal.id,
         kind="checking",
-        nickname="Canvas",
+        nickname="Primary checking",
         current_balance=Decimal("5000"),
         is_cash_for_ifpp=True,
     )

@@ -53,7 +53,7 @@
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Add user" />
             <TextBox x:Name="UserNameBox" Header="Username" PlaceholderText="bookkeeper1" />
-            <TextBox x:Name="DisplayBox" Header="Display name" PlaceholderText="Alex" />
+            <TextBox x:Name="DisplayBox" Header="Display name" PlaceholderText="Display name" />
             <ComboBox x:Name="RoleBox" Header="Role" SelectedIndex="3" HorizontalAlignment="Stretch">
                 <ComboBoxItem Content="owner" Tag="owner" />
                 <ComboBoxItem Content="bookkeeper" Tag="bookkeeper" />

@@ -40,7 +40,7 @@ def test_quick_setup_creates_cash_and_card(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     result = apply_quick_setup(
         s,
-        cash_name="Canvas",
+        cash_name="Primary checking",
         cash_balance=Decimal("2500"),
         card_name="Amex",
         card_balance=Decimal("400"),

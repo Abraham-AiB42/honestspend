@@ -71,6 +71,7 @@ class IfppResult:
     next_red_day: date | None
     warnings: list[str]
     details: dict
+    is_red_now: bool = False
 
 
 def _d(value: Decimal | int | float | str | None) -> Decimal:
@@ -139,8 +140,10 @@ def compute_cash_spendable(
     horizon_days: int = 45,
     never_negative_scope: str = "checking",
     tax_vault: Decimal = ZERO,
-) -> tuple[Decimal, date | None, list[str]]:
+) -> tuple[Decimal, date | None, list[str], bool]:
     """Cash you can spend without going negative under scheduled reality.
+
+    Returns (spendable, next_red_day, warnings, is_red_now).
 
     never_negative_scope:
       checking — only checking accounts (product default; never bounce checking)
@@ -167,9 +170,11 @@ def compute_cash_spendable(
         pool = [a for a in cash_accounts if a.is_cash_for_ifpp]
 
     cash = sum((_d(a.balance) for a in pool), ZERO)
+    is_red_now = False
     # Hard warning if raw checking already negative
     for a in cash_accounts:
         if a.kind == "checking" and _d(a.balance) < ZERO:
+            is_red_now = True
             warnings.append(
                 f"CHECKING NEGATIVE: {a.name} is ${_d(a.balance):.2f} — resolve before anything else."
             )
@@ -180,6 +185,12 @@ def compute_cash_spendable(
         warnings.append(
             f"Tax vault reserves ${vault:.2f} — not available to spend (April problem avoided)."
         )
+    # Start-of-horizon cash (after buffer/vault) already underwater
+    if cash < ZERO:
+        is_red_now = True
+        warnings.append(
+            f"Spendable runway starts negative ({cash}) after buffer/tax vault — red now."
+        )
 
     horizon_end = as_of + timedelta(days=horizon_days)
     events = [s for s in schedule if as_of <= s.on_date <= horizon_end]
@@ -187,7 +198,7 @@ def compute_cash_spendable(
 
     running = cash
     min_running = cash
-    red_day: date | None = None
+    red_day: date | None = as_of if is_red_now else None
 
     for ev in events:
         weight = _certainty_weight(ev.certainty, mode)
@@ -208,7 +219,7 @@ def compute_cash_spendable(
             )
 
     spendable = max(ZERO, min_running)
-    return spendable, red_day, warnings
+    return spendable, red_day, warnings, is_red_now
 
 
 def card_safe_to_charge(
@@ -340,7 +351,7 @@ def compute_ifpp(
     tax_vault: Decimal = ZERO,
 ) -> IfppResult:
     mode = mode if mode in ("conservative", "expected") else "conservative"
-    cash_spendable, red_day, warnings = compute_cash_spendable(
+    cash_spendable, red_day, warnings, is_red_now = compute_cash_spendable(
         cash_accounts,
         schedule,
         as_of=as_of,
@@ -384,6 +395,7 @@ def compute_ifpp(
         cards=card_plans,
         next_red_day=red_day,
         warnings=warnings,
+        is_red_now=is_red_now,
         details={
             "horizon_days": horizon_days,
             "safety_buffer": str(safety_buffer),
@@ -391,6 +403,7 @@ def compute_ifpp(
             "tax_vault": str(max(ZERO, _d(tax_vault))),
             "cash_accounts": len([a for a in cash_accounts if a.is_cash_for_ifpp]),
             "zero_pct_float_ok": True,
+            "is_red_now": is_red_now,
         },
     )
 

@@ -20,7 +20,10 @@
                 <ComboBoxItem Content="Cash first" Tag="cash" />
                 <ComboBoxItem Content="Card first" Tag="card" />
             </ComboBox>
-            <Button Content="Check purchase" Click="Check_Click" Style="{StaticResource AccentButtonStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Check purchase" Click="Check_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="What-if Spendable" Click="Simulate_Click" />
+            </StackPanel>
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -32,6 +35,7 @@
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Options" Margin="0,8,0,0" />
                     <ItemsControl x:Name="OptionsList" />
                     <TextBlock x:Name="ScopeText" Opacity="0.6" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock x:Name="SimText" Opacity="0.85" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

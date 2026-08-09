@@ -182,8 +182,28 @@ def run_ifpp(
     result.details["profile_id"] = resolved_pid
     result.details["scope_note"] = scope_note
     result.details["ifpp_cleared_only"] = bool(getattr(settings, "ifpp_cleared_only", True))
-    # Balances are the source for Spendable; pending txns are excluded from projection
-    # when cleared_only (flag is recorded for clients / future ledger-based modes).
+    # Pending exposure for UI (balances remain authoritative source for Spendable)
+    from financial_os.db import Transaction
+    from decimal import Decimal as D
+
+    pq = session.query(Transaction).filter(
+        Transaction.status == "pending",
+        Transaction.is_transfer.is_(False),
+    )
+    if sc == "entity" and resolved_pid is not None:
+        pq = pq.filter(Transaction.profile_id == resolved_pid)
+    pending_rows = pq.all()
+    pend_out = sum(
+        (abs(D(str(t.amount))) for t in pending_rows if D(str(t.amount)) < 0),
+        D("0"),
+    )
+    result.details["pending_count"] = len(pending_rows)
+    result.details["pending_outflows_abs"] = str(pend_out.quantize(D("0.01")))
+    result.details["pending_warning"] = (
+        f"{len(pending_rows)} pending · ${pend_out} outflow may hit books soon"
+        if pending_rows
+        else None
+    )
     return result
 
 
@@ -231,6 +251,7 @@ def ifpp_to_dict(result: IfppResult, session: Session | None = None) -> dict:
             )
         cards_out.append(entry)
 
+    details = result.details or {}
     return {
         "as_of": result.as_of.isoformat(),
         "mode": result.mode,
@@ -238,9 +259,14 @@ def ifpp_to_dict(result: IfppResult, session: Session | None = None) -> dict:
         "card_float_interest_free": str(result.card_float_interest_free),
         "combined_purchasing_power": str(result.combined_purchasing_power),
         "next_red_day": result.next_red_day.isoformat() if result.next_red_day else None,
+        "is_red_now": bool(getattr(result, "is_red_now", False)),
+        "pending_count": details.get("pending_count", 0),
+        "pending_outflows_abs": details.get("pending_outflows_abs", "0"),
+        "pending_warning": details.get("pending_warning"),
+        "ifpp_cleared_only": details.get("ifpp_cleared_only"),
         "warnings": result.warnings,
         "details": result.details,
         "cards": cards_out,
-        "ifpp_scope": (result.details or {}).get("ifpp_scope"),
-        "profile_id": (result.details or {}).get("profile_id"),
+        "ifpp_scope": details.get("ifpp_scope"),
+        "profile_id": details.get("profile_id"),
     }

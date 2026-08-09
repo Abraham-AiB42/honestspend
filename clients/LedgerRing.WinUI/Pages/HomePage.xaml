@@ -79,10 +79,18 @@
                     <TextBlock x:Name="DailyReason" Opacity="0.8" TextWrapping="Wrap" />
                     <ItemsControl x:Name="DailyAlerts" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Mark done for now" Click="Done_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Rescue options" Click="Rescue_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Mark done for now" Click="Done_Click" />
                         <Button Content="Show full cockpit" Click="Expand_Click" />
                     </StackPanel>
                     <TextBlock x:Name="DoneText" Opacity="0.75" />
+                    <TextBlock x:Name="RescueText" TextWrapping="Wrap" Opacity="0.9" />
+                    <ItemsControl x:Name="RescueList" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Fiscal brief" Click="Brief_Click" />
+                        <Button Content="Fee year summary" Click="FeeSummary_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="BriefText" TextWrapping="Wrap" Opacity="0.9" IsTextSelectionEnabled="True" />
                 </StackPanel>
             </Border>
 

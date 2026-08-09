@@ -13,7 +13,7 @@ from financial_os.engine.ifpp import (
 
 def test_conservative_ignores_expected_income():
     as_of = date(2026, 8, 5)
-    cash = [CashAccountView(1, "Canvas", Decimal("1000"), True)]
+    cash = [CashAccountView(1, "Checking", Decimal("1000"), True)]
     schedule = [
         ScheduledView(1, "Rent", Decimal("-800"), as_of + timedelta(days=3), "fixed"),
         ScheduledView(2, "Maybe pay", Decimal("2000"), as_of + timedelta(days=2), "expected"),
@@ -34,7 +34,7 @@ def test_conservative_ignores_expected_income():
 
 def test_expected_mode_counts_income():
     as_of = date(2026, 8, 5)
-    cash = [CashAccountView(1, "Canvas", Decimal("100"), True)]
+    cash = [CashAccountView(1, "Checking", Decimal("100"), True)]
     schedule = [
         ScheduledView(1, "Bill", Decimal("-500"), as_of + timedelta(days=5), "fixed"),
         ScheduledView(2, "Paycheck", Decimal("2000"), as_of + timedelta(days=2), "fixed"),
@@ -54,7 +54,7 @@ def test_expected_mode_counts_income():
 
 def test_red_day_when_bill_exceeds_cash():
     as_of = date(2026, 8, 5)
-    cash = [CashAccountView(1, "Canvas", Decimal("200"), True)]
+    cash = [CashAccountView(1, "Checking", Decimal("200"), True)]
     schedule = [
         ScheduledView(1, "Insurance", Decimal("-500"), as_of + timedelta(days=4), "fixed"),
     ]
@@ -72,7 +72,7 @@ def test_red_day_when_bill_exceeds_cash():
 
 def test_safety_buffer():
     as_of = date(2026, 8, 5)
-    cash = [CashAccountView(1, "Canvas", Decimal("1000"), True)]
+    cash = [CashAccountView(1, "Checking", Decimal("1000"), True)]
     result = compute_ifpp(
         as_of=as_of,
         mode="conservative",
@@ -103,7 +103,7 @@ def test_promo_zero_percent_active():
 
 def test_card_blocked_without_due_day():
     as_of = date(2026, 8, 5)
-    cash = [CashAccountView(1, "Canvas", Decimal("5000"), True)]
+    cash = [CashAccountView(1, "Checking", Decimal("5000"), True)]
     card = CardView(
         id=2,
         name="Mystery",
@@ -127,7 +127,7 @@ def test_card_blocked_without_due_day():
 
 def test_statement_payoff_limits_charge():
     as_of = date(2026, 8, 5)
-    cash = [CashAccountView(1, "Canvas", Decimal("1000"), True)]
+    cash = [CashAccountView(1, "Checking", Decimal("1000"), True)]
     card = CardView(
         id=3,
         name="Discover",

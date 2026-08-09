@@ -65,21 +65,24 @@ def scan_fees(
     days: int = 90,
     limit: int = 50,
     as_of: date | None = None,
+    profile_id: int | None = None,
 ) -> dict[str, Any]:
     as_of = as_of or date.today()
     start = as_of - timedelta(days=max(1, days))
     cats = {c.id: c for c in session.query(Category).all()}
-    rows = (
-        session.query(Transaction)
-        .filter(
-            Transaction.txn_date >= start,
-            Transaction.txn_date <= as_of,
-            Transaction.is_transfer.is_(False),
-        )
-        .order_by(Transaction.txn_date.desc())
-        .limit(500)
-        .all()
+    q = session.query(Transaction).filter(
+        Transaction.txn_date >= start,
+        Transaction.txn_date <= as_of,
+        Transaction.is_transfer.is_(False),
     )
+    if profile_id is not None:
+        q = q.filter(Transaction.profile_id == profile_id)
+    # Hide dismissed fee candidates (fee_status column when present)
+    if hasattr(Transaction, "fee_status"):
+        q = q.filter(
+            (Transaction.fee_status.is_(None)) | (Transaction.fee_status != "dismissed")
+        )
+    rows = q.order_by(Transaction.txn_date.desc()).limit(500).all()
     hits: list[dict[str, Any]] = []
     total = Decimal("0")
     for t in rows:
@@ -116,4 +119,90 @@ def scan_fees(
         "total_abs": str(total.quantize(Decimal("0.01"))),
         "candidates": hits,
         "principle": "Fees are stupid — confirm, categorize, and stop the recurring ones.",
+        "profile_id": profile_id,
+    }
+
+
+def confirm_fee(
+    session: Session,
+    *,
+    transaction_id: int,
+    action: str,
+    category_id: int | None = None,
+) -> dict[str, Any]:
+    """mark_fee | dismiss | recategorize."""
+    txn = session.get(Transaction, transaction_id)
+    if not txn:
+        raise ValueError("Transaction not found")
+    action = (action or "").lower().strip()
+    if action not in ("mark_fee", "dismiss", "recategorize"):
+        raise ValueError("action must be mark_fee, dismiss, or recategorize")
+
+    if action == "dismiss":
+        if hasattr(txn, "fee_status"):
+            txn.fee_status = "dismissed"
+        session.flush()
+        return {"ok": True, "transaction_id": txn.id, "action": "dismiss", "fee_status": "dismissed"}
+
+    if action == "recategorize":
+        if not category_id:
+            raise ValueError("category_id required for recategorize")
+        cat = session.get(Category, category_id)
+        if not cat:
+            raise ValueError("Category not found")
+        txn.category_id = category_id
+        if hasattr(txn, "fee_status"):
+            txn.fee_status = "recategorized"
+        session.flush()
+        return {
+            "ok": True,
+            "transaction_id": txn.id,
+            "action": "recategorize",
+            "category_id": category_id,
+        }
+
+    # mark_fee — prefer FEE_OTHER / SYS_FEE category
+    fee_cat = (
+        session.query(Category)
+        .filter(Category.code.in_(("FEE_OTHER", "SYS_FEE", "FEE_LATE")))
+        .order_by(Category.id)
+        .first()
+    )
+    if category_id:
+        fee_cat = session.get(Category, category_id) or fee_cat
+    if fee_cat:
+        txn.category_id = fee_cat.id
+    if hasattr(txn, "fee_status"):
+        txn.fee_status = "confirmed_fee"
+    session.flush()
+    return {
+        "ok": True,
+        "transaction_id": txn.id,
+        "action": "mark_fee",
+        "category_id": txn.category_id,
+        "fee_status": getattr(txn, "fee_status", None),
+    }
+
+
+def fee_summary(
+    session: Session,
+    *,
+    days: int = 365,
+    profile_id: int | None = None,
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    scan = scan_fees(session, days=days, limit=200, as_of=as_of, profile_id=profile_id)
+    total = _d(scan["total_abs"])
+    # Suggest buffer at least 2x monthly fee rate or $500
+    monthly = (total / Decimal(max(1, days)) * Decimal("30")).quantize(Decimal("0.01"))
+    suggested_buffer = max(Decimal("500"), monthly * Decimal("2"))
+    return {
+        **scan,
+        "period_days": days,
+        "est_monthly_fee_drag": str(monthly),
+        "suggested_safety_buffer": str(suggested_buffer),
+        "message": (
+            f"~${total} fee-like outflows in {days}d (~${monthly}/mo). "
+            f"Consider safety buffer ≥ ${suggested_buffer}."
+        ),
     }

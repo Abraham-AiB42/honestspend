@@ -49,6 +49,53 @@ public sealed partial class ReconcilePage : Page
             }
             AcctList.ItemsSource = rows;
             MsgText.Text = rows.Count == 0 ? "No accounts." : $"{rows.Count} listed.";
+
+            try
+            {
+                var pays = await api.GetPaymentCandidatesAsync(14);
+                var plines = new List<string>();
+                if (pays.TryGetProperty("candidates", out var pc) && pc.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var c in pc.EnumerateArray())
+                    {
+                        plines.Add(
+                            $"{JsonUi.Str(c, "kind")} · ${JsonUi.Str(c, "amount")} · " +
+                            $"cash #{JsonUi.Str(c, "cash_txn_id")} ({JsonUi.Str(c, "cash_account")}) → " +
+                            $"card #{JsonUi.Str(c, "card_txn_id", "—")} · {JsonUi.Str(c, "suggestion")}");
+                        if (double.IsNaN(CashTxnBox.Value) && c.TryGetProperty("cash_txn_id", out var ct))
+                            CashTxnBox.Value = ct.GetInt32();
+                        if (double.IsNaN(CardTxnBox.Value) && c.TryGetProperty("card_txn_id", out var kt)
+                            && kt.ValueKind == JsonValueKind.Number)
+                            CardTxnBox.Value = kt.GetInt32();
+                    }
+                }
+                PayList.ItemsSource = plines.Count > 0 ? plines : new List<string> { "No payment matches." };
+                PayMsg.Text = JsonUi.Str(pays, "principle");
+            }
+            catch
+            {
+                PayList.ItemsSource = new List<string> { "Payment matcher unavailable." };
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void ConfirmPay_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (double.IsNaN(CashTxnBox.Value) || double.IsNaN(CardTxnBox.Value))
+                throw new InvalidOperationException("Enter cash and card transaction ids.");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.ConfirmPaymentAsync((int)CashTxnBox.Value, (int)CardTxnBox.Value);
+            PayMsg.Text = $"Confirmed transfer · ${JsonUi.Str(res, "amount")}";
+            await LoadAsync();
         }
         catch (Exception ex)
         {

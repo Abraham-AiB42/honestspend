@@ -9,8 +9,8 @@
 <body>
   <div class="banner" style="background:#2a3a4a;color:#e8f0f5;padding:0.6rem 1rem;font-size:0.9rem;">
     <strong>Primary client is LedgerRing WinUI</strong> (native Windows).
-    This web UI is a limited fallback; Plaid Link lives at
-    <a href="/static/plaid-link.html" style="color:#7fd4c4">/static/plaid-link.html</a>.
+    Mac/Linux/phone: <a href="/glance" style="color:#7fd4c4">Glance</a> ·
+    Plaid Link: <a href="/static/plaid-link.html" style="color:#7fd4c4">/static/plaid-link.html</a>.
   </div>
   <!-- Standalone product onboarding (no spreadsheet) -->
   <div id="onboard" class="onboard hidden" aria-modal="true">
@@ -23,7 +23,7 @@
         </div>
       </div>
       <p class="onboard-lead">
-        One app for Personal, AP Agency, and AiB42. Answer:
+        One app for Personal, Businesses, and Children. Answer:
         <strong>what can I spend or charge right now without going negative or paying interest?</strong>
       </p>
       <ol class="onboard-steps">
@@ -165,7 +165,7 @@
         <div class="card">
           <h2>Entities</h2>
           <ul id="profiles" class="list"></ul>
-          <p class="fine">Personal · AP Agency · AiB42 — linked books in one product.</p>
+          <p class="fine">Personal · Add Business(es) · Add Child(ren) — siloed Spendable by default.</p>
         </div>
         <div class="card">
           <h2>Cards — safe to charge &amp; payoff plan</h2>
@@ -259,7 +259,7 @@
             <input id="acct-priority" type="number" value="100" min="1" />
           </label>
           <label>APY / yield (cash) e.g. 0.06 = 6%
-            <input id="acct-apy" type="number" step="0.0001" placeholder="0.06 for X Money" />
+            <input id="acct-apy" type="number" step="0.0001" placeholder="0.06 for HYSA" />
           </label>
           <div class="form-actions wide">
             <button type="submit" id="acct-submit">Save account</button>
@@ -476,7 +476,7 @@
       <div class="card">
         <h2>Payoff strategy + opportunity cost</h2>
         <p class="fine">
-          If <strong>X Money pays 6%</strong> and your <strong>mortgage is 2.625%</strong>, extra mortgage payments
+          If <strong>high-yield savings pays 6%</strong> and your <strong>mortgage is 2.625%</strong>, extra mortgage payments
           usually lose money — keep cash earning. LedgerRing uses your highest cash APY (or a manual hurdle)
           so cheap debt stays on <em>minimum only</em>; extra goes to high-APR debt or stays in yield.
         </p>

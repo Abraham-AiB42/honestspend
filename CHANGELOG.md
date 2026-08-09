@@ -1,5 +1,66 @@
 # Changelog
 
+## 0.6.0 — Public multi-entity release
+
+**Ship bar for freeware release:** Personal + Add Business(es) + Add Child(ren); never-neg write gate + rescue coach; multi-user keys; encrypted cloud snapshots; Glance for Mac/Linux/phone; schema **v9**.
+
+### Wave 0 — Generic entities
+- **Personal only** on fresh install — no private business names in seed
+- **Add Business / Add Child** via `POST /api/profiles` + WinUI **Entities** page
+- Child COA (`child_budget`); business COA applied when created
+- Schema **v5**: `parent_profile_id`, profile archive, `never_negative_enforcement`
+- Stripped private entity names from seed, demo, docs, web, WinUI
+
+### Wave 1 — Never-neg + rescue + scope
+- **Write gate**: `never_negative_enforcement` = off|**warn**|hard; `POST /api/transactions` returns **409** `would_go_negative` unless `confirm_unsafe` (warn) 
+- **`is_red_now`** on IFPP when checking already negative; digest `red_now` alert
+- **Rescue coach**: `POST /api/liquidity/rescue` — transfer-in, defer bills, 0% float, APR cost, sell-investment advisory, intermix
+- Scope threaded: digest, fees, promo, debts, capital desk, pre-purchase cards
+- **Fee confirm**: `POST /api/fees/confirm` + `GET /api/fees/summary`; schema **v6** `fee_status`
+- Quick-setup card defaults due day 15 / close day 1
+- WinUI Home **Rescue options** button
+
+### Wave 2 — Books quality
+- **Void transaction**: `POST /api/transactions/{id}/void` reverses balances, status=`void`
+- **Transfer matcher**: `GET /api/transfers/candidates`, `POST /api/transfers/confirm`
+- **Import presets**: `GET/PUT /api/import/presets` (institution sign/map memory)
+- **What-if IFPP**: `POST /api/ifpp/simulate` with extra outflows
+- **Child allowance** intermix kind + WinUI playbook
+- Schema **v7** `import_presets` table
+- `scripts/smoke-e2e.ps1` · Ledger void · Buy What-if
+
+### Wave U/S — Multi-user + encrypted cloud backup
+- **Multi-user mode**: 2+ active users → **X-API-Key required** even on loopback
+- Creating a second user mints **owner_api_token** if owner had none
+- Role caps expanded; audit log `GET /api/permissions/audit` (schema **v8**)
+- **Encrypted backups**: AES-256-GCM `.lrenc` via `POST /api/backup/create-encrypted`
+- Remote destination folder: `GET/PUT /api/backup/remote-config` (OneDrive/Dropbox path)
+- Decrypt: `POST /api/backup/decrypt` → staged restore path
+- Dependency: `cryptography`
+- WinUI Users multi-user banner · Data page encrypted backup UI
+
+### Wave product polish
+- **Shell entity bar** on MainWindow (entity + silo/combined) + `AppState.ScopeChanged`
+- **CPA mode** toggles read-only nav (hide write pages; tax export stays)
+- **Autopay desk**: `GET/PUT /api/autopay` — min \| statement \| promo_sink (schema **v9**)
+- **Money map**: `GET /api/intermix/graph` + Intermix page list
+- **Fiscal brief**: `GET /api/digest/brief` (offline default; optional Grok)
+- Home: Fiscal brief + Fee year summary buttons
+- `docs/CLIENTS.md` multi-platform + encrypted sync contract
+
+### Wave detector + glance
+- **Card payment matcher**: `GET /api/payments/candidates`, `POST /api/payments/confirm`
+- **Pending-aware IFPP**: `pending_count`, `pending_outflows_abs`, `pending_warning` on `/api/ifpp`
+- Digest pending alerts include $ outflow (warn if ≥ $100)
+- **`GET /api/glance`** — mobile/multi-client one-shot Spendable + alerts
+- WinUI: pending banner on Home; payment matches on Reconcile
+
+### Wave P — Glance multi-platform shell
+- **`/glance`** + `web/glance.html` — mobile-first Spendable / rescue / brief UI
+- CLI: `ledgerring glance` (JSON) · `ledgerring glance --open`
+- `scripts/start-glance.sh` (Mac/Linux) · `scripts/start-glance.ps1` (Windows)
+- INSTALL + CLIENTS: Mac/Linux install path via Glance
+
 ## 0.5.0 — Packaging (Wave G)
 
 - **Post-setup backup** on quick setup / complete onboarding

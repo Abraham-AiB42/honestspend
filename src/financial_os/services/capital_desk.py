@@ -46,42 +46,22 @@ def _d(v: Any) -> Decimal:
     return Decimal(str(v))
 
 
-def _fee_warnings(session: Session, as_of: date) -> list[str]:
-    """Detect fee-like activity in recent ledger."""
-    from datetime import timedelta
+def _fee_warnings(
+    session: Session,
+    as_of: date,
+    *,
+    profile_id: int | None = None,
+) -> list[str]:
+    """Detect fee-like activity via shared fee_scan heuristics."""
+    from financial_os.services.fee_scan import scan_fees
 
-    start = as_of - timedelta(days=45)
-    txns = (
-        session.query(Transaction)
-        .filter(Transaction.txn_date >= start, Transaction.amount < 0)
-        .limit(500)
-        .all()
-    )
-    warnings = []
-    fee_words = (
-        "fee",
-        "overdraft",
-        "nsf",
-        "late fee",
-        "interest charge",
-        "finance charge",
-        "annual fee",
-        "foreign transaction",
-        "cash advance",
-    )
-    total_fees = ZERO
-    hits = 0
-    for t in txns:
-        blob = f"{t.payee or ''} {t.memo or ''}".lower()
-        if any(w in blob for w in fee_words):
-            hits += 1
-            total_fees += abs(_d(t.amount))
-    if hits:
-        warnings.append(
-            f"Detected ~{hits} fee-like transactions (~${total_fees:.2f}) in last 45 days — "
-            f"fees are avoidable drag on IFPP."
-        )
-    return warnings
+    fees = scan_fees(session, days=45, limit=50, as_of=as_of, profile_id=profile_id)
+    if fees["count"] <= 0:
+        return []
+    return [
+        f"Detected ~{fees['count']} fee-like transactions (~${fees['total_abs']}) in last 45 days — "
+        f"fees are avoidable drag on IFPP."
+    ]
 
 
 def build_capital_desk(
@@ -95,7 +75,13 @@ def build_capital_desk(
     settings = session.get(AppSettings, 1) or AppSettings(id=1)
     ifpp = run_ifpp(session, as_of=as_of, profile_id=profile_id, scope=scope)
     opp_rate, opp_src, opp_aware = opportunity_context(session)
-    debts = accounts_to_debts(session)
+    resolved_pid = (ifpp.details or {}).get("profile_id")
+    sc = (ifpp.details or {}).get("ifpp_scope") or scope or "entity"
+    debts = accounts_to_debts(
+        session,
+        profile_id=resolved_pid if sc == "entity" else None,
+        scope=sc,
+    )
     extra = _d(getattr(settings, "debt_extra_monthly", None) or 0)
     plan = simulate_payoff(
         debts,
@@ -111,9 +97,10 @@ def build_capital_desk(
     rank = 1
 
     # 1. Red day / checking safety
-    if ifpp.next_red_day is not None or ifpp.cash_spendable <= ZERO:
-        gap = "cash runway"
-        if ifpp.cash_spendable <= ZERO:
+    if ifpp.is_red_now or ifpp.next_red_day is not None or ifpp.cash_spendable <= ZERO:
+        if ifpp.is_red_now:
+            gap = "RED NOW — checking already negative or runway underwater"
+        elif ifpp.cash_spendable <= ZERO:
             gap = "Spendable is $0 or less after buffer and bills"
         else:
             gap = f"Projected red day {ifpp.next_red_day.isoformat()}"
@@ -122,9 +109,10 @@ def build_capital_desk(
                 rank=rank,
                 action="protect_checking",
                 title="Protect checking — never go negative",
-                amount_hint="Cover upcoming outflows before any discretionary spend",
+                amount_hint="Cover gap before any discretionary spend; open rescue options",
                 reason=gap,
                 alternatives=[
+                    "POST /api/liquidity/rescue — ranked transfer / defer / float options",
                     "Delay non-essential purchases",
                     "Move money from yield/savings into checking before bill hits",
                     "Use interest-free card float only if full-pay path exists",
@@ -135,7 +123,11 @@ def build_capital_desk(
         rank += 1
 
     # 2. Fee warnings
-    for fw in _fee_warnings(session, as_of):
+    for fw in _fee_warnings(
+        session,
+        as_of,
+        profile_id=resolved_pid if sc == "entity" else None,
+    ):
         steps.append(
             AllocationStep(
                 rank=rank,
@@ -231,13 +223,10 @@ def build_capital_desk(
 
     # 5. Safety buffer
     buffer = _d(settings.safety_buffer or 0)
-    checking_bal = sum(
-        (
-            _d(a.current_balance)
-            for a in session.query(Account).filter(Account.kind == "checking").all()
-        ),
-        ZERO,
-    )
+    cq = session.query(Account).filter(Account.kind == "checking", Account.archived_at.is_(None))
+    if sc == "entity" and resolved_pid is not None:
+        cq = cq.filter(Account.profile_id == resolved_pid)
+    checking_bal = sum((_d(a.current_balance) for a in cq.all()), ZERO)
     if buffer > ZERO and checking_bal < buffer:
         steps.append(
             AllocationStep(
@@ -352,8 +341,11 @@ def build_capital_desk(
             "card_float_interest_free": str(ifpp.card_float_interest_free),
             "combined_purchasing_power": str(ifpp.combined_purchasing_power),
             "next_red_day": ifpp.next_red_day.isoformat() if ifpp.next_red_day else None,
+            "is_red_now": bool(ifpp.is_red_now),
             "mode": ifpp.mode,
             "warnings": ifpp.warnings[:12],
+            "ifpp_scope": sc,
+            "profile_id": resolved_pid,
         },
         "opportunity": {
             "rate": str(opp_rate) if opp_rate is not None else None,

@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="LedgerRing_WinUI.Pages.EntitiesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="720">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Entities" />
+            <TextBlock Opacity="0.8" TextWrapping="Wrap"
+                Text="Personal is always available. Add Business(es) for company books and Child(ren) for siloed allowance tracking. Each entity has its own Spendable by default." />
+
+            <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" IsClosable="True" />
+            <TextBlock x:Name="StatusText" Opacity="0.75" />
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Your entities" />
+                    <ListView x:Name="EntityList" SelectionMode="None" />
+                    <Button Content="Refresh" Click="Refresh_Click" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Add Business" />
+                    <TextBox x:Name="BizNameBox" Header="Display name" PlaceholderText="e.g. Northwind LLC" />
+                    <ComboBox x:Name="BizTaxBox" Header="Primary tax form" SelectedIndex="0" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="1120-S (S-corp)" Tag="1120S" />
+                        <ComboBoxItem Content="1065 (Partnership)" Tag="1065" />
+                        <ComboBoxItem Content="Schedule C (sole prop)" Tag="SchC" />
+                        <ComboBoxItem Content="Other / none" Tag="other" />
+                    </ComboBox>
+                    <Button Content="Add Business" Style="{StaticResource AccentButtonStyle}" Click="AddBiz_Click" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Add Child" />
+                    <TextBox x:Name="ChildNameBox" Header="Display name" PlaceholderText="e.g. first name" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Child entities use a simple allowance COA (not tax filing). Linked to Personal by default for household context." />
+                    <Button Content="Add Child" Style="{StaticResource AccentButtonStyle}" Click="AddChild_Click" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="MsgText" TextWrapping="Wrap" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -65,6 +65,25 @@
             </StackPanel>
             <TextBox x:Name="NoteBox" Header="Backup note (optional)" PlaceholderText="before tax season" />
 
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Encrypted cloud snapshot" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="AES-256-GCM (.lrenc). Copy to any folder you choose (OneDrive, Dropbox, etc.). Not a live multi-writer DB." />
+                    <TextBox x:Name="RemoteFolderBox" Header="Destination folder"
+                             PlaceholderText="C:\Users\…\OneDrive\LedgerRing\backups" />
+                    <CheckBox x:Name="AutoCopyEncBox" Content="Copy encrypted backups to destination" IsChecked="True" />
+                    <PasswordBox x:Name="EncPassBox" Header="Encryption password (min 8 chars)" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Save destination" Click="SaveRemote_Click" />
+                        <Button Content="Create encrypted backup" Click="CreateEnc_Click" Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                    <TextBlock x:Name="RemoteHintText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Saved backups" />
             <ListView x:Name="BackupList" SelectionMode="None">
                 <ListView.ItemTemplate>

@@ -128,6 +128,17 @@ public sealed partial class IntermixPage : Page
         AmtBox.Value = 500;
     }
 
+    private void Play_Allowance(object sender, RoutedEventArgs e)
+    {
+        SelectKind("child_allowance");
+        SelectAccount(FromBox, a => a.Slug == "personal" && a.Kind is "checking" or "savings");
+        SelectAccount(ToBox, a => a.Kind is "checking" or "savings" && a.Slug != "personal");
+        MemoBox.Text = "Weekly / monthly allowance";
+        PlaybookHint.Text =
+            "Child allowance: personal → child entity transfer. Siloed Spendable for the child; not a business expense.";
+        AmtBox.Value = 20;
+    }
+
     private async void Save_Click(object sender, RoutedEventArgs e)
     {
         ErrorBar.IsOpen = false;
@@ -155,12 +166,47 @@ public sealed partial class IntermixPage : Page
             ResultText.Text =
                 $"{JsonUi.Str(res, "label")}: {JsonUi.Money(res, "amount")}\n" +
                 $"{JsonUi.Str(res, "guidance")}";
+            await LoadGraphAsync(api);
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private async void Graph_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await LoadGraphAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async Task LoadGraphAsync(LedgerApiClient api)
+    {
+        var g = await api.GetIntermixGraphAsync(365);
+        GraphMsg.Text = JsonUi.Str(g, "message");
+        var lines = new List<string>();
+        if (g.TryGetProperty("edges", out var edges) && edges.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in edges.EnumerateArray())
+            {
+                lines.Add(
+                    $"{JsonUi.Str(e, "from_name")} → {JsonUi.Str(e, "to_name")}: " +
+                    $"${JsonUi.Str(e, "total")} ({JsonUi.Str(e, "count")} moves)");
+            }
+        }
+        if (lines.Count == 0) lines.Add("No edges yet.");
+        GraphList.ItemsSource = lines;
     }
 
     private sealed record Acct(int Id, int ProfileId, string Kind, string Nick, string Slug, string Label);
