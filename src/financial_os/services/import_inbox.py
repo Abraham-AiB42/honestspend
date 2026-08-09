@@ -37,14 +37,15 @@ def ensure_inbox_layout() -> dict[str, str]:
         readme.write_text(
             "Floatpile inbox\n"
             "================\n"
-            "Drop bank CSV exports here (e.g. chase.csv, amex-export.csv).\n"
-            "Name the file with a hint of the account nickname when you can\n"
-            "(e.g. Primary-checking-2026-08.csv or Everyday-card.csv).\n"
+            "Drop bank CSV or text PDF statement exports here.\n"
+            "  e.g. chase.csv, Everyday-card.pdf, Primary-checking-2026-08.csv\n"
+            "Name files with account nicknames when you can.\n"
             "\n"
             "Run:  floatpile import-inbox\n"
-            "Or:   Settings / Import → Import inbox\n"
+            "Or:   Import → Import inbox now · tray → Import inbox now\n"
             "Or:   scheduled task Floatpile-ImportInbox\n"
             "\n"
+            "CSV is preferred. PDF is best-effort (text statements only).\n"
             "Processed files move to inbox/archive/.\n"
             "Floatpile never stores bank passwords.\n",
             encoding="utf-8",
@@ -141,13 +142,14 @@ def list_inbox_files() -> list[dict[str, Any]]:
             continue
         if p.name.upper() == "README.TXT":
             continue
-        if p.suffix.lower() not in (".csv", ".txt"):
+        if p.suffix.lower() not in (".csv", ".txt", ".pdf"):
             continue
         out.append(
             {
                 "name": p.name,
                 "path": str(p),
                 "size": p.stat().st_size,
+                "kind": p.suffix.lower().lstrip("."),
                 "modified": datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds"),
             }
         )
@@ -193,26 +195,44 @@ def process_inbox(
             results.append(entry)
             continue
         try:
-            with path.open("rb") as fh:
-                res = import_bank_csv(
-                    session,
-                    account_id=acct.id,
-                    file_obj=fh,
-                    filename=path.name,
-                    auto_categorize=auto_categorize,
-                    amount_sign=amount_sign,
-                )
+            suffix = path.suffix.lower()
+            if suffix == ".pdf":
+                from financial_os.services.statement_pdf import import_statement_pdf
+
+                with path.open("rb") as fh:
+                    res = import_statement_pdf(
+                        session,
+                        account_id=acct.id,
+                        file_obj=fh,
+                        filename=path.name,
+                        auto_categorize=auto_categorize,
+                        amount_sign=amount_sign,
+                    )
+                entry["format"] = "pdf"
+                entry["pages"] = getattr(res, "pages", None)
+                entry["rows_scanned"] = res.lines_scanned
+            else:
+                with path.open("rb") as fh:
+                    res = import_bank_csv(
+                        session,
+                        account_id=acct.id,
+                        file_obj=fh,
+                        filename=path.name,
+                        auto_categorize=auto_categorize,
+                        amount_sign=amount_sign,
+                    )
+                entry["format"] = "csv"
+                entry["rows_scanned"] = res.rows_scanned
+
             entry["ok"] = not res.errors or res.transactions_created > 0
             entry["transactions_created"] = res.transactions_created
             entry["skipped_existing"] = res.skipped_existing
             entry["skipped_bad"] = res.skipped_bad
-            entry["rows_scanned"] = res.rows_scanned
             entry["categorized"] = res.categorized
             entry["errors"] = res.errors[:5]
             if res.transactions_created or res.skipped_existing:
                 any_ok = True
                 total_created += res.transactions_created
-                # archive
                 dest = archive_dir() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{path.name}"
                 shutil.move(str(path), str(dest))
                 entry["archived_to"] = str(dest)

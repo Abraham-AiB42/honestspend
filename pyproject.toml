@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "floatpile"
-version = "1.0.7"
+version = "1.0.8"
 description = "Floatpile — open-source liquidity cockpit (safe to spend · multi-entity · local books)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -29,6 +29,7 @@ dependencies = [
   "pystray>=0.19.5",
   "pillow>=10.0.0",
   "cryptography>=42.0.0",
+  "pypdf>=5.0.0",
 ]
 
 [project.optional-dependencies]

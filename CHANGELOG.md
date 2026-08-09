@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.8 — Tray inbox + PDF statement import
+
+- **Tray:** Import page · Open inbox folder · Import inbox now (API or offline)
+- **PDF statements:** best-effort text extract (`pypdf`) · preview + import · inbox accepts `.pdf`
+- First-run tip points at Import guides + inbox
+- Prefer CSV when banks offer it; PDF is heuristic
+
 ## 1.0.7 — Bank download guides + inbox import
 
 - **Bank guides** on Import: Chase, Amex, Capital One, etc. — login link + steps (no passwords)

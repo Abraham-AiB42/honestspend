@@ -640,6 +640,38 @@ public sealed class LedgerApiClient : IDisposable
         return await ReadJsonAsync(r, q, ct);
     }
 
+    public async Task<JsonElement> PreviewStatementPdfAsync(
+        Stream fileStream,
+        string fileName,
+        CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var streamContent = new StreamContent(fileStream);
+        streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        content.Add(streamContent, "file", fileName);
+        var r = await _http.PostAsync("api/import/statement-pdf/preview", content, ct);
+        return await ReadJsonAsync(r, "api/import/statement-pdf/preview", ct);
+    }
+
+    public async Task<JsonElement> ImportStatementPdfAsync(
+        Stream fileStream,
+        string fileName,
+        int accountId,
+        string amountSign = "bank",
+        bool autoCategorize = true,
+        CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        var streamContent = new StreamContent(fileStream);
+        streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        content.Add(streamContent, "file", fileName);
+        content.Add(new StringContent(accountId.ToString()), "account_id");
+        content.Add(new StringContent(amountSign), "amount_sign");
+        content.Add(new StringContent(autoCategorize.ToString().ToLowerInvariant()), "auto_categorize");
+        var r = await _http.PostAsync("api/import/statement-pdf", content, ct);
+        return await ReadJsonAsync(r, "api/import/statement-pdf", ct);
+    }
+
     public async Task<JsonElement> ImportBudgetXlsxAsync(
         Stream fileStream,
         string fileName,

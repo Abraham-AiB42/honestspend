@@ -154,6 +154,62 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     def open_settings(icon=None, item=None):
         open_desktop(page="settings")
 
+    def open_import(icon=None, item=None):
+        open_desktop(page="import")
+
+    def open_inbox_folder(icon=None, item=None):
+        """Open the bank CSV drop folder in Explorer."""
+        import subprocess
+        from pathlib import Path
+
+        try:
+            from financial_os.services.import_inbox import ensure_inbox_layout
+
+            layout = ensure_inbox_layout()
+            path = layout["inbox"]
+            Path(path).mkdir(parents=True, exist_ok=True)
+            if os.name == "nt":
+                subprocess.Popen(["explorer", path], close_fds=True)
+            else:
+                subprocess.Popen(["xdg-open", path], close_fds=True)
+        except Exception:
+            open_import()
+
+    def run_import_inbox(icon=None, item=None):
+        """Process inbox CSVs via local API (or offline CLI fallback)."""
+        try:
+            with httpx.Client(timeout=120.0) as client:
+                r = client.post(f"{_base()}/api/import/inbox/process", json={})
+                if r.status_code < 400:
+                    data = r.json()
+                    n = data.get("transactions_created", 0)
+                    seen = data.get("files_seen", 0)
+                    msg = f"Inbox: {seen} file(s) · {n} new transactions"
+                    if icon:
+                        notify(icon, "Floatpile · import", msg)
+                    refresh_now(icon)
+                    return
+        except Exception:
+            pass
+        # Offline: run engine import if DB available
+        try:
+            from financial_os.db import init_db, make_engine, make_session_factory
+            from financial_os.services.import_inbox import process_inbox
+
+            eng = make_engine()
+            init_db(eng)
+            Session = make_session_factory(eng)
+            with Session() as s:
+                data = process_inbox(s)
+                s.commit()
+            n = data.get("transactions_created", 0)
+            seen = data.get("files_seen", 0)
+            if icon:
+                notify(icon, "Floatpile · import", f"Inbox: {seen} file(s) · {n} new")
+        except Exception as e:
+            if icon:
+                notify(icon, "Floatpile · import", f"Failed: {e}")
+
     def open_glance(icon=None, item=None):
         # Thin shell only — not the product
         webbrowser.open(f"{_base()}/glance")
@@ -241,6 +297,9 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     menu = pystray.Menu(
         pystray.MenuItem("Open Floatpile (desktop)", open_desktop, default=True),
         pystray.MenuItem("Sort charges", open_sort_charges),
+        pystray.MenuItem("Import (bank CSV)", open_import),
+        pystray.MenuItem("Open inbox folder", open_inbox_folder),
+        pystray.MenuItem("Import inbox now", run_import_inbox),
         pystray.MenuItem("Reports", open_reports),
         pystray.MenuItem("Settings", open_settings),
         pystray.MenuItem("Refresh Safe to spend", refresh_now),
@@ -251,7 +310,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         pystray.MenuItem("Quit tray", on_exit),
     )
     icon = pystray.Icon(
-        "lederring",
+        "floatpile",
         make_icon_image(),
         "Floatpile",
         menu,

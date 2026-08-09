@@ -154,8 +154,9 @@ public sealed partial class FirstRunPage : Page
                     TextWrapping = TextWrapping.Wrap,
                     Opacity = 0.75,
                     Text =
-                        "Change anytime in Settings. Optional: Full books → Banks (Plaid) with your keys, " +
-                        "or Grok categorize with your xAI key. Core app stays free forever.",
+                        "After setup: Full books → Import shows bank how-tos (login links + download steps). " +
+                        "Drop CSVs or statement PDFs into the inbox folder — tray has “Import inbox now”. " +
+                        "Optional: Banks (Plaid) or Grok with your own keys. Core app stays free forever.",
                 });
                 break;
             case 5:

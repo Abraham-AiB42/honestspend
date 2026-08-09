@@ -7,7 +7,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
@@ -2350,6 +2350,55 @@ def import_inbox_process(body: InboxProcessIn, db: Session = Depends(get_db)):
         amount_sign=body.amount_sign,
         dry_run=body.dry_run,
     )
+
+
+@app.post("/api/import/statement-pdf/preview")
+async def import_statement_pdf_preview(file: UploadFile = File(...)):
+    """Heuristic PDF statement parse preview (text PDFs only)."""
+    content = await file.read()
+    from financial_os.services.statement_pdf import preview_statement_pdf
+
+    try:
+        return preview_statement_pdf(content)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/import/statement-pdf")
+async def import_statement_pdf_upload(
+    account_id: int = Form(...),
+    auto_categorize: bool = Form(True),
+    amount_sign: str = Form("bank"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    content = await file.read()
+    from financial_os.services.statement_pdf import import_statement_pdf
+
+    if not db.get(Account, account_id):
+        raise HTTPException(404, "Account not found")
+    try:
+        result = import_statement_pdf(
+            db,
+            account_id=account_id,
+            file_obj=content,
+            filename=file.filename or "statement.pdf",
+            auto_categorize=auto_categorize,
+            amount_sign=amount_sign,
+        )
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    return {
+        "pages": result.pages,
+        "lines_scanned": result.lines_scanned,
+        "transactions_created": result.transactions_created,
+        "skipped_existing": result.skipped_existing,
+        "skipped_bad": result.skipped_bad,
+        "categorized": result.categorized,
+        "errors": result.errors,
+        "sample": result.sample,
+        "raw_text_chars": result.raw_text_chars,
+    }
 
 
 @app.get("/api/reconcile")

@@ -14,6 +14,7 @@ namespace Floatpile_WinUI.Pages;
 public sealed partial class ImportPage : Page
 {
     private StorageFile? _csvFile;
+    private StorageFile? _pdfFile;
     private StorageFile? _xlsxFile;
     private string? _inboxPath;
 
@@ -257,7 +258,17 @@ public sealed partial class ImportPage : Page
         var file = await PickFileAsync(new[] { ".csv", ".txt" });
         if (file is null) return;
         _csvFile = file;
+        _pdfFile = null;
         CsvPathText.Text = file.Name;
+    }
+
+    private async void PickPdf_Click(object sender, RoutedEventArgs e)
+    {
+        var file = await PickFileAsync(new[] { ".pdf" });
+        if (file is null) return;
+        _pdfFile = file;
+        _csvFile = null;
+        CsvPathText.Text = file.Name + " (PDF)";
     }
 
     private async void PickXlsx_Click(object sender, RoutedEventArgs e)
@@ -289,31 +300,49 @@ public sealed partial class ImportPage : Page
         PreviewText.Text = "";
         try
         {
-            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV first.");
-            using var stream = await _csvFile.OpenStreamForReadAsync();
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var res = await api.PreviewBankCsvAsync(stream, _csvFile.Name);
-            var map = res.TryGetProperty("mapping", out var m) ? m : default;
-            var lines = new List<string>
+            if (_pdfFile is not null)
             {
-                res.TryGetProperty("ok", out var ok) && ok.GetBoolean() ? "Mapping OK" : "Mapping issues",
+                using var stream = await _pdfFile.OpenStreamForReadAsync();
+                var pdfRes = await api.PreviewStatementPdfAsync(stream, _pdfFile.Name);
+                var pdfLines = new List<string>
+                {
+                    $"PDF · pages {JsonUi.Str(pdfRes, "pages")} · candidates {JsonUi.Str(pdfRes, "candidates")}",
+                    JsonUi.Str(pdfRes, "hint"),
+                };
+                if (pdfRes.TryGetProperty("sample", out var pdfSample) && pdfSample.ValueKind == JsonValueKind.Array)
+                {
+                    pdfLines.Add("Sample:");
+                    foreach (var row in pdfSample.EnumerateArray().Take(8))
+                        pdfLines.Add($"  {JsonUi.Str(row, "txn_date")} · {JsonUi.Str(row, "payee")} · {JsonUi.Str(row, "amount")}");
+                }
+                PreviewText.Text = string.Join("\n", pdfLines);
+                return;
+            }
+            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or PDF first.");
+            using var streamCsv = await _csvFile.OpenStreamForReadAsync();
+            var csvRes = await api.PreviewBankCsvAsync(streamCsv, _csvFile.Name);
+            var map = csvRes.TryGetProperty("mapping", out var m) ? m : default;
+            var csvLines = new List<string>
+            {
+                csvRes.TryGetProperty("ok", out var ok) && ok.GetBoolean() ? "Mapping OK" : "Mapping issues",
                 $"date → {JsonUi.Str(map, "date_col")} · payee → {JsonUi.Str(map, "description_col")} · " +
                 $"amount → {JsonUi.Str(map, "amount_col")} · debit → {JsonUi.Str(map, "debit_col")} · credit → {JsonUi.Str(map, "credit_col")}",
             };
-            if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
+            if (csvRes.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var er in errs.EnumerateArray())
-                    lines.Add("Error: " + er.GetString());
+                    csvLines.Add("Error: " + er.GetString());
             }
-            if (res.TryGetProperty("sample", out var sample) && sample.ValueKind == JsonValueKind.Array)
+            if (csvRes.TryGetProperty("sample", out var csvSample) && csvSample.ValueKind == JsonValueKind.Array)
             {
-                lines.Add("Sample:");
-                foreach (var row in sample.EnumerateArray().Take(6))
-                    lines.Add($"  {JsonUi.Str(row, "date")} · {JsonUi.Str(row, "payee")} · {JsonUi.Str(row, "amount")}");
+                csvLines.Add("Sample:");
+                foreach (var row in csvSample.EnumerateArray().Take(6))
+                    csvLines.Add($"  {JsonUi.Str(row, "date")} · {JsonUi.Str(row, "payee")} · {JsonUi.Str(row, "amount")}");
             }
-            lines.Add(JsonUi.Str(res, "hint"));
-            PreviewText.Text = string.Join("\n", lines);
+            csvLines.Add(JsonUi.Str(csvRes, "hint"));
+            PreviewText.Text = string.Join("\n", csvLines);
         }
         catch (Exception ex)
         {
@@ -347,6 +376,47 @@ public sealed partial class ImportPage : Page
             ResultText.Text =
                 $"CSV done · scanned {Prop(res, "rows_scanned")} · created {Prop(res, "transactions_created")} · " +
                 $"skipped existing {Prop(res, "skipped_existing")} · bad {Prop(res, "skipped_bad")} · " +
+                $"categorized {Prop(res, "categorized")}";
+            if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
+            {
+                var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);
+                var joined = string.Join("; ", list!);
+                if (!string.IsNullOrEmpty(joined))
+                    ResultText.Text += "\nErrors: " + joined;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void ImportPdf_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        ResultText.Text = "";
+        try
+        {
+            if (_pdfFile is null) throw new InvalidOperationException("Pick a PDF statement first.");
+            if (AccountBox.SelectedItem is not ComboBoxItem ai || ai.Tag is not int accountId)
+                throw new InvalidOperationException("Pick a target account.");
+            var sign = "bank";
+            if (SignBox.SelectedItem is ComboBoxItem si && si.Tag is string st)
+                sign = st;
+
+            using var stream = await _pdfFile.OpenStreamForReadAsync();
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.ImportStatementPdfAsync(
+                stream,
+                _pdfFile.Name,
+                accountId,
+                sign,
+                AutoCatBox.IsChecked == true);
+            ResultText.Text =
+                $"PDF done · pages {Prop(res, "pages")} · lines {Prop(res, "lines_scanned")} · " +
+                $"created {Prop(res, "transactions_created")} · skipped {Prop(res, "skipped_existing")} · " +
                 $"categorized {Prop(res, "categorized")}";
             if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
