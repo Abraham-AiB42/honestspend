@@ -8,7 +8,7 @@ from typing import Callable
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-log = logging.getLogger("lederring.migrations")
+log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
 SCHEMA_VERSION = 12

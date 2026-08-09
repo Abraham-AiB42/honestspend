@@ -46,16 +46,9 @@ def void_transaction(
     amt = _d(row.amount)
 
     if acct and (row.status or "cleared").lower() != "void":
-        if acct.kind != "credit":
-            # original create: balance += amount → reverse
-            acct.current_balance = _d(acct.current_balance) - amt
-        else:
-            # original create: balance owed -= amount (charge is negative amount)
-            # so reverse: balance owed += amount
-            acct.current_balance = _d(acct.current_balance) + amt
-            if acct.credit_limit is not None:
-                bal = _d(acct.current_balance)
-                acct.available_credit = _d(acct.credit_limit) - bal
+        from financial_os.services.account_balance import reverse_amount_on_account
+
+        reverse_amount_on_account(acct, amt)
 
     row.status = "void"
     note = (row.memo or "").strip()

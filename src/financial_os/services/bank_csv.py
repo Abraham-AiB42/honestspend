@@ -404,6 +404,9 @@ def import_bank_csv(
                     external_id=external_id,
                 )
             )
+            from financial_os.services.account_balance import apply_amount_to_account
+
+            apply_amount_to_account(acct, amount)
             existing.add(external_id)
             result.transactions_created += 1
         except Exception as e:
@@ -473,9 +476,12 @@ def import_bank_csv(
     result.next_steps = build_post_import_next_steps(
         session,
         profile_id=acct.profile_id,
+        account_id=account_id,
         created=result.transactions_created,
         categorized=result.categorized,
         drift=drift,
+        books_balance=result.books_balance,
+        institution_balance=result.ending_balance if result.institution_balance_set else None,
         source="CSV",
     )
     return result

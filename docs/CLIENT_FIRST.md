@@ -30,7 +30,8 @@
 | **Inbox folder** | Drop `.csv` / `.ofx` / `.qfx` / `.pdf` → `honestspend import-inbox` / daily task · next_steps after process |
 | **OFX ACCTID match** | First OFX import learns account id; later drops auto-route without nickname in filename |
 | **Import reminders** | User-chosen cadence: off · daily · weekly · monthly |
-| **Post-import next steps** | After CSV / OFX / PDF: Sort charges · Reconcile drift · Home |
+| **Post-import next steps** | After CSV / OFX / PDF: **Set Safe to spend from bank** · Sort charges · Home |
+| **Import → books** | New rows update `current_balance` (IFPP); bank ending bal → institution + one-tap trust |
 | **BYOK Plaid** | Optional live link with *user’s* keys |
 | **BYOK Grok** | Optional AI categorize with *user’s* xAI key |
 | **Rules categorizer** | Always free, offline |

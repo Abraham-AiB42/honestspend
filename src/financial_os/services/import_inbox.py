@@ -129,7 +129,12 @@ def resolve_account_for_file(
     path: Path,
     *,
     default_account_id: int | None = None,
-) -> Account | None:
+) -> tuple[Account | None, int, str]:
+    """Match inbox file → account.
+
+    Returns (account|None, score, match_mode).
+    Does **not** fall back to first checking — wrong-account imports poison ACCTID.
+    """
     accounts = (
         session.query(Account)
         .filter(Account.archived_at.is_(None))
@@ -137,7 +142,7 @@ def resolve_account_for_file(
         .all()
     )
     if not accounts:
-        return None
+        return None, 0, "none"
 
     # OFX/QFX: prefer previously learned ACCTID binding
     if path.suffix.lower() in (".ofx", ".qfx"):
@@ -147,15 +152,15 @@ def resolve_account_for_file(
             meta = peek_ofx_meta(path)
             matched = match_account_by_ofx_acctid(session, meta.get("acctid"))
             if matched is not None:
-                return matched
-            # last-4 of ACCTID vs nickname/filename still via scoring below
+                return matched, 100, "ofx_acctid"
+            # last-4 of ACCTID vs nickname / external_id
             if meta.get("acctid"):
                 last4 = re.sub(r"\D+", "", meta["acctid"])[-4:]
                 if last4:
                     for a in accounts:
                         blob = f"{a.nickname or ''} {a.institution or ''} {a.external_id or ''}"
                         if last4 in re.sub(r"\D+", "", blob):
-                            return a
+                            return a, 40, "ofx_last4"
         except Exception:
             pass
 
@@ -166,16 +171,12 @@ def resolve_account_for_file(
     )
     best_score, _, best = ranked[0]
     if best_score > 0:
-        return best
+        return best, best_score, "filename"
     if default_account_id is not None:
         for a in accounts:
             if a.id == default_account_id:
-                return a
-    # fallback: first checking, else first account
-    for a in accounts:
-        if a.kind == "checking":
-            return a
-    return accounts[0]
+                return a, 0, "default"
+    return None, 0, "none"
 
 
 def list_inbox_files() -> list[dict[str, Any]]:
@@ -220,32 +221,30 @@ def process_inbox(
 
     for meta in files:
         path = Path(meta["path"])
-        match_mode = "filename"
-        acct = resolve_account_for_file(session, path, default_account_id=default_account_id)
+        acct, match_score, match_mode = resolve_account_for_file(
+            session, path, default_account_id=default_account_id
+        )
         if acct is None:
             results.append(
                 {
                     "file": path.name,
                     "ok": False,
-                    "error": "No accounts in books — run first-run setup first.",
+                    "match_mode": match_mode,
+                    "match_score": match_score,
+                    "error": (
+                        "No accounts in books — run first-run setup first."
+                        if not session.query(Account).filter(Account.archived_at.is_(None)).count()
+                        else "Could not match account — name file with nickname "
+                        "(e.g. Primary-checking.csv) or pick a default account on Import."
+                    ),
                 }
             )
             continue
-        if path.suffix.lower() in (".ofx", ".qfx"):
-            try:
-                from financial_os.services.bank_ofx import peek_ofx_meta
-
-                ofx_meta = peek_ofx_meta(path)
-                linked = match_account_by_ofx_acctid(session, ofx_meta.get("acctid"))
-                if linked is not None and linked.id == acct.id:
-                    match_mode = "ofx_acctid"
-            except Exception:
-                pass
         entry: dict[str, Any] = {
             "file": path.name,
             "account_id": acct.id,
             "account_nickname": acct.nickname,
-            "match_score": _score_account(acct, path.stem),
+            "match_score": match_score,
             "match_mode": match_mode,
         }
         match_modes.append(match_mode)

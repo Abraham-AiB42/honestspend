@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.16 — Import honesty + inbox safety + path jails
+
+- **CSV/OFX/PDF import updates `current_balance`** (same rules as manual posts) so Safe to spend moves
+- Post-import **Set Safe to spend from bank** when books ≠ bank ending bal (Simple, no Full Reconcile)
+- **Inbox** refuses unmatched files (no first-checking fallback / ACCTID poison)
+- Upload size limit (50 MB) · safe filenames · path APIs jailed under `data_dir`
+- Shared `account_balance` apply/reverse helpers (create + void + import)
+
 ## 1.0.15 — Mark month closed + post-import bill hints
 
 - **Schema v12:** `month_close_period` + `month_close_last_at` on app settings

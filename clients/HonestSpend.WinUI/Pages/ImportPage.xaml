@@ -80,12 +80,13 @@
                     </StackPanel>
                     <TextBlock x:Name="ResultText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <StackPanel x:Name="NextStepsPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
-                        <Button x:Name="GoSortBtn" Content="Sort charges" Click="GoSort_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" />
-                        <Button x:Name="GoReconcileBtn" Content="Reconcile" Click="GoReconcile_Click" Visibility="Collapsed" />
+                        <Button x:Name="SetBooksFromBankBtn" Content="Set Safe to spend from bank"
+                                Click="SetBooksFromBank_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" />
+                        <Button x:Name="GoSortBtn" Content="Sort charges" Click="GoSort_Click" Visibility="Collapsed" />
                         <Button x:Name="GoHomeBtn" Content="Home" Click="GoHome_Click" Visibility="Collapsed" />
                     </StackPanel>
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Best: CSV or OFX/QFX. CSV Balance column or ending balance field → Reconcile. OFX LEDGERBAL does the same. PDF is best-effort text only." />
+                        Text="Best: CSV or OFX/QFX. Ending balance → Match bank. New rows update books balance. One-tap Set Safe to spend from bank when bank bal differs." />
                 </StackPanel>
             </Border>
 

@@ -823,15 +823,10 @@ def create_transaction(body: TransactionIn, db: Session = Depends(get_db)):
 
     row = Transaction(**data)
     db.add(row)
-    if acct and acct.kind != "credit":
-        # Credit balances are "amount owed"; cash accounts move with signed amount
-        acct.current_balance = Decimal(acct.current_balance or 0) + Decimal(body.amount)
-    elif acct and acct.kind == "credit":
-        # Negative amount = charge increases balance owed
-        acct.current_balance = Decimal(acct.current_balance or 0) - Decimal(body.amount)
-        if acct.credit_limit is not None:
-            bal = Decimal(acct.current_balance or 0)
-            acct.available_credit = Decimal(acct.credit_limit) - bal
+    if acct:
+        from financial_os.services.account_balance import apply_amount_to_account
+
+        apply_amount_to_account(acct, body.amount)
     db.flush()
     db.refresh(row)
     return row
@@ -2263,9 +2258,15 @@ def tax_packet_write(
 
 @app.post("/api/import/budget-xlsx")
 def import_xlsx_path(body: ImportPathIn, db: Session = Depends(get_db)):
+    from financial_os.services.paths_safe import resolve_under_data_dir
+
+    try:
+        safe_path = resolve_under_data_dir(body.path)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     result = import_budget_xlsx(
         db,
-        body.path,
+        safe_path,
         profile_slug=body.profile_slug,
         sheet_name=body.sheet_name,
         since=body.since,
@@ -2291,10 +2292,16 @@ async def import_xlsx_upload(
     dry_run: bool = False,
     db: Session = Depends(get_db),
 ):
+    from financial_os.services.paths_safe import enforce_upload_size, safe_filename
+
     dest = settings.data_dir / "imports"
     dest.mkdir(parents=True, exist_ok=True)
-    target = dest / (file.filename or "budget.xlsx")
+    target = dest / safe_filename(file.filename, default="budget.xlsx")
     content = await file.read()
+    try:
+        enforce_upload_size(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     target.write_bytes(content)
     result = import_budget_xlsx(
         db,
@@ -2323,7 +2330,12 @@ async def import_bank_csv_preview(file: UploadFile = File(...)):
     from io import BytesIO
 
     from financial_os.services.bank_csv import preview_bank_csv
+    from financial_os.services.paths_safe import enforce_upload_size
 
+    try:
+        enforce_upload_size(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     return preview_bank_csv(BytesIO(content))
 
 
@@ -2381,9 +2393,13 @@ async def import_ofx_preview(file: UploadFile = File(...)):
     """Preview OFX/QFX transactions without writing."""
     content = await file.read()
     from financial_os.services.bank_ofx import preview_ofx
+    from financial_os.services.paths_safe import enforce_upload_size
 
     try:
+        enforce_upload_size(content)
         return preview_ofx(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     except Exception as e:
         raise HTTPException(400, str(e)) from e
 
@@ -2398,7 +2414,12 @@ async def import_ofx_upload(
 ):
     content = await file.read()
     from financial_os.services.bank_ofx import import_ofx
+    from financial_os.services.paths_safe import enforce_upload_size, safe_filename
 
+    try:
+        enforce_upload_size(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     if not db.get(Account, account_id):
         raise HTTPException(404, "Account not found")
     try:
@@ -2406,7 +2427,7 @@ async def import_ofx_upload(
             db,
             account_id=account_id,
             file_obj=content,
-            filename=file.filename or "download.ofx",
+            filename=safe_filename(file.filename, default="download.ofx"),
             auto_categorize=auto_categorize,
             amount_sign=amount_sign,
             apply_ledger_balance=True,
@@ -2436,10 +2457,14 @@ async def import_ofx_upload(
 async def import_statement_pdf_preview(file: UploadFile = File(...)):
     """Heuristic PDF statement parse preview (text PDFs only)."""
     content = await file.read()
+    from financial_os.services.paths_safe import enforce_upload_size
     from financial_os.services.statement_pdf import preview_statement_pdf
 
     try:
+        enforce_upload_size(content)
         return preview_statement_pdf(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     except Exception as e:
         raise HTTPException(400, str(e)) from e
 
@@ -2453,8 +2478,13 @@ async def import_statement_pdf_upload(
     db: Session = Depends(get_db),
 ):
     content = await file.read()
+    from financial_os.services.paths_safe import enforce_upload_size, safe_filename
     from financial_os.services.statement_pdf import import_statement_pdf
 
+    try:
+        enforce_upload_size(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     if not db.get(Account, account_id):
         raise HTTPException(404, "Account not found")
     try:
@@ -2462,7 +2492,7 @@ async def import_statement_pdf_upload(
             db,
             account_id=account_id,
             file_obj=content,
-            filename=file.filename or "statement.pdf",
+            filename=safe_filename(file.filename, default="statement.pdf"),
             auto_categorize=auto_categorize,
             amount_sign=amount_sign,
         )
@@ -2542,11 +2572,17 @@ async def import_bank_csv_upload(
     content = await file.read()
     from io import BytesIO
 
+    from financial_os.services.paths_safe import enforce_upload_size, safe_filename
+
+    try:
+        enforce_upload_size(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     result = import_bank_csv(
         db,
         account_id=account_id,
         file_obj=BytesIO(content),
-        filename=file.filename or "bank.csv",
+        filename=safe_filename(file.filename, default="bank.csv"),
         auto_categorize=auto_categorize,
         amount_sign=amount_sign,
         institution_balance=institution_balance,
@@ -2857,11 +2893,15 @@ class DecryptBackupIn(BaseModel):
 def backup_decrypt(body: DecryptBackupIn):
     from financial_os.services.backup import backups_dir
     from financial_os.services.encrypted_backup import decrypt_file_to_backup
+    from financial_os.services.paths_safe import resolve_under_data_dir, safe_filename
 
     if body.path:
-        p = body.path
+        try:
+            p = str(resolve_under_data_dir(body.path))
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
     elif body.name:
-        safe = Path(body.name).name
+        safe = safe_filename(body.name, default="backup.zip")
         p = str(backups_dir() / safe)
     else:
         raise HTTPException(400, "path or name required")
@@ -2944,12 +2984,14 @@ def backup_restore(name: str):
 @app.post("/api/backup/restore-upload")
 async def backup_restore_upload(file: UploadFile = File(...)):
     from financial_os.services.backup import restore_from_upload
+    from financial_os.services.paths_safe import enforce_upload_size, safe_filename
 
     content = await file.read()
     if not content:
         raise HTTPException(400, "Empty file")
     try:
-        return restore_from_upload(content, file.filename or "upload.db")
+        enforce_upload_size(content)
+        return restore_from_upload(content, safe_filename(file.filename, default="upload.db"))
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 

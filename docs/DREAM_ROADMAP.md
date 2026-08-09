@@ -1,9 +1,9 @@
 # Plan: Realize the Dream
 
 **Product:** HonestSpend (financial-os)  
-**Baseline:** **v0.9.x** feature tags · product maturity **~65% dream (~0.6.5-class)** — see [`VERSIONING.md`](./VERSIONING.md)  
-**Schema:** **v10**  
-**1.0:** Only after [`RC_1.0.md`](./RC_1.0.md) — do **not** treat 0.9 as “almost 1.0.”  
+**Baseline:** **v1.0.x** feature tags · product maturity still **~70% dream** (liquidity OS shippable; not full H3) — see [`VERSIONING.md`](./VERSIONING.md)  
+**Schema:** **v12** (month-close markers · import reminders earlier)  
+**1.0:** Shipped after [`RC_1.0.md`](./RC_1.0.md); 1.0.x polishes money-in honesty and Simple open-rarely.  
 **Dream:** One app that *does the job* of Excel-nerd control + Credit Karma awareness + QuickBooks books hygiene + TurboTax handoff + Rocket Money daily simplicity — without becoming five mediocre clones.
 
 **Constitution (non-negotiable):** local-first freeware · never bounce checking · no dumb fees/interest · intentional 0% float · options + why · fiscal #1 · credit #2 · open rarely · **no** bureau marketplace · **no** payroll product · **no** trading product · **no** e-file as core product.

@@ -158,14 +158,18 @@ def build_post_import_next_steps(
     session: Session,
     *,
     profile_id: int,
+    account_id: int | None = None,
     created: int = 0,
     categorized: int = 0,
     drift: Decimal | None = None,
+    books_balance: str | None = None,
+    institution_balance: str | None = None,
     source: str = "import",
 ) -> list[dict[str, str]]:
     """Structured CTAs after CSV / OFX / PDF import (open-rarely habit).
 
-    Each step: {action, label, detail} where action is review|reconcile|home|hold.
+    Each step: {action, label, detail, account_id?} where action includes
+    review | set_books_from_bank | reconcile | home | hold | bills.
     """
     steps: list[dict[str, str]] = []
     uncat = (
@@ -173,6 +177,43 @@ def build_post_import_next_steps(
         .filter(Transaction.profile_id == profile_id, Transaction.category_id.is_(None))
         .count()
     )
+
+    # Highest priority for honesty: bank ending bal vs books after import
+    if (
+        drift is not None
+        and abs(drift) >= Decimal("0.01")
+        and institution_balance is not None
+        and account_id is not None
+    ):
+        steps.append(
+            {
+                "action": "set_books_from_bank",
+                "label": "Set Safe to spend from bank",
+                "detail": (
+                    f"Books ${books_balance or '?'} vs bank ${institution_balance} "
+                    f"(Δ ${drift.quantize(Decimal('0.01'))}). One tap updates Safe to spend."
+                ),
+                "account_id": str(account_id),
+            }
+        )
+    elif drift is not None and abs(drift) < Decimal("0.01") and institution_balance is not None:
+        steps.append(
+            {
+                "action": "hold",
+                "label": "Balances match",
+                "detail": "Books match bank ending balance — Safe to spend is honest.",
+            }
+        )
+    elif drift is not None and abs(drift) >= Decimal("0.01"):
+        steps.append(
+            {
+                "action": "reconcile",
+                "label": "Match bank balance",
+                "detail": f"Books vs bank differ by ${drift.quantize(Decimal('0.01'))}.",
+                "account_id": str(account_id) if account_id else "",
+            }
+        )
+
     if uncat > 0:
         steps.append(
             {
@@ -187,23 +228,6 @@ def build_post_import_next_steps(
                 "action": "hold",
                 "label": "Categories filled",
                 "detail": f"{categorized} auto-categorized from rules.",
-            }
-        )
-
-    if drift is not None and abs(drift) >= Decimal("0.01"):
-        steps.append(
-            {
-                "action": "reconcile",
-                "label": "Reconcile drift",
-                "detail": f"Books vs bank differ by ${drift.quantize(Decimal('0.01'))}. Check Reconcile.",
-            }
-        )
-    elif drift is not None:
-        steps.append(
-            {
-                "action": "reconcile",
-                "label": "Balances match",
-                "detail": "Institution balance from OFX matches books.",
             }
         )
 

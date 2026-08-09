@@ -13,6 +13,7 @@ Linear milestone tags for what shipped:
 | **0.8.x** | Live books loop · month-close · fees/bills one-tap |
 | **0.9.x** | Tax year prep · scenarios · reports · pre-1.0 freeze |
 | **1.0.0** | Liquidity OS ship — [RC_1.0.md](./RC_1.0.md) + dogfood e2e green |
+| **1.0.x** | Money-in honesty · import→Safe to spend · month-close · inbox safety |
 | **1.x** | H3 polish (**client-first** WinUI automation, nerd tools; **no PWA**) |
 
 Tags **are not** “percent of the dream done.” They mark **slices of capability**.
@@ -44,5 +45,5 @@ If it is H3 (mobile PWA, rule grid, Windows service), it is **1.x**.
 
 ## 5. Display
 
-- Engine / About: `Engine v0.9.x` + maturity line (“pre-1.0 · ~65% dream”)  
+- Engine / About: current **feature tag** (e.g. `1.0.16`) + optional dream-maturity note  
 - `__version__` / pyproject / Inno stay aligned with the **feature tag**

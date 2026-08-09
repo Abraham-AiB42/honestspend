@@ -279,6 +279,9 @@ def import_statement_pdf(
                     memo=f"PDF import · {filename}"[:200],
                 )
             )
+            from financial_os.services.account_balance import apply_amount_to_account
+
+            apply_amount_to_account(acct, amt)
             existing.add(ext)
             result.transactions_created += 1
         except Exception as e:
@@ -308,8 +311,10 @@ def import_statement_pdf(
     result.next_steps = build_post_import_next_steps(
         session,
         profile_id=acct.profile_id,
+        account_id=account_id,
         created=result.transactions_created,
         categorized=result.categorized,
+        books_balance=str(acct.current_balance or 0),
         source="PDF",
     )
     return result

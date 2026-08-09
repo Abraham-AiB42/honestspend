@@ -61,8 +61,10 @@ def test_inbox_import_matches_account(tmp_path: Path, monkeypatch):
         encoding="utf-8",
     )
 
-    acct = resolve_account_for_file(s, csv)
+    acct, score, mode = resolve_account_for_file(s, csv)
     assert acct is not None
+    assert score > 0
+    assert mode == "filename"
     assert "card" in (acct.nickname or "").lower() or acct.kind == "credit"
 
     result = process_inbox(s, dry_run=False)
@@ -80,4 +82,27 @@ def test_inbox_empty(tmp_path: Path, monkeypatch):
     ensure_inbox_layout()
     result = process_inbox(s)
     assert result["files_seen"] == 0
+    s.close()
+
+
+def test_inbox_refuses_unmatched_filename(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(
+        s,
+        cash_name="Primary checking",
+        cash_balance=Decimal("1000"),
+    )
+    s.commit()
+    layout = ensure_inbox_layout()
+    path = Path(layout["inbox"]) / "mystery-export.csv"
+    path.write_text(
+        "Date,Description,Amount\n2026-08-01,X,-1.00\n",
+        encoding="utf-8",
+    )
+    result = process_inbox(s)
+    assert result["files_seen"] == 1
+    assert result["transactions_created"] == 0
+    assert result["results"][0]["ok"] is False
+    assert "match" in (result["results"][0].get("error") or "").lower()
+    assert path.exists()  # not archived on failure
     s.close()

@@ -113,6 +113,7 @@ def test_csv_ending_balance_column(tmp_path: Path):
 2026-08-02,PAY,-20.00,975.50
 """
     from financial_os.services.bank_csv import preview_bank_csv
+    from financial_os.services.reconcile import trust_balance
 
     prev = preview_bank_csv(StringIO(csv_text))
     assert prev.get("ending_balance") == "975.50"
@@ -130,7 +131,47 @@ def test_csv_ending_balance_column(tmp_path: Path):
     assert result.balance_source == "column"
     assert result.drift is not None
     s.refresh(acct)
+    # Deltas applied: 1000 - 4.50 - 20 = 975.50; matches bank ending
+    assert acct.current_balance == Decimal("975.50")
     assert acct.institution_balance == Decimal("975.50")
+    # next_steps prefer honest path
+    actions = {st.get("action") for st in result.next_steps}
+    assert "hold" in actions or "set_books_from_bank" in actions or "review" in actions
+    s.close()
+
+
+def test_csv_import_updates_safe_to_spend_via_trust(tmp_path: Path):
+    """Opening books wrong vs bank ending → trust institution fixes IFPP input."""
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Chase",
+        current_balance=Decimal("500"),  # wrong open vs bank history
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Date,Description,Amount,Balance
+2026-08-01,COFFEE,-4.50,995.50
+"""
+    from financial_os.services.reconcile import trust_balance
+
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+    )
+    s.refresh(acct)
+    # 500 - 4.50 = 495.50 books; bank says 995.50
+    assert acct.current_balance == Decimal("495.50")
+    assert acct.institution_balance == Decimal("995.50")
+    assert any(st.get("action") == "set_books_from_bank" for st in result.next_steps)
+    trust_balance(s, acct.id, trust="institution")
+    s.refresh(acct)
+    assert acct.current_balance == Decimal("995.50")
     s.close()
 
 

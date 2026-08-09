@@ -18,6 +18,7 @@ public sealed partial class ImportPage : Page
     private StorageFile? _pdfFile;
     private StorageFile? _xlsxFile;
     private string? _inboxPath;
+    private int? _setBooksAccountId;
 
     public ImportPage()
     {
@@ -407,9 +408,11 @@ public sealed partial class ImportPage : Page
     private void HideNextSteps()
     {
         NextStepsPanel.Visibility = Visibility.Collapsed;
+        SetBooksFromBankBtn.Visibility = Visibility.Collapsed;
         GoSortBtn.Visibility = Visibility.Collapsed;
-        GoReconcileBtn.Visibility = Visibility.Collapsed;
         GoHomeBtn.Visibility = Visibility.Collapsed;
+        GoHomeBtn.Content = "Home";
+        _setBooksAccountId = null;
     }
 
     private void ShowNextSteps(JsonElement res)
@@ -421,37 +424,67 @@ public sealed partial class ImportPage : Page
         foreach (var st in steps.EnumerateArray())
         {
             var action = JsonUi.Str(st, "action");
-            if (action == "review")
+            if (action == "set_books_from_bank")
+            {
+                if (int.TryParse(JsonUi.Str(st, "account_id"), out var aid))
+                    _setBooksAccountId = aid;
+                else if (AccountBox.SelectedItem is ComboBoxItem { Tag: int selected })
+                    _setBooksAccountId = selected;
+                SetBooksFromBankBtn.Content = string.IsNullOrEmpty(JsonUi.Str(st, "label"))
+                    ? "Set Safe to spend from bank"
+                    : JsonUi.Str(st, "label");
+                SetBooksFromBankBtn.Visibility = Visibility.Visible;
+                show = true;
+            }
+            else if (action == "review")
             {
                 GoSortBtn.Visibility = Visibility.Visible;
                 show = true;
             }
-            else if (action == "reconcile")
-            {
-                GoReconcileBtn.Visibility = Visibility.Visible;
-                show = true;
-            }
-            else if (action is "home" or "hold" or "bills")
+            else if (action is "home" or "hold" or "bills" or "reconcile")
             {
                 GoHomeBtn.Visibility = Visibility.Visible;
                 if (action == "bills")
                     GoHomeBtn.Content = "Home · bills";
+                else if (action == "reconcile")
+                    GoHomeBtn.Content = "Home · match bal";
                 show = true;
             }
         }
         NextStepsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private async void SetBooksFromBank_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var accountId = _setBooksAccountId;
+            if (accountId is null && AccountBox.SelectedItem is ComboBoxItem { Tag: int selected })
+                accountId = selected;
+            if (accountId is null)
+                throw new InvalidOperationException("Pick the account that received the import.");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.ReconcileTrustAsync(accountId.Value, "institution");
+            ResultText.Text =
+                (ResultText.Text ?? "") +
+                $"\nSafe to spend updated · books ${Prop(res, "books_balance")} (trusted bank).";
+            SetBooksFromBankBtn.Visibility = Visibility.Collapsed;
+            GoHomeBtn.Visibility = Visibility.Visible;
+            NextStepsPanel.Visibility = Visibility.Visible;
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
     private void GoSort_Click(object sender, RoutedEventArgs e)
     {
         if (App.MainWindowInstance is MainWindow mw)
             mw.NavigatePublic("review");
-    }
-
-    private void GoReconcile_Click(object sender, RoutedEventArgs e)
-    {
-        if (App.MainWindowInstance is MainWindow mw)
-            mw.NavigatePublic("reconcile");
     }
 
     private void GoHome_Click(object sender, RoutedEventArgs e)
