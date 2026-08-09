@@ -33,6 +33,12 @@ class OfxImportResult:
     sample: list[dict[str, Any]] = field(default_factory=list)
     account_hint: str | None = None
     bank_id: str | None = None
+    ledger_balance: str | None = None
+    ledger_balance_as_of: str | None = None
+    institution_balance_set: bool = False
+    books_balance: str | None = None
+    drift: str | None = None
+    next_steps: list[dict[str, str]] = field(default_factory=list)
 
 
 def _read_text(file_obj: BinaryIO | TextIO | bytes | str | Path) -> str:
@@ -84,6 +90,44 @@ def _parse_amount(raw: str) -> Decimal | None:
         return None
 
 
+def parse_ofx_ledger_balance(text: str) -> dict[str, Any]:
+    """Extract LEDGERBAL / AVAILBAL BALAMT (+ optional DTASOF)."""
+    out: dict[str, Any] = {"balance": None, "as_of": None, "source": None}
+    # Prefer LEDGERBAL block, then AVAILBAL, then any BALAMT
+    for source, pattern in (
+        ("ledger", r"<LEDGERBAL>(.*?)</LEDGERBAL>"),
+        ("ledger", r"<LEDGERBAL>(.*?)(?=<AVAILBAL>|<BANKACCTFROM>|<CCACCTFROM>|</STMTRS>|</CCSTMTRS>|</OFX>)"),
+        ("available", r"<AVAILBAL>(.*?)</AVAILBAL>"),
+        ("available", r"<AVAILBAL>(.*?)(?=<LEDGERBAL>|<BANKACCTFROM>|</STMTRS>|</OFX>)"),
+    ):
+        m = re.search(pattern, text, re.I | re.S)
+        if not m:
+            continue
+        block = m.group(1)
+        bal_m = re.search(r"<BALAMT>([^<\r\n]+)", block, re.I)
+        if not bal_m:
+            continue
+        bal = _parse_amount(bal_m.group(1))
+        if bal is None:
+            continue
+        out["balance"] = bal
+        out["source"] = source
+        dt_m = re.search(r"<DTASOF>([^<\r\n]+)", block, re.I)
+        if dt_m:
+            d = _parse_ofx_date(dt_m.group(1))
+            if d:
+                out["as_of"] = d
+        return out
+    # bare BALAMT (some exporters)
+    bare = re.search(r"<BALAMT>([^<\r\n]+)", text, re.I)
+    if bare:
+        bal = _parse_amount(bare.group(1))
+        if bal is not None:
+            out["balance"] = bal
+            out["source"] = "balamt"
+    return out
+
+
 def parse_ofx_transactions(text: str) -> tuple[list[dict[str, Any]], dict[str, str]]:
     """Extract STMTTRN (and similar) blocks. Returns (rows, meta)."""
     meta: dict[str, str] = {}
@@ -92,6 +136,13 @@ def parse_ofx_transactions(text: str) -> tuple[list[dict[str, Any]], dict[str, s
         m = re.search(rf"<{key}>([^<\r\n]+)", text, re.I)
         if m:
             meta[key.lower()] = m.group(1).strip()
+
+    ledger = parse_ofx_ledger_balance(text)
+    if ledger.get("balance") is not None:
+        meta["ledger_balance"] = str(ledger["balance"])
+        meta["ledger_source"] = str(ledger.get("source") or "ledger")
+        if ledger.get("as_of") is not None:
+            meta["ledger_as_of"] = ledger["as_of"].isoformat()
 
     rows: list[dict[str, Any]] = []
     # Split on STMTTRN open (handles both <STMTTRN>…</STMTTRN> and SGML style)
@@ -137,12 +188,17 @@ def parse_ofx_transactions(text: str) -> tuple[list[dict[str, Any]], dict[str, s
 def preview_ofx(file_obj: BinaryIO | TextIO | bytes | str | Path) -> dict[str, Any]:
     text = _read_text(file_obj)
     rows, meta = parse_ofx_transactions(text)
+    ledger = parse_ofx_ledger_balance(text)
+    bal = ledger.get("balance")
     return {
-        "ok": len(rows) > 0,
+        "ok": len(rows) > 0 or bal is not None,
         "transactions_found": len(rows),
         "account_hint": meta.get("acctid"),
         "bank_id": meta.get("bankid"),
         "org": meta.get("org"),
+        "ledger_balance": str(bal) if bal is not None else None,
+        "ledger_balance_as_of": meta.get("ledger_as_of"),
+        "ledger_source": ledger.get("source"),
         "sample": [
             {
                 "txn_date": r["txn_date"].isoformat(),
@@ -153,11 +209,90 @@ def preview_ofx(file_obj: BinaryIO | TextIO | bytes | str | Path) -> dict[str, A
             for r in rows[:12]
         ],
         "hint": (
-            "OFX/QFX ready — import maps TRNAMT (bank sign: expenses usually negative)."
+            (
+                "OFX/QFX ready — import maps TRNAMT; LEDGERBAL sets institution balance for Reconcile."
+                if bal is not None
+                else "OFX/QFX ready — import maps TRNAMT (bank sign: expenses usually negative)."
+            )
             if rows
-            else "No STMTTRN blocks found. Prefer CSV if this bank export is empty."
+            else (
+                "Found ledger balance but no STMTTRN rows."
+                if bal is not None
+                else "No STMTTRN blocks found. Prefer CSV if this bank export is empty."
+            )
         ),
     }
+
+
+def _build_ofx_next_steps(
+    session: Session,
+    *,
+    account_id: int,
+    profile_id: int,
+    created: int,
+    categorized: int,
+    drift: Decimal | None,
+) -> list[dict[str, str]]:
+    """Post-import CTAs for Import page / tray (open-rarely habit)."""
+    from financial_os.db import Transaction as Txn
+
+    steps: list[dict[str, str]] = []
+    uncat = (
+        session.query(Txn)
+        .filter(Txn.profile_id == profile_id, Txn.category_id.is_(None))
+        .count()
+    )
+    still_uncat = max(0, uncat)
+    if still_uncat > 0:
+        steps.append(
+            {
+                "action": "review",
+                "label": "Sort charges",
+                "detail": f"{still_uncat} uncategorized — accept categories so tax/reports stay clean.",
+            }
+        )
+    elif created and categorized:
+        steps.append(
+            {
+                "action": "hold",
+                "label": "Categories filled",
+                "detail": f"{categorized} auto-categorized from rules.",
+            }
+        )
+    if drift is not None and abs(drift) >= Decimal("0.01"):
+        steps.append(
+            {
+                "action": "reconcile",
+                "label": "Reconcile drift",
+                "detail": f"Books vs bank differ by ${drift.quantize(Decimal('0.01'))}. Check Reconcile.",
+            }
+        )
+    elif drift is not None:
+        steps.append(
+            {
+                "action": "reconcile",
+                "label": "Balances match",
+                "detail": "Institution balance from OFX matches books.",
+            }
+        )
+    if not steps:
+        if created:
+            steps.append(
+                {
+                    "action": "home",
+                    "label": "Done",
+                    "detail": f"{created} transaction(s) imported. Safe to spend will refresh on Home.",
+                }
+            )
+        else:
+            steps.append(
+                {
+                    "action": "hold",
+                    "label": "No new rows",
+                    "detail": "Duplicates skipped (FITID). Drop a newer date range next time.",
+                }
+            )
+    return steps
 
 
 def import_ofx(
@@ -168,6 +303,7 @@ def import_ofx(
     filename: str = "download.ofx",
     auto_categorize: bool = True,
     amount_sign: str = "bank",
+    apply_ledger_balance: bool = True,
 ) -> OfxImportResult:
     result = OfxImportResult()
     acct = session.get(Account, account_id)
@@ -178,6 +314,7 @@ def import_ofx(
     try:
         text = _read_text(file_obj)
         rows, meta = parse_ofx_transactions(text)
+        ledger = parse_ofx_ledger_balance(text)
     except Exception as e:
         result.errors.append(str(e))
         return result
@@ -185,6 +322,10 @@ def import_ofx(
     result.transactions_found = len(rows)
     result.account_hint = meta.get("acctid")
     result.bank_id = meta.get("bankid")
+    if ledger.get("balance") is not None:
+        result.ledger_balance = str(ledger["balance"])
+        if ledger.get("as_of") is not None:
+            result.ledger_balance_as_of = ledger["as_of"].isoformat()
     result.sample = [
         {
             "txn_date": r["txn_date"].isoformat(),
@@ -193,7 +334,7 @@ def import_ofx(
         }
         for r in rows[:8]
     ]
-    if not rows:
+    if not rows and ledger.get("balance") is None:
         result.errors.append("No transactions found in OFX/QFX file")
         return result
 
@@ -244,7 +385,25 @@ def import_ofx(
                 result.errors.append(str(e))
 
     session.flush()
-    if result.transactions_created or result.skipped_existing:
+
+    # LEDGERBAL → institution_balance (does not overwrite books current_balance)
+    drift: Decimal | None = None
+    if apply_ledger_balance and ledger.get("balance") is not None:
+        from financial_os.services.reconcile import set_institution_balance
+
+        bal = ledger["balance"]
+        assert isinstance(bal, Decimal)
+        set_institution_balance(session, account_id, bal, mark_reconciled=False)
+        result.institution_balance_set = True
+        session.refresh(acct)
+        books = Decimal(str(acct.current_balance or 0))
+        result.books_balance = str(books)
+        drift = (books - bal).quantize(Decimal("0.01"))
+        result.drift = str(drift)
+    else:
+        result.books_balance = str(acct.current_balance or 0)
+
+    if result.transactions_created or result.skipped_existing or result.institution_balance_set:
         try:
             mark_import_activity(session)
         except Exception:
@@ -259,4 +418,13 @@ def import_ofx(
             min_confidence=0.85,
         )
         result.categorized = sum(1 for x in applied if x.get("applied"))
+
+    result.next_steps = _build_ofx_next_steps(
+        session,
+        account_id=account_id,
+        profile_id=acct.profile_id,
+        created=result.transactions_created,
+        categorized=result.categorized,
+        drift=drift,
+    )
     return result

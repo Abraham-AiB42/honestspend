@@ -49,6 +49,10 @@ NEWFILEUID:NONE
 <NAME>PAYROLL ACME
 </STMTTRN>
 </BANKTRANLIST>
+<LEDGERBAL>
+<BALAMT>2554.33
+<DTASOF>20260805
+</LEDGERBAL>
 </STMTRS>
 </STMTTRNRS>
 </BANKMSGSRSV1>
@@ -60,6 +64,8 @@ def test_parse_ofx_sample():
     rows, meta = parse_ofx_transactions(SAMPLE_OFX)
     assert len(rows) == 2
     assert meta.get("acctid") == "123456789"
+    assert meta.get("ledger_balance") == "2554.33"
+    assert meta.get("ledger_as_of") == "2026-08-05"
     assert rows[0]["amount"] == Decimal("-45.67")
     assert rows[0]["txn_date"].isoformat() == "2026-08-01"
     assert "COFFEE" in rows[0]["payee"].upper()
@@ -70,6 +76,7 @@ def test_preview_ofx():
     prev = preview_ofx(SAMPLE_OFX.encode("utf-8"))
     assert prev["ok"] is True
     assert prev["transactions_found"] == 2
+    assert prev["ledger_balance"] == "2554.33"
 
 
 def test_import_ofx_and_dedupe(tmp_path: Path, monkeypatch):
@@ -89,6 +96,12 @@ def test_import_ofx_and_dedupe(tmp_path: Path, monkeypatch):
     s.commit()
     assert r1.transactions_created == 2
     assert s.query(Transaction).count() == 2
+    assert r1.institution_balance_set is True
+    assert r1.ledger_balance == "2554.33"
+    assert r1.drift is not None
+    assert r1.next_steps
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("2554.33")
 
     r2 = import_ofx(s, account_id=acct.id, file_obj=SAMPLE_OFX.encode("utf-8"), filename="a.ofx")
     s.commit()

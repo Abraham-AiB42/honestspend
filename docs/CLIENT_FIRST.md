@@ -24,9 +24,12 @@
 | Path | Role |
 |------|------|
 | **Import CSV** | Default free path |
+| **Import OFX/QFX** | Quicken-style downloads · FITID dedupe · **LEDGERBAL → Reconcile** |
+| **PDF statements** | Best-effort text extract (prefer CSV/OFX when offered) |
 | **Bank guides** | Login links + download steps (no passwords) |
-| **Inbox folder** | Drop CSVs → `floatpile import-inbox` / daily task |
+| **Inbox folder** | Drop `.csv` / `.ofx` / `.qfx` / `.pdf` → `floatpile import-inbox` / daily task |
 | **Import reminders** | User-chosen cadence: off · daily · weekly · monthly |
+| **Post-import next steps** | Sort charges · Reconcile drift · Home (open-rarely habit) |
 | **BYOK Plaid** | Optional live link with *user’s* keys |
 | **BYOK Grok** | Optional AI categorize with *user’s* xAI key |
 | **Rules categorizer** | Always free, offline |

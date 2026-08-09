@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.10 — OFX ledger balance + post-import next steps
+
+- **LEDGERBAL / AVAILBAL** from OFX/QFX → `institution_balance` for Reconcile
+- Import result includes **drift** (books vs bank) + structured **next_steps**
+- Import page: Sort charges · Reconcile · Home CTAs after OFX import
+- CLIENT_FIRST docs list OFX/PDF/inbox formats
+
 ## 1.0.9 — OFX/QFX bank import
 
 - **OFX / QFX** preview + import (no extra deps) · FITID dedupe

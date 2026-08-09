@@ -340,7 +340,8 @@ public sealed partial class ImportPage : Page
                 var ofxLines = new List<string>
                 {
                     $"OFX/QFX · {JsonUi.Str(ofxRes, "transactions_found")} transactions" +
-                    (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "account_hint")) ? "" : $" · acct {JsonUi.Str(ofxRes, "account_hint")}"),
+                    (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "account_hint")) ? "" : $" · acct {JsonUi.Str(ofxRes, "account_hint")}") +
+                    (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "ledger_balance")) ? "" : $" · ledger ${JsonUi.Str(ofxRes, "ledger_balance")}"),
                     JsonUi.Str(ofxRes, "hint"),
                 };
                 if (ofxRes.TryGetProperty("sample", out var ofxSample) && ofxSample.ValueKind == JsonValueKind.Array)
@@ -383,10 +384,65 @@ public sealed partial class ImportPage : Page
         }
     }
 
+    private void HideNextSteps()
+    {
+        NextStepsPanel.Visibility = Visibility.Collapsed;
+        GoSortBtn.Visibility = Visibility.Collapsed;
+        GoReconcileBtn.Visibility = Visibility.Collapsed;
+        GoHomeBtn.Visibility = Visibility.Collapsed;
+    }
+
+    private void ShowNextSteps(JsonElement res)
+    {
+        HideNextSteps();
+        if (!res.TryGetProperty("next_steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+            return;
+        var show = false;
+        foreach (var st in steps.EnumerateArray())
+        {
+            var action = JsonUi.Str(st, "action");
+            if (action == "review")
+            {
+                GoSortBtn.Visibility = Visibility.Visible;
+                show = true;
+            }
+            else if (action == "reconcile")
+            {
+                GoReconcileBtn.Visibility = Visibility.Visible;
+                show = true;
+            }
+            else if (action is "home" or "hold")
+            {
+                GoHomeBtn.Visibility = Visibility.Visible;
+                show = true;
+            }
+        }
+        NextStepsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void GoSort_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("review");
+    }
+
+    private void GoReconcile_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("reconcile");
+    }
+
+    private void GoHome_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("home");
+    }
+
     private async void ImportCsv_Click(object sender, RoutedEventArgs e)
     {
         ErrorBar.IsOpen = false;
         ResultText.Text = "";
+        HideNextSteps();
         try
         {
             if (AccountBox.SelectedItem is not ComboBoxItem ai || ai.Tag is not int accountId)
@@ -402,9 +458,28 @@ public sealed partial class ImportPage : Page
                 using var stream = await _ofxFile.OpenStreamForReadAsync();
                 var ofxRes = await api.ImportOfxAsync(
                     stream, _ofxFile.Name, accountId, sign, AutoCatBox.IsChecked == true);
-                ResultText.Text =
+                var lines = new List<string>
+                {
                     $"OFX/QFX done · found {Prop(ofxRes, "transactions_found")} · created {Prop(ofxRes, "transactions_created")} · " +
-                    $"skipped {Prop(ofxRes, "skipped_existing")} · categorized {Prop(ofxRes, "categorized")}";
+                    $"skipped {Prop(ofxRes, "skipped_existing")} · categorized {Prop(ofxRes, "categorized")}",
+                };
+                var ledger = Prop(ofxRes, "ledger_balance");
+                if (!string.IsNullOrEmpty(ledger))
+                {
+                    lines.Add(
+                        $"Bank ledger bal ${ledger}" +
+                        (string.IsNullOrEmpty(Prop(ofxRes, "drift")) ? "" : $" · books drift ${Prop(ofxRes, "drift")}") +
+                        (ofxRes.TryGetProperty("institution_balance_set", out var ibs) && ibs.ValueKind == JsonValueKind.True
+                            ? " · set for Reconcile"
+                            : ""));
+                }
+                if (ofxRes.TryGetProperty("next_steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var step in steps.EnumerateArray())
+                        lines.Add($"→ {JsonUi.Str(step, "label")}: {JsonUi.Str(step, "detail")}");
+                }
+                ResultText.Text = string.Join("\n", lines);
+                ShowNextSteps(ofxRes);
                 return;
             }
             if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
@@ -438,6 +513,7 @@ public sealed partial class ImportPage : Page
     {
         ErrorBar.IsOpen = false;
         ResultText.Text = "";
+        HideNextSteps();
         try
         {
             if (_pdfFile is null) throw new InvalidOperationException("Pick a PDF statement first.");

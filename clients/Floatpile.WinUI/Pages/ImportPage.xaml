@@ -75,8 +75,14 @@
                         <Button Content="Import file" Click="ImportCsv_Click" Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Import PDF statement" Click="ImportPdf_Click" />
                     </StackPanel>
+                    <TextBlock x:Name="ResultText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <StackPanel x:Name="NextStepsPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                        <Button x:Name="GoSortBtn" Content="Sort charges" Click="GoSort_Click" Style="{StaticResource AccentButtonStyle}" Visibility="Collapsed" />
+                        <Button x:Name="GoReconcileBtn" Content="Reconcile" Click="GoReconcile_Click" Visibility="Collapsed" />
+                        <Button x:Name="GoHomeBtn" Content="Home" Click="GoHome_Click" Visibility="Collapsed" />
+                    </StackPanel>
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Best: CSV or OFX/QFX from online banking. PDF is best-effort (text statements only)." />
+                        Text="Best: CSV or OFX/QFX from online banking. PDF is best-effort (text statements only). OFX LEDGERBAL sets bank balance for Reconcile." />
                 </StackPanel>
             </Border>
 
@@ -107,7 +113,6 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock x:Name="ResultText" IsTextSelectionEnabled="True" TextWrapping="Wrap" Opacity="0.9" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

@@ -2385,6 +2385,7 @@ async def import_ofx_upload(
             filename=file.filename or "download.ofx",
             auto_categorize=auto_categorize,
             amount_sign=amount_sign,
+            apply_ledger_balance=True,
         )
     except Exception as e:
         raise HTTPException(400, str(e)) from e
@@ -2398,6 +2399,12 @@ async def import_ofx_upload(
         "sample": result.sample,
         "account_hint": result.account_hint,
         "bank_id": result.bank_id,
+        "ledger_balance": result.ledger_balance,
+        "ledger_balance_as_of": result.ledger_balance_as_of,
+        "institution_balance_set": result.institution_balance_set,
+        "books_balance": result.books_balance,
+        "drift": result.drift,
+        "next_steps": result.next_steps,
     }
 
 
