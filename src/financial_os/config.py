@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FOS_", env_file=".env", extra="ignore")
 
-    app_name: str = "LedgerRing"
+    app_name: str = "Floatpile"
     # Seed fake demo accounts only when explicitly requested
     seed_demo: bool = False
     host: str = "127.0.0.1"

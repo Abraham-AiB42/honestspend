@@ -6,9 +6,9 @@
 
 | Priority | Surface | Role |
 |----------|---------|------|
-| **1** | **WinUI 3** (`LedgerRing.WinUI`) | Daily product — Simple + Full books |
+| **1** | **WinUI 3** (`Floatpile.WinUI`) | Daily product — Simple + Full books |
 | **2** | **System tray** (Python process, launched by client) | Hover Safe to spend · toasts · open **WinUI** |
-| **3** | **CLI** (`ledgerring`) | Power users · scripts · automation |
+| **3** | **CLI** (`floatpile`) | Power users · scripts · automation |
 | **4** | **Glance HTML** | Emergency / Mac-Linux-phone **read** shell until native clients exist |
 
 ## Explicit non-goals
@@ -51,7 +51,7 @@ Tray menu opens the **WinUI** EXE (from `winui.path`), not Glance:
 
 | Tray item | CLI / request |
 |-----------|----------------|
-| Open LedgerRing | (home) |
+| Open Floatpile | (home) |
 | Sort charges | `--page review` |
 | Reports | `--page reports` |
 | Settings | `--page settings` |

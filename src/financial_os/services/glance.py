@@ -49,7 +49,7 @@ def build_glance(
     top = alerts[:3]
     return {
         "as_of": as_of.isoformat(),
-        "product": "LedgerRing",
+        "product": "Floatpile",
         "ifpp_scope": ifpp_d.get("ifpp_scope"),
         "profile_id": ifpp_d.get("profile_id"),
         "cash_spendable": ifpp_d["cash_spendable"],

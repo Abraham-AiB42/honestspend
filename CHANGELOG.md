@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6 — Rename: LedgerRing → Floatpile (working alpha)
+
+- **Product name:** **Floatpile** (working alpha; branding may change later)
+- Full rename: docs, CLI (`floatpile`), WinUI project `Floatpile.WinUI`, packaging, tray/tasks
+- Python import path stays `financial_os`; data dir stays `~/.financial-os`
+- Legacy CLI alias `ledgerring` still points at the same entry point
+- See [`docs/BRAND.md`](docs/BRAND.md)
+
 ## 1.0.5 — Freeware money-in + customizable import reminders
 
 - **Policy:** full freeware · optional **BYOK Plaid** · optional **BYOK Grok** · no paid services  
@@ -33,7 +41,7 @@
 
 - **[`docs/CLIENT_FIRST.md`](docs/CLIENT_FIRST.md)** — WinUI is the product; Glance is fallback only  
 - Dream H3: **native multi-platform clients**, never PWA  
-- **Tray:** Open LedgerRing (**desktop**) first; Glance demoted to browser fallback  
+- **Tray:** Open Floatpile (**desktop**) first; Glance demoted to browser fallback  
 - **Settings:** Register / remove Windows scheduled tasks (backup + digest) from the client  
 - About: client-first copy  
 
@@ -80,7 +88,7 @@ See [VERSIONING.md](docs/VERSIONING.md). Not a bureau, not e-file, not payroll.
 
 - Hide **Get started** after first-run (Simple + Full nav)
 - Digest: plain “Sort charges” / “set aside” promo copy
-- CLI: `ledgerring home` (+ `--brief`) for Safe to spend summary
+- CLI: `floatpile home` (+ `--brief`) for Safe to spend summary
 - README oriented to Simple mode + grade-A package path
 
 ## 0.7.0 — Simple mode + wizards (north star)
@@ -160,7 +168,7 @@ Ship bar: `scripts/verify-grade-a.ps1`, package-release one-folder install, Inno
 
 ### Wave P — Glance multi-platform shell
 - **`/glance`** + `web/glance.html` — mobile-first Spendable / rescue / brief UI
-- CLI: `ledgerring glance` (JSON) · `ledgerring glance --open`
+- CLI: `floatpile glance` (JSON) · `floatpile glance --open`
 - `scripts/start-glance.sh` (Mac/Linux) · `scripts/start-glance.ps1` (Windows)
 - INSTALL + CLIENTS: Mac/Linux install path via Glance
 
@@ -169,7 +177,7 @@ Ship bar: `scripts/verify-grade-a.ps1`, package-release one-folder install, Inno
 - **Post-setup backup** on quick setup / complete onboarding
 - `docs/INSTALL.md` — install options (source, zip, Inno)
 - `scripts/package-release.ps1` — WinUI + engine stage + zip
-- `packaging/LedgerRing.iss` — optional Inno Setup installer
+- `packaging/Floatpile.iss` — optional Inno Setup installer
 - Release workflow: attach INSTALL/AUTOMATION notes; README in WinUI artifact
 
 ## 0.4.5 — Automation (Wave F)
@@ -236,7 +244,7 @@ Ship bar: `scripts/verify-grade-a.ps1`, package-release one-folder install, Inno
 
 ## 0.3.1 — WinUI 3 Windows client
 
-- **Native WinUI 3 app** (`clients/LedgerRing.WinUI`) — not Electron/Tauri
+- **Native WinUI 3 app** (`clients/Floatpile.WinUI`) — not Electron/Tauri
 - Pages: Spendable, capital desk, digest, promo clock, Can I buy?, Settings
 - `BackendHost` auto-starts Python engine on `127.0.0.1:7420`
 - `scripts/start-winui.ps1`
@@ -253,7 +261,7 @@ Ship bar: `scripts/verify-grade-a.ps1`, package-release one-folder install, Inno
 
 ## 0.2.0 — product constitution
 
-- LedgerRing branding, open-source freeware positioning
+- Floatpile branding, open-source freeware positioning
 - Default safety buffer $1,000; never-neg checking
 - OSS LICENSE (MIT) + CONTRIBUTING
 

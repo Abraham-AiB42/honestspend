@@ -59,7 +59,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     write_pid(pid_file)
 
     state: dict = {
-        "title": "LedgerRing — starting…",
+        "title": "Floatpile — starting…",
         "last_critical_key": None,
         "offline_notified": False,
     }
@@ -86,18 +86,18 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                     candidates.append(Path(line[0].strip()))
         except Exception:
             pass
-        env_exe = os.environ.get("LEDGERRING_WINUI")
+        env_exe = os.environ.get("FLOATPILE_WINUI")
         if env_exe:
             candidates.insert(0, Path(env_exe))
         cwd = Path.cwd()
         candidates += [
             cwd / "winui.path",
             cwd.parent / "winui.path",
-            cwd / "LedgerRing.WinUI.exe",
-            cwd.parent / "LedgerRing.WinUI.exe",
+            cwd / "Floatpile.WinUI.exe",
+            cwd.parent / "Floatpile.WinUI.exe",
         ]
         if cwd.name.lower() == "engine":
-            candidates.insert(0, cwd.parent / "LedgerRing.WinUI.exe")
+            candidates.insert(0, cwd.parent / "Floatpile.WinUI.exe")
         resolved: list[Path] = []
         for c in candidates:
             try:
@@ -173,7 +173,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     def refresh_now(icon=None, item=None):
         data = _get("/api/ifpp")
         if not data:
-            state["title"] = "LedgerRing — server offline\nStart: financial-os serve"
+            state["title"] = "Floatpile — server offline\nStart: financial-os serve"
             if icon:
                 icon.title = state["title"]
                 try:
@@ -181,7 +181,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                 except Exception:
                     pass
                 if not state["offline_notified"]:
-                    notify(icon, "LedgerRing", "Engine offline on :7420")
+                    notify(icon, "Floatpile", "Engine offline on :7420")
                     state["offline_notified"] = True
             return
 
@@ -222,12 +222,12 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                     msg = critical[0].get("message", "Critical alert")
                     if len(critical) > 1:
                         msg += f" (+{len(critical) - 1} more)"
-                    notify(icon, "LedgerRing · action needed", msg)
+                    notify(icon, "Floatpile · action needed", msg)
             else:
                 state["last_critical_key"] = None
                 if warn and item is not None:
                     # only on manual refresh for warnings
-                    notify(icon, "LedgerRing", warn[0].get("message", "Warning"))
+                    notify(icon, "Floatpile", warn[0].get("message", "Warning"))
 
     def on_exit(icon, item):
         clear_pid(pid_file)
@@ -239,7 +239,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             time.sleep(poll_seconds)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Open LedgerRing (desktop)", open_desktop, default=True),
+        pystray.MenuItem("Open Floatpile (desktop)", open_desktop, default=True),
         pystray.MenuItem("Sort charges", open_sort_charges),
         pystray.MenuItem("Reports", open_reports),
         pystray.MenuItem("Settings", open_settings),
@@ -253,7 +253,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
     icon = pystray.Icon(
         "lederring",
         make_icon_image(),
-        "LedgerRing",
+        "Floatpile",
         menu,
     )
 
@@ -263,6 +263,6 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         t = threading.Thread(target=poll_loop, args=(icon,), daemon=True)
         t.start()
 
-    print(f"LedgerRing tray — polling {_base()}/api/ifpp + digest")
+    print(f"Floatpile tray — polling {_base()}/api/ifpp + digest")
     print("Hover for Safe to spend. Critical alerts toast once.")
     icon.run(setup=setup)

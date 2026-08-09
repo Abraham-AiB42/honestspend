@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Floatpile_WinUI.Pages.ReportsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="720">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Reports" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Cash flow by who — not a full accounting suite. Full books only." />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Export cashflow CSV" Click="Export_Click" />
+                    <Button Content="Export debt CSV" Click="ExportDebt_Click" />
+                    <Button Content="Refresh" Click="Refresh_Click" />
+                </StackPanel>
+            </Grid>
+
+            <ComboBox x:Name="DaysBox" Header="Window" SelectedIndex="0" MinWidth="200">
+                <ComboBoxItem Content="Last 30 days" Tag="30" IsSelected="True" />
+                <ComboBoxItem Content="Last 90 days" Tag="90" />
+                <ComboBoxItem Content="Last 365 days" Tag="365" />
+            </ComboBox>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="TitleText" FontWeight="SemiBold" FontSize="18" />
+                    <TextBlock x:Name="TotalsText" Opacity="0.9" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="EntityList" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Fee drag (year)" />
+                    <TextBlock x:Name="FeeText" Opacity="0.9" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Debt snapshot" />
+                    <TextBlock x:Name="DebtTotals" Opacity="0.9" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="DebtList" />
+                </StackPanel>
+            </Border>
+
+            <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="True" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

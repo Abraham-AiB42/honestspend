@@ -1,4 +1,4 @@
-# LedgerRing tray (server must already be running)
+# Floatpile tray (server must already be running)
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 & .\.venv\Scripts\Activate.ps1

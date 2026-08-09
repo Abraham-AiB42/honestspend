@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="Floatpile_WinUI.Pages.PlaidPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="760">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Bank connect (optional BYOK Plaid)" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Free core path: Import CSV/OFX. Plaid is optional with your own keys (we never bill). Link opens in the browser." />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
+            </Grid>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Status" />
+                    <TextBlock x:Name="StatusText" TextWrapping="Wrap" />
+                    <TextBlock x:Name="HintText" Opacity="0.7" TextWrapping="Wrap" />
+                    <TextBlock x:Name="LinkUrlText" Opacity="0.65" FontSize="12" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Connect" />
+            <ComboBox x:Name="ProfileBox" Header="Entity for new connection" HorizontalAlignment="Stretch" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Open Plaid Link in browser" Click="OpenLink_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="Sandbox one-click" Click="Sandbox_Click" />
+            </StackPanel>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Paste public_token (advanced)" />
+            <TextBox x:Name="PublicTokenBox" Header="public_token from Link" PlaceholderText="public-sandbox-…" />
+            <TextBox x:Name="InstNameBox" Header="Institution name (optional)" />
+            <Button Content="Exchange token" Click="Exchange_Click" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Linked items" />
+            <ListView x:Name="ItemList" SelectionMode="None">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1" CornerRadius="8">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                                    <TextBlock Opacity="0.7" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="6">
+                                    <Button Content="Sync now" Tag="{Binding Id}" Click="Sync_Click" />
+                                    <Button Content="Disconnect" Tag="{Binding Id}" Click="Disconnect_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <TextBlock x:Name="MsgText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

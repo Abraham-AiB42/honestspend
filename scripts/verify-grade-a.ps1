@@ -54,11 +54,11 @@ Step "private-name gate" {
 Step "version sync" {
     $init = Get-Content (Join-Path $Root "src\financial_os\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '1\.0\.5') { throw "__init__.py not 1.0.5" }
-    if ($pyproj -notmatch '1\.0\.5') { throw "pyproject.toml not 1.0.5" }
-    $iss = Get-Content (Join-Path $Root "packaging\LedgerRing.iss") -Raw
-    if ($iss -notmatch '1\.0\.5') { throw "LedgerRing.iss not 1.0.5" }
-    Write-Host "version 1.0.5 consistent"
+    if ($init -notmatch '1\.0\.6') { throw "__init__.py not 1.0.6" }
+    if ($pyproj -notmatch '1\.0\.6') { throw "pyproject.toml not 1.0.6" }
+    $iss = Get-Content (Join-Path $Root "packaging\Floatpile.iss") -Raw
+    if ($iss -notmatch '1\.0\.6') { throw "Floatpile.iss not 1.0.6" }
+    Write-Host "version 1.0.6 consistent"
 }
 
 Step "north-star surface files" {
@@ -67,11 +67,11 @@ Step "north-star surface files" {
         "src\financial_os\services\wealth_basics.py",
         "docs\SIMPLE_MODE.md",
         "docs\RELEASE_0.7.0.md",
-        "clients\LedgerRing.WinUI\Pages\FirstRunPage.xaml",
-        "clients\LedgerRing.WinUI\Pages\AddHubPage.xaml",
-        "clients\LedgerRing.WinUI\Pages\MoneyWizardPage.xaml",
-        "clients\LedgerRing.WinUI\Helpers\UiCopy.cs",
-        "clients\LedgerRing.WinUI\Pages\ScenariosPage.xaml",
+        "clients\Floatpile.WinUI\Pages\FirstRunPage.xaml",
+        "clients\Floatpile.WinUI\Pages\AddHubPage.xaml",
+        "clients\Floatpile.WinUI\Pages\MoneyWizardPage.xaml",
+        "clients\Floatpile.WinUI\Helpers\UiCopy.cs",
+        "clients\Floatpile.WinUI\Pages\ScenariosPage.xaml",
         "scripts\_northstar_e2e.py",
         "scripts\_dogfood_e2e.py",
         "scripts\package-release.ps1",

@@ -1,11 +1,11 @@
-# LedgerRing clients
+# Floatpile clients
 
 ## Windows (primary) — WinUI 3
 
 Native Fluent Design app. **Not** a WebView / Electron / Tauri wrapper.
 
 ```
-clients/LedgerRing.WinUI/
+clients/Floatpile.WinUI/
   Services/   LedgerApiClient, BackendHost, TrayHost, AppConfig
   Pages/      Spendable … Banks, Data, Users, Tax, Setup, Credit, …
   Helpers/    JsonUi
@@ -18,11 +18,11 @@ clients/LedgerRing.WinUI/
 .\scripts\start-winui.ps1
 
 # Or:
-cd clients\LedgerRing.WinUI
+cd clients\Floatpile.WinUI
 dotnet run -c Debug -p:Platform=x64
 ```
 
-Open `LedgerRing.WinUI.csproj` in Visual Studio for designer/debug.
+Open `Floatpile.WinUI.csproj` in Visual Studio for designer/debug.
 
 The app auto-starts `python -m financial_os.cli serve` if nothing is on `:7420` (expects repo-root `.venv`).  
 Optional: **Settings → Start system tray with app**.
@@ -32,17 +32,17 @@ Optional: **Settings → Start system tray with app**.
 ```powershell
 # Full distributable: UI + engine + zip
 .\scripts\package-release.ps1
-# → dist\LedgerRing-Windows-x64\  and  .zip
+# → dist\Floatpile-Windows-x64\  and  .zip
 
 # UI only + optional engine
 .\scripts\publish-winui.ps1
 .\scripts\prepare-engine-bundle.ps1
 ```
 
-See [docs/INSTALL.md](../docs/INSTALL.md). Optional Inno: `packaging/LedgerRing.iss`.
+See [docs/INSTALL.md](../docs/INSTALL.md). Optional Inno: `packaging/Floatpile.iss`.
 
 Settings: **Launch at Windows logon** (tray-only), **Start tray**, **data dir / OneDrive**, minimized start.  
-CLI: `LedgerRing.WinUI.exe --tray-only` · `--minimized` · `--tray`  
+CLI: `Floatpile.WinUI.exe --tray-only` · `--minimized` · `--tray`  
 Data page: **auto-backup schedule** (engine loop while `serve` is running).
 
 Releases: push a `v*` tag → GitHub Actions builds WinUI zip + Python wheels (`.github/workflows/release.yml`).

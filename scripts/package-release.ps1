@@ -1,9 +1,9 @@
 # Build a distributable Windows folder + zip:
-#   dist/LedgerRing-Windows-x64/
-#     LedgerRing.WinUI.exe + deps
+#   dist/Floatpile-Windows-x64/
+#     Floatpile.WinUI.exe + deps
 #     engine/   (Python venv + package)
 #     README-INSTALL.txt
-#   dist/LedgerRing-Windows-x64.zip
+#   dist/Floatpile-Windows-x64.zip
 #
 # Usage (from repo root):
 #   .\scripts\package-release.ps1
@@ -19,11 +19,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$Stage = Join-Path $Root "dist\LedgerRing-Windows-x64"
-$WinUiOut = Join-Path $Root "dist\LedgerRing.WinUI-win-x64"
-$Zip = Join-Path $Root "dist\LedgerRing-Windows-x64.zip"
+$Stage = Join-Path $Root "dist\Floatpile-Windows-x64"
+$WinUiOut = Join-Path $Root "dist\Floatpile.WinUI-win-x64"
+$Zip = Join-Path $Root "dist\Floatpile-Windows-x64.zip"
 
-Write-Host "=== LedgerRing package-release ($Configuration) ===" -ForegroundColor Cyan
+Write-Host "=== Floatpile package-release ($Configuration) ===" -ForegroundColor Cyan
 
 # 1) Publish WinUI
 & (Join-Path $Root "scripts\publish-winui.ps1") -Configuration $Configuration
@@ -45,12 +45,12 @@ if (-not $SkipEngine) {
 
 # 4) Install notes
 $notes = @"
-LedgerRing — Windows package (v0.7 Simple mode)
+Floatpile — Windows package (v0.7 Simple mode)
 ================================================
 
 ONE-CLICK USE
 1. Unzip this folder anywhere (keep engine\ next to the EXE)
-2. Run LedgerRing.WinUI.exe
+2. Run Floatpile.WinUI.exe
 3. 2-minute Get started → Safe to spend on Home
 4. Optional: Add → Link bank, or Import CSV
 
@@ -91,6 +91,6 @@ if (-not $SkipZip) {
 
 Write-Host ""
 Write-Host "Stage folder: $Stage" -ForegroundColor Green
-Write-Host "Run: $Stage\LedgerRing.WinUI.exe"
-Write-Host "Inno Setup (optional): compile packaging\LedgerRing.iss after this step."
+Write-Host "Run: $Stage\Floatpile.WinUI.exe"
+Write-Host "Inno Setup (optional): compile packaging\Floatpile.iss after this step."
 Write-Host "Done."

@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ledgerring"
-version = "1.0.5"
-description = "LedgerRing — open-source liquidity cockpit for small business owners (IFPP)"
+name = "floatpile"
+version = "1.0.6"
+description = "Floatpile — open-source liquidity cockpit (safe to spend · multi-entity · local books)"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
-authors = [{ name = "LedgerRing contributors" }]
+authors = [{ name = "Floatpile contributors" }]
 keywords = ["finance", "budget", "small-business", "s-corp", "liquidity", "opensource"]
 classifiers = [
   "License :: OSI Approved :: MIT License",
@@ -39,7 +39,9 @@ dev = [
 ]
 
 [project.scripts]
+floatpile = "financial_os.cli:main"
 financial-os = "financial_os.cli:main"
+# legacy alias (pre-Floatpile)
 ledgerring = "financial_os.cli:main"
 
 [tool.setuptools.packages.find]

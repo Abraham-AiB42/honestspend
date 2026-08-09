@@ -1,4 +1,4 @@
-"""Local SQLite backup / restore for LedgerRing data."""
+"""Local SQLite backup / restore for Floatpile data."""
 
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def create_backup(*, as_zip: bool = True, note: str | None = None) -> dict[str, 
         with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.write(tmp, arcname="financial_os.db")
             meta = (
-                f"LedgerRing backup\n"
+                f"Floatpile backup\n"
                 f"created_utc={datetime.now(timezone.utc).isoformat()}\n"
                 f"source={src}\n"
                 f"note={note or ''}\n"
@@ -137,7 +137,7 @@ def zip_stream_from_live_db() -> BytesIO:
         zf.write(src, arcname="financial_os.db")
         zf.writestr(
             "BACKUP.txt",
-            f"LedgerRing live snapshot\ncreated_utc={datetime.now(timezone.utc).isoformat()}\n",
+            f"Floatpile live snapshot\ncreated_utc={datetime.now(timezone.utc).isoformat()}\n",
         )
     buf.seek(0)
     return buf
@@ -198,7 +198,7 @@ def restore_from_backup(name: str) -> dict[str, Any]:
         "next_db": str(next_db),
         "safety_backup": safety["name"],
         "hint": (
-            "Restore staged. Restart the LedgerRing engine (or WinUI) to apply. "
+            "Restore staged. Restart the Floatpile engine (or WinUI) to apply. "
             "Writes continue on the old DB until restart."
         ),
     }

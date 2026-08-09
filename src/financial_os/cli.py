@@ -41,7 +41,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         finally:
             session.close()
     else:
-        print("LedgerRing ready — complete setup in the app (no spreadsheet required).")
+        print("Floatpile ready — complete setup in the app (no spreadsheet required).")
 
     print(f"Open http://{args.host or settings.host}:{args.port or settings.port}")
     uvicorn.run(
@@ -240,7 +240,7 @@ def cmd_token(args: argparse.Namespace) -> int:
 def cmd_version(_args: argparse.Namespace) -> int:
     from financial_os import __version__
 
-    print(f"LedgerRing {__version__}")
+    print(f"Floatpile {__version__}")
     return 0
 
 
@@ -274,7 +274,7 @@ def cmd_glance(args: argparse.Namespace) -> int:
         r.raise_for_status()
     except Exception as e:
         print(f"glance failed: {e}", file=sys.stderr)
-        print(f"Is the engine up? ledgerring serve → {base}", file=sys.stderr)
+        print(f"Is the engine up? floatpile serve → {base}", file=sys.stderr)
         return 1
     print(json.dumps(r.json(), indent=2))
     return 0
@@ -302,7 +302,7 @@ def cmd_home(args: argparse.Namespace) -> int:
         r.raise_for_status()
     except Exception as e:
         print(f"home failed: {e}", file=sys.stderr)
-        print(f"Is the engine up? ledgerring serve → {base}", file=sys.stderr)
+        print(f"Is the engine up? floatpile serve → {base}", file=sys.stderr)
         return 1
     body = r.json()
     if args.brief:
@@ -320,7 +320,7 @@ def cmd_home(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="ledgerring", description="LedgerRing liquidity cockpit")
+    parser = argparse.ArgumentParser(prog="floatpile", description="Floatpile liquidity cockpit")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init-db", help="Create DB and seed tax COA")

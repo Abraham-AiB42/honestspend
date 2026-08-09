@@ -11,7 +11,7 @@ $Fail = 0
 function Ok($m) { Write-Host "[ok] $m" -ForegroundColor Green }
 function Bad($m) { Write-Host "[!!] $m" -ForegroundColor Red; $script:Fail++ }
 
-Write-Host "=== LedgerRing logon / automation smoke ===" -ForegroundColor Cyan
+Write-Host "=== Floatpile logon / automation smoke ===" -ForegroundColor Cyan
 Write-Host "Root: $Root"
 
 # 1. version / health CLI
@@ -32,16 +32,16 @@ if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 2) { Ok "digest (exit $LASTEXITCOD
 if ($LASTEXITCODE -eq 0) { Ok "engine healthy" } else { Write-Host "[--] engine offline (start WinUI or serve)" -ForegroundColor Yellow }
 
 # 5. scheduled tasks registered?
-foreach ($t in @("LedgerRing-AutoBackup", "LedgerRing-Digest")) {
+foreach ($t in @("Floatpile-AutoBackup", "Floatpile-Digest")) {
   $st = Get-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue
   if ($st) { Ok "task $t ($($st.State))" } else { Write-Host "[--] task $t not registered (run register-tasks.ps1)" -ForegroundColor Yellow }
 }
 
 # 6. logon Run key
-$run = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "LedgerRing" -ErrorAction SilentlyContinue
+$run = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Floatpile" -ErrorAction SilentlyContinue
 if ($run) {
-  Ok "HKCU Run LedgerRing = $($run.LedgerRing)"
-  if ($run.LedgerRing -match "tray-only") { Ok "logon uses --tray-only" }
+  Ok "HKCU Run Floatpile = $($run.Floatpile)"
+  if ($run.Floatpile -match "tray-only") { Ok "logon uses --tray-only" }
   else { Write-Host "[--] logon command missing --tray-only (enable in Settings)" -ForegroundColor Yellow }
 } else {
   Write-Host "[--] logon launch not enabled (WinUI Settings)" -ForegroundColor Yellow

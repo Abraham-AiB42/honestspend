@@ -1,4 +1,4 @@
-# LedgerRing — Product Constitution
+# Floatpile — Product Constitution
 
 Locked decisions from product discovery (2026). This is the source of truth for roadmap and defaults.
 
@@ -6,7 +6,7 @@ Locked decisions from product discovery (2026). This is the source of truth for 
 
 ## One-liner (proposed — refine later)
 
-> **LedgerRing is the open-source liquidity cockpit for small business owners who refuse to go negative, pay dumb fees, or waste money on unnecessary interest.**
+> **Floatpile is the open-source liquidity cockpit for small business owners who refuse to go negative, pay dumb fees, or waste money on unnecessary interest.**
 
 *(Owner had no preferred one-liner yet; this matches locked priorities. Revisit anytime.)*
 

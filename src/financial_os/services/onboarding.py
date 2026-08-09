@@ -33,7 +33,7 @@ def get_onboarding_status(session: Session) -> OnboardingStatus:
         has_credit_account=credit,
         has_recurring=recurring,
         account_count=len(accounts),
-        product_name=getattr(settings, "product_name", None) or "LedgerRing",
+        product_name=getattr(settings, "product_name", None) or "Floatpile",
     )
 
 

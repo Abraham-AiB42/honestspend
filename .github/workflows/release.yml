@@ -40,9 +40,9 @@ jobs:
       - name: Publish WinUI (win-x64 self-contained)
         shell: pwsh
         run: |
-          $Out = Join-Path $env:GITHUB_WORKSPACE "dist/LedgerRing.WinUI-win-x64"
+          $Out = Join-Path $env:GITHUB_WORKSPACE "dist/Floatpile.WinUI-win-x64"
           New-Item -ItemType Directory -Force -Path $Out | Out-Null
-          dotnet publish clients/LedgerRing.WinUI/LedgerRing.WinUI.csproj `
+          dotnet publish clients/Floatpile.WinUI/Floatpile.WinUI.csproj `
             -c Release `
             -p:Platform=x64 `
             -p:RuntimeIdentifier=win-x64 `
@@ -52,12 +52,12 @@ jobs:
       - name: Stage release folder notes
         shell: pwsh
         run: |
-          $Out = Join-Path $env:GITHUB_WORKSPACE "dist/LedgerRing.WinUI-win-x64"
+          $Out = Join-Path $env:GITHUB_WORKSPACE "dist/Floatpile.WinUI-win-x64"
           Copy-Item docs/INSTALL.md $Out -Force -ErrorAction SilentlyContinue
           Copy-Item LICENSE $Out -Force -ErrorAction SilentlyContinue
           Copy-Item CHANGELOG.md $Out -Force -ErrorAction SilentlyContinue
           @"
-          LedgerRing WinUI (self-contained)
+          Floatpile WinUI (self-contained)
           ---------------------------------
           This zip is the UI only. For a full offline package with Python engine:
             run scripts/package-release.ps1 on a dev machine, or
@@ -68,15 +68,15 @@ jobs:
       - name: Zip WinUI
         shell: pwsh
         run: |
-          $Out = Join-Path $env:GITHUB_WORKSPACE "dist/LedgerRing.WinUI-win-x64"
-          $Zip = Join-Path $env:GITHUB_WORKSPACE "dist/LedgerRing.WinUI-win-x64.zip"
+          $Out = Join-Path $env:GITHUB_WORKSPACE "dist/Floatpile.WinUI-win-x64"
+          $Zip = Join-Path $env:GITHUB_WORKSPACE "dist/Floatpile.WinUI-win-x64.zip"
           if (Test-Path $Zip) { Remove-Item $Zip -Force }
           Compress-Archive -Path (Join-Path $Out "*") -DestinationPath $Zip
       - name: Upload WinUI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LedgerRing.WinUI-win-x64
-          path: dist/LedgerRing.WinUI-win-x64.zip
+          name: Floatpile.WinUI-win-x64
+          path: dist/Floatpile.WinUI-win-x64.zip
 
   python-sdist:
     needs: python-test
@@ -93,7 +93,7 @@ jobs:
       - name: Upload Python dist
         uses: actions/upload-artifact@v4
         with:
-          name: LedgerRing-python-dist
+          name: Floatpile-python-dist
           path: dist/*
 
   github-release:
@@ -112,8 +112,8 @@ jobs:
           generate_release_notes: true
           body_path: CHANGELOG.md
           files: |
-            artifacts/LedgerRing.WinUI-win-x64/LedgerRing.WinUI-win-x64.zip
-            artifacts/LedgerRing-python-dist/*
+            artifacts/Floatpile.WinUI-win-x64/Floatpile.WinUI-win-x64.zip
+            artifacts/Floatpile-python-dist/*
             docs/INSTALL.md
             docs/AUTOMATION.md
         env:

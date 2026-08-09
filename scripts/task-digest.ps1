@@ -1,4 +1,4 @@
-# LedgerRing — scheduled digest (exit 2 if critical — for monitoring)
+# Floatpile — scheduled digest (exit 2 if critical — for monitoring)
 $ErrorActionPreference = "Continue"
 $Root = Split-Path -Parent $PSScriptRoot
 if (-not (Test-Path (Join-Path $Root "src\financial_os"))) {

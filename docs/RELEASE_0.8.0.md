@@ -1,4 +1,4 @@
-# LedgerRing v0.8.0 — Dream H1 (live books + month-close)
+# Floatpile v0.8.0 — Dream H1 (live books + month-close)
 
 First vertical slice of [`DREAM_ROADMAP.md`](./DREAM_ROADMAP.md) H1.
 

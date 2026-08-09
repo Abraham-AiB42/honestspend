@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LedgerRing — Spendable Now</title>
+  <title>Floatpile — Spendable Now</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="banner" style="background:#2a3a4a;color:#e8f0f5;padding:0.6rem 1rem;font-size:0.9rem;">
-    <strong>Primary client is LedgerRing WinUI</strong> (native Windows).
+    <strong>Primary client is Floatpile WinUI</strong> (native Windows).
     Mac/Linux/phone: <a href="/glance" style="color:#7fd4c4">Glance</a> ·
     Plaid Link: <a href="/static/plaid-link.html" style="color:#7fd4c4">/static/plaid-link.html</a>.
   </div>
@@ -18,7 +18,7 @@
       <div class="brand onboard-brand">
         <span class="ring">◎</span>
         <div>
-          <h1>LedgerRing</h1>
+          <h1>Floatpile</h1>
           <p class="tag">Your money OS — cash, credit float, books, tax maps</p>
         </div>
       </div>
@@ -57,7 +57,7 @@
           <label>Promo end <input id="ob-card-promo-end" type="date" /></label>
         </div>
         <div class="form-actions wide">
-          <button type="submit" class="primary">Start LedgerRing</button>
+          <button type="submit" class="primary">Start Floatpile</button>
           <button type="button" id="ob-skip" class="ghost">Skip — I'll set up manually</button>
         </div>
       </form>
@@ -69,7 +69,7 @@
     <div class="brand">
       <span class="ring">◎</span>
       <div>
-        <h1 id="product-title">LedgerRing</h1>
+        <h1 id="product-title">Floatpile</h1>
         <p class="tag">Never neg checking · 0% float OK · No dumb fees/interest</p>
       </div>
     </div>
@@ -452,7 +452,7 @@
         <h2>Why no Credit Karma / bureau link?</h2>
         <p class="fine" id="credit-api-msg">
           Credit Karma and Equifax / Experian / TransUnion do not provide consumer APIs for apps like this.
-          LedgerRing builds payoff plans and an <strong>educational</strong> score from debts you track here
+          Floatpile builds payoff plans and an <strong>educational</strong> score from debts you track here
           (balances, APR, 0% promos, limits, opened dates) plus history you enter.
         </p>
       </div>
@@ -477,7 +477,7 @@
         <h2>Payoff strategy + opportunity cost</h2>
         <p class="fine">
           If <strong>high-yield savings pays 6%</strong> and your <strong>mortgage is 2.625%</strong>, extra mortgage payments
-          usually lose money — keep cash earning. LedgerRing uses your highest cash APY (or a manual hurdle)
+          usually lose money — keep cash earning. Floatpile uses your highest cash APY (or a manual hurdle)
           so cheap debt stays on <em>minimum only</em>; extra goes to high-APR debt or stays in yield.
         </p>
         <form id="debt-form" class="form">
@@ -553,7 +553,7 @@
     <!-- CONNECT (primary data in) -->
     <section id="tab-connect" class="tab-panel">
       <div class="card">
-        <h2>Bring money data into LedgerRing</h2>
+        <h2>Bring money data into Floatpile</h2>
         <p class="fine">This product is self-contained. Feed it via bank link or CSV — not a spreadsheet workflow.</p>
       </div>
       <div class="card">
@@ -585,7 +585,7 @@
       </div>
       <div class="card muted-card">
         <h2>Legacy one-time migration</h2>
-        <p class="fine">Optional: if you have an old personal budget spreadsheet, you can migrate history once. Day-to-day use is entirely in LedgerRing.</p>
+        <p class="fine">Optional: if you have an old personal budget spreadsheet, you can migrate history once. Day-to-day use is entirely in Floatpile.</p>
         <details>
           <summary>Show migration tools</summary>
           <form id="import-path-form" class="form" style="margin-top:0.75rem">
@@ -686,7 +686,7 @@
       </div>
       <div class="card">
         <h2>Product</h2>
-        <p class="fine">LedgerRing is open-source freeware. Data lives in local SQLite (<code id="data-path-hint">~/.financial-os</code>). Local backup only by default.</p>
+        <p class="fine">Floatpile is open-source freeware. Data lives in local SQLite (<code id="data-path-hint">~/.financial-os</code>). Local backup only by default.</p>
         <button type="button" id="reset-onboard" class="ghost">Show setup wizard again</button>
       </div>
       <div class="card">
@@ -719,7 +719,7 @@
   </main>
 
   <footer>
-    <span>LedgerRing · local · multi-entity · interest-free purchasing power</span>
+    <span>Floatpile · local · multi-entity · interest-free purchasing power</span>
     <a href="/docs" target="_blank">API</a>
   </footer>
   <script src="/static/app.js"></script>

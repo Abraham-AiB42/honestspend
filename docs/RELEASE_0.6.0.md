@@ -1,4 +1,4 @@
-# LedgerRing v0.6.0 — release notes
+# Floatpile v0.6.0 — release notes
 
 Open-source freeware liquidity cockpit. Local-first Python engine + WinUI (Windows) + Glance (Mac/Linux/phone).
 
@@ -9,7 +9,7 @@ Open-source freeware liquidity cockpit. Local-first Python engine + WinUI (Windo
 3. **Books quality** — void, transfer match, payment match, import presets, simulate  
 4. **Multi-user** — second user forces `X-API-Key`; roles + audit  
 5. **Encrypted backups** — AES-256-GCM `.lrenc` to any folder (OneDrive/etc.)  
-6. **Glance** — `/glance` UI + `ledgerring glance` for non-Windows clients  
+6. **Glance** — `/glance` UI + `floatpile glance` for non-Windows clients  
 7. **Schema v9** — migrations applied on engine start  
 
 ## Verify

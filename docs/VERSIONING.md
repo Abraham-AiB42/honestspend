@@ -1,6 +1,6 @@
 # Versioning policy (honest pre-1.0)
 
-LedgerRing uses **two rulers**. Do not confuse them.
+Floatpile uses **two rulers**. Do not confuse them.
 
 ## 1. Feature tags (git / `__version__`)
 

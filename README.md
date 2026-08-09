@@ -1,4 +1,4 @@
-# LedgerRing
+# Floatpile
 
 **Open-source freeware** liquidity cockpit — ridiculously powerful engine, **stupid-simple** daily UI.
 
@@ -31,7 +31,7 @@ Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple: [`docs/SIM
 # Grade-A bar + one-folder package
 .\scripts\verify-grade-a.ps1
 .\scripts\package-release.ps1
-# → dist\LedgerRing-Windows-x64\LedgerRing.WinUI.exe  (+ engine\)
+# → dist\Floatpile-Windows-x64\Floatpile.WinUI.exe  (+ engine\)
 ```
 
 Install: [`docs/INSTALL.md`](docs/INSTALL.md)
@@ -41,8 +41,8 @@ Install: [`docs/INSTALL.md`](docs/INSTALL.md)
 ```bash
 ./scripts/start-glance.sh
 # http://127.0.0.1:7420/glance
-ledgerring glance --open
-ledgerring home --brief    # Safe to spend + Do this next
+floatpile glance --open
+floatpile home --brief    # Safe to spend + Do this next
 ```
 
 ## Engine quick start
@@ -52,7 +52,7 @@ python -m venv .venv
 # activate, then:
 pip install -e ".[dev]"
 python -m financial_os.cli serve
-# or: ledgerring serve
+# or: floatpile serve
 ```
 
 1. WinUI **Get started** (~2 min) or API first-run  

@@ -1,4 +1,4 @@
-# Register Windows Task Scheduler jobs for LedgerRing automation.
+# Register Windows Task Scheduler jobs for Floatpile automation.
 # Run once (no admin required for current-user tasks).
 #
 # Usage:
@@ -20,8 +20,8 @@ if (-not (Test-Path (Join-Path $Root "src\financial_os"))) {
 
 $BackupScript = Join-Path $Root "scripts\task-auto-backup.ps1"
 $DigestScript = Join-Path $Root "scripts\task-digest.ps1"
-$TaskBackup = "LedgerRing-AutoBackup"
-$TaskDigest = "LedgerRing-Digest"
+$TaskBackup = "Floatpile-AutoBackup"
+$TaskDigest = "Floatpile-Digest"
 
 function Remove-LrTask([string]$Name) {
   $existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
@@ -34,6 +34,9 @@ function Remove-LrTask([string]$Name) {
 if ($Uninstall) {
   Remove-LrTask $TaskBackup
   Remove-LrTask $TaskDigest
+  # legacy names (pre-Floatpile / LedgerRing era)
+  Remove-LrTask "LedgerRing-AutoBackup"
+  Remove-LrTask "LedgerRing-Digest"
   Write-Host "Done (uninstalled)."
   exit 0
 }
@@ -50,7 +53,7 @@ $triggerB = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours($Bac
 $settingsB = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 $principalB = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskBackup -Action $actionB -Trigger $triggerB -Settings $settingsB -Principal $principalB `
-  -Description "LedgerRing local SQLite auto-backup (respects schedule / force via env)" | Out-Null
+  -Description "Floatpile local SQLite auto-backup (respects schedule / force via env)" | Out-Null
 Write-Host "Registered: $TaskBackup (daily ${BackupHour}:00)"
 
 # --- Daily digest ---
@@ -60,7 +63,7 @@ $triggerD = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours($Dig
 $settingsD = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 $principalD = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 Register-ScheduledTask -TaskName $TaskDigest -Action $actionD -Trigger $triggerD -Settings $settingsD -Principal $principalD `
-  -Description "LedgerRing daily digest (exit 2 if critical); may start engine if offline" | Out-Null
+  -Description "Floatpile daily digest (exit 2 if critical); may start engine if offline" | Out-Null
 Write-Host "Registered: $TaskDigest (daily ${DigestHour}:00)"
 
 Write-Host ""

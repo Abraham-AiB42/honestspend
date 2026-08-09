@@ -1,4 +1,4 @@
-# LedgerRing — scheduled auto-backup (run by Task Scheduler)
+# Floatpile — scheduled auto-backup (run by Task Scheduler)
 # Ensures data_dir backups; does not require UI.
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot

@@ -1,6 +1,6 @@
-# Contributing to LedgerRing
+# Contributing to Floatpile
 
-LedgerRing is **open-source freeware** for small business owners and anyone who wants a liquidity cockpit (not an investment app).
+Floatpile is **open-source freeware** for small business owners and anyone who wants a liquidity cockpit (not an investment app).
 
 ## Product north star
 

@@ -1,5 +1,5 @@
 services:
-  ledgerring:
+  floatpile:
     build: .
     ports:
       - "7420:7420"
@@ -17,8 +17,8 @@ services:
       # FOS_PLAID_SECRET: ""
       # FOS_PLAID_ENV: sandbox
     volumes:
-      - ledgerring-data:/data
+      - floatpile-data:/data
     restart: unless-stopped
 
 volumes:
-  ledgerring-data:
+  floatpile-data:

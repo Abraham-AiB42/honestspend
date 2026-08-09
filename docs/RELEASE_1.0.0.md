@@ -1,4 +1,4 @@
-# LedgerRing v1.0.0 — Liquidity OS
+# Floatpile v1.0.0 — Liquidity OS
 
 **Ridiculously powerful engine · stupid-simple daily UI · local-first freeware.**
 
@@ -37,7 +37,7 @@
 ```powershell
 .\scripts\verify-grade-a.ps1
 .\scripts\package-release.ps1
-# Run: dist\LedgerRing-Windows-x64\LedgerRing.WinUI.exe
+# Run: dist\Floatpile-Windows-x64\Floatpile.WinUI.exe
 # Keep engine\ next to the EXE
 ```
 

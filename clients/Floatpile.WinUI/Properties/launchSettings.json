@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Floatpile.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Floatpile.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

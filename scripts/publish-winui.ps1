@@ -1,4 +1,4 @@
-# Publish LedgerRing WinUI (self-contained x64) for sideload / local install.
+# Publish Floatpile WinUI (self-contained x64) for sideload / local install.
 # Requires: .NET 10 SDK, Windows App SDK workloads as used by the project.
 #
 # Usage (from repo root):
@@ -14,14 +14,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$Proj = Join-Path $Root "clients\LedgerRing.WinUI\LedgerRing.WinUI.csproj"
-$Out = Join-Path $Root "dist\LedgerRing.WinUI-win-x64"
+$Proj = Join-Path $Root "clients\Floatpile.WinUI\Floatpile.WinUI.csproj"
+$Out = Join-Path $Root "dist\Floatpile.WinUI-win-x64"
 
 if (-not (Test-Path $Proj)) {
     Write-Error "Project not found: $Proj"
 }
 
-Write-Host "Publishing LedgerRing.WinUI ($Configuration, win-x64) → $Out"
+Write-Host "Publishing Floatpile.WinUI ($Configuration, win-x64) → $Out"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
 dotnet publish $Proj `
@@ -37,7 +37,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 Write-Host ""
 Write-Host "Published app folder:"
 Write-Host "  $Out"
-Write-Host "Run:  $Out\LedgerRing.WinUI.exe"
+Write-Host "Run:  $Out\Floatpile.WinUI.exe"
 Write-Host ""
 Write-Host "Bundle the Python engine next to the EXE (recommended):"
 Write-Host "  .\scripts\prepare-engine-bundle.ps1 -Target `"$Out`""
@@ -47,7 +47,7 @@ Write-Host "Or keep using a full repo clone and set Backend root in Settings."
 
 if ($Msix) {
     Write-Host ""
-    Write-Host "MSIX: open clients\LedgerRing.WinUI in Visual Studio → Package and Publish → Create App Packages."
+    Write-Host "MSIX: open clients\Floatpile.WinUI in Visual Studio → Package and Publish → Create App Packages."
     Write-Host "Or: msbuild with WindowsAppSDK packaging targets once signing cert is configured."
     Write-Host "Identity in Package.appxmanifest — update Publisher CN for your cert before store/sideload."
 }

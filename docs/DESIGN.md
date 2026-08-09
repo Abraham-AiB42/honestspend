@@ -1,6 +1,6 @@
-# LedgerRing — Design Document
+# Floatpile — Design Document
 
-**Product name:** LedgerRing  
+**Product name:** Floatpile  
 **Distribution:** Open source freeware (small business owners + anyone)  
 **Platform:** Local-first; Windows first → Mac / Linux / iOS / Android  
 **North star:** Interest-Free Purchasing Power (IFPP)  

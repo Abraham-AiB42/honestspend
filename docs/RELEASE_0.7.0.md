@@ -1,4 +1,4 @@
-# LedgerRing v0.7.0 — Simple mode (north star)
+# Floatpile v0.7.0 — Simple mode (north star)
 
 **Ridiculously powerful engine · stupid-simple daily UI.**
 
@@ -9,12 +9,12 @@
 # pytest · northstar e2e · smoke · name-gate · version · surfaces
 
 .\scripts\package-release.ps1
-# → dist\LedgerRing-Windows-x64\  (+ zip)
-# Run: dist\LedgerRing-Windows-x64\LedgerRing.WinUI.exe
+# → dist\Floatpile-Windows-x64\  (+ zip)
+# Run: dist\Floatpile-Windows-x64\Floatpile.WinUI.exe
 # Engine auto-detected from .\engine\
 ```
 
-Optional installer: compile `packaging\LedgerRing.iss` after package-release → `dist\LedgerRing-Setup-x64.exe`.
+Optional installer: compile `packaging\Floatpile.iss` after package-release → `dist\Floatpile-Setup-x64.exe`.
 
 ## What users get
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LedgerRing · Connect bank (Plaid)</title>
+  <title>Floatpile · Connect bank (Plaid)</title>
   <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
   <style>
     :root { color-scheme: dark light; font-family: system-ui, Segoe UI, sans-serif; }
@@ -27,7 +27,7 @@
 <body>
   <h1>Connect a bank (Plaid Link)</h1>
   <p class="muted">
-    Browser handoff for LedgerRing. After success, return to the WinUI app and sync if needed.
+    Browser handoff for Floatpile. After success, return to the WinUI app and sync if needed.
     CSV import works without Plaid.
   </p>
 
@@ -111,7 +111,7 @@
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
               });
-              log("Connected.\n" + JSON.stringify(res, null, 2) + "\n\nYou can close this tab and return to LedgerRing.");
+              log("Connected.\n" + JSON.stringify(res, null, 2) + "\n\nYou can close this tab and return to Floatpile.");
             } catch (e) {
               log("Exchange failed: " + (e.message || e));
             } finally {

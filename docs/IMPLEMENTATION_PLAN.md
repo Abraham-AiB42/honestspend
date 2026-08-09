@@ -1,4 +1,4 @@
-# LedgerRing — Full Implementation Plan
+# Floatpile — Full Implementation Plan
 
 **Source:** End-to-end code review (2026-08) + PRODUCT.md constitution + product suggestions  
 **Goal:** Close every high/medium gap, ship constitution completeness, then product ideas  

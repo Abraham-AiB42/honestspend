@@ -562,14 +562,14 @@ else:
 # -------------------------------------------------------------------------
 print("\n8. Simple WinUI surface static gate (no IFPP in user XAML)")
 simple_files = [
-    ROOT / "clients/LedgerRing.WinUI/Pages/HomePage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Pages/FirstRunPage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Pages/AddHubPage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Pages/MoneyWizardPage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Pages/BuyPage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Pages/AboutPage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Pages/ReviewPage.xaml",
-    ROOT / "clients/LedgerRing.WinUI/Helpers/UiCopy.cs",
+    ROOT / "clients/Floatpile.WinUI/Pages/HomePage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Pages/FirstRunPage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Pages/AddHubPage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Pages/MoneyWizardPage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Pages/BuyPage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Pages/AboutPage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Pages/ReviewPage.xaml",
+    ROOT / "clients/Floatpile.WinUI/Helpers/UiCopy.cs",
 ]
 bad_hits = []
 for f in simple_files:
@@ -592,7 +592,7 @@ else:
     bad("Simple WinUI IFPP", ", ".join(bad_hits[:6]))
 
 # MainWindow simple nav tags
-mw = (ROOT / "clients/LedgerRing.WinUI/MainWindow.xaml").read_text(encoding="utf-8")
+mw = (ROOT / "clients/Floatpile.WinUI/MainWindow.xaml").read_text(encoding="utf-8")
 for tag in ("Home", "Add", "Can I buy?", "Simple"):
     if tag in mw:
         ok(f"shell has {tag}")
@@ -600,7 +600,7 @@ for tag in ("Home", "Add", "Can I buy?", "Simple"):
         bad(f"shell {tag}", "missing")
 
 # UiCopy helpers exist
-ui = (ROOT / "clients/LedgerRing.WinUI/Helpers/UiCopy.cs").read_text(encoding="utf-8")
+ui = (ROOT / "clients/Floatpile.WinUI/Helpers/UiCopy.cs").read_text(encoding="utf-8")
 for fn in ("AutopayPolicy", "MoneyView", "PayMethod", "SafeToSpend"):
     if fn in ui:
         ok(f"UiCopy.{fn}")

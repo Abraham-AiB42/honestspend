@@ -1,6 +1,6 @@
 # Plan: Realize the Dream
 
-**Product:** LedgerRing (financial-os)  
+**Product:** Floatpile (financial-os)  
 **Baseline:** **v0.9.x** feature tags · product maturity **~65% dream (~0.6.5-class)** — see [`VERSIONING.md`](./VERSIONING.md)  
 **Schema:** **v10**  
 **1.0:** Only after [`RC_1.0.md`](./RC_1.0.md) — do **not** treat 0.9 as “almost 1.0.”  
@@ -12,7 +12,7 @@
 
 ## 0. Dream definition (what “done” means)
 
-LedgerRing is “best of all worlds” when a real household + side hustle can:
+Floatpile is “best of all worlds” when a real household + side hustle can:
 
 | Job | User outcome | Replaces |
 |-----|--------------|----------|
@@ -68,7 +68,7 @@ Keep the **one fiscal engine** (Python/SQLite FastAPI). Clients never re-impleme
 
 ## 2. Pillar strategy (steal the job, not the brand)
 
-| Pillar | Steal | Explicitly reject | LedgerRing expression |
+| Pillar | Steal | Explicitly reject | Floatpile expression |
 |--------|-------|-------------------|------------------------|
 | **Excel nerd** | Explainability, what-if, multi-entity, rules, import memory | Live grid as primary UX | Full books + simulate + capital desk + APIs |
 | **Credit Karma** | Util, “what if,” payoff order, promo urgency | Soft-pull marketplace, ads | Educational score + debt/promo/autopay |
@@ -363,7 +363,7 @@ Do **not** start H3 mobile natives or scenario schema until H1 live-books loop i
 
 ## 12. Success narrative at v1.0
 
-> LedgerRing is the local liquidity OS: Safe to spend you can trust, multi-entity books a CPA can open, tax handoff without TurboTax theater, credit discipline without Credit Karma ads, and Excel-grade what-ifs without living in a spreadsheet. Open rarely. Never bounce. Never pay dumb interest by accident.
+> Floatpile is the local liquidity OS: Safe to spend you can trust, multi-entity books a CPA can open, tax handoff without TurboTax theater, credit discipline without Credit Karma ads, and Excel-grade what-ifs without living in a spreadsheet. Open rarely. Never bounce. Never pay dumb interest by accident.
 
 That’s the dream—**realized as one product**, not five brands.
 
