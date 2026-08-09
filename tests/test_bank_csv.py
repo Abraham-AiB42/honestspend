@@ -47,6 +47,8 @@ def test_import_simple_csv(tmp_path: Path):
     )
     assert result.transactions_created == 3
     assert not result.errors
+    assert result.next_steps
+    assert any(st.get("action") in ("review", "hold", "home") for st in result.next_steps)
     txns = s.query(Transaction).order_by(Transaction.txn_date).all()
     assert len(txns) == 3
     assert txns[0].payee == "SHELL OIL"
@@ -62,6 +64,7 @@ def test_import_simple_csv(tmp_path: Path):
     )
     assert result2.transactions_created == 0
     assert result2.skipped_existing == 3
+    assert result2.next_steps  # still guides user (duplicates / hold)
     s.close()
 
 

@@ -43,6 +43,7 @@ class PdfImportResult:
     categorized: int = 0
     sample: list[dict[str, Any]] = field(default_factory=list)
     raw_text_chars: int = 0
+    next_steps: list[dict[str, Any]] = field(default_factory=list)
 
 
 def extract_pdf_text(file_obj: BinaryIO | bytes | Path | str) -> tuple[str, int]:
@@ -302,4 +303,13 @@ def import_statement_pdf(
             )
             result.categorized = sum(1 for x in applied if x.get("applied"))
 
+    from financial_os.services.import_brief import build_post_import_next_steps
+
+    result.next_steps = build_post_import_next_steps(
+        session,
+        profile_id=acct.profile_id,
+        created=result.transactions_created,
+        categorized=result.categorized,
+        source="PDF",
+    )
     return result

@@ -224,77 +224,6 @@ def preview_ofx(file_obj: BinaryIO | TextIO | bytes | str | Path) -> dict[str, A
     }
 
 
-def _build_ofx_next_steps(
-    session: Session,
-    *,
-    account_id: int,
-    profile_id: int,
-    created: int,
-    categorized: int,
-    drift: Decimal | None,
-) -> list[dict[str, str]]:
-    """Post-import CTAs for Import page / tray (open-rarely habit)."""
-    from financial_os.db import Transaction as Txn
-
-    steps: list[dict[str, str]] = []
-    uncat = (
-        session.query(Txn)
-        .filter(Txn.profile_id == profile_id, Txn.category_id.is_(None))
-        .count()
-    )
-    still_uncat = max(0, uncat)
-    if still_uncat > 0:
-        steps.append(
-            {
-                "action": "review",
-                "label": "Sort charges",
-                "detail": f"{still_uncat} uncategorized — accept categories so tax/reports stay clean.",
-            }
-        )
-    elif created and categorized:
-        steps.append(
-            {
-                "action": "hold",
-                "label": "Categories filled",
-                "detail": f"{categorized} auto-categorized from rules.",
-            }
-        )
-    if drift is not None and abs(drift) >= Decimal("0.01"):
-        steps.append(
-            {
-                "action": "reconcile",
-                "label": "Reconcile drift",
-                "detail": f"Books vs bank differ by ${drift.quantize(Decimal('0.01'))}. Check Reconcile.",
-            }
-        )
-    elif drift is not None:
-        steps.append(
-            {
-                "action": "reconcile",
-                "label": "Balances match",
-                "detail": "Institution balance from OFX matches books.",
-            }
-        )
-    if not steps:
-        if created:
-            steps.append(
-                {
-                    "action": "home",
-                    "label": "Done",
-                    "detail": f"{created} transaction(s) imported. Safe to spend will refresh on Home.",
-                }
-            )
-        else:
-            steps.append(
-                {
-                    "action": "hold",
-                    "label": "No new rows",
-                    "detail": "Duplicates skipped (FITID). Drop a newer date range next time.",
-                }
-            )
-    return steps
-
-
 def import_ofx(
     session: Session,
     *,
@@ -419,12 +348,14 @@ def import_ofx(
         )
         result.categorized = sum(1 for x in applied if x.get("applied"))
 
-    result.next_steps = _build_ofx_next_steps(
+    from financial_os.services.import_brief import build_post_import_next_steps
+
+    result.next_steps = build_post_import_next_steps(
         session,
-        account_id=account_id,
         profile_id=acct.profile_id,
         created=result.transactions_created,
         categorized=result.categorized,
         drift=drift,
+        source="OFX/QFX",
     )
     return result

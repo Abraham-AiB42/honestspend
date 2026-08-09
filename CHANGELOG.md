@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.12 — Post-import next steps for all money-in paths
+
+- Shared **`build_post_import_next_steps`** (Sort charges · Reconcile · Home)
+- **CSV** and **PDF** import return the same structured next_steps as OFX
+- Import page CTAs after every file import (not only OFX)
+
 ## 1.0.11 — Rename: Floatpile → HonestSpend
 
 - **Product name:** **HonestSpend**

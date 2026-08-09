@@ -2454,6 +2454,7 @@ async def import_statement_pdf_upload(
         "errors": result.errors,
         "sample": result.sample,
         "raw_text_chars": result.raw_text_chars,
+        "next_steps": result.next_steps,
     }
 
 
@@ -2530,6 +2531,7 @@ async def import_bank_csv_upload(
         "skipped_bad": result.skipped_bad,
         "categorized": result.categorized,
         "errors": result.errors,
+        "next_steps": result.next_steps,
     }
 
 

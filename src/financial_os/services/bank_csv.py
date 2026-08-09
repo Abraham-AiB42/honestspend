@@ -48,6 +48,7 @@ class CsvImportResult:
     skipped_bad: int = 0
     errors: list[str] = field(default_factory=list)
     categorized: int = 0
+    next_steps: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _norm(h: str) -> str:
@@ -378,4 +379,13 @@ def import_bank_csv(
         )
         result.categorized = sum(1 for r in applied if r.get("applied"))
 
+    from financial_os.services.import_brief import build_post_import_next_steps
+
+    result.next_steps = build_post_import_next_steps(
+        session,
+        profile_id=acct.profile_id,
+        created=result.transactions_created,
+        categorized=result.categorized,
+        source="CSV",
+    )
     return result

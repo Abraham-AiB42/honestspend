@@ -152,3 +152,76 @@ def build_import_brief(
         "has_cash": has_cash,
         "needs_attention": attention in ("action", "watch"),
     }
+
+
+def build_post_import_next_steps(
+    session: Session,
+    *,
+    profile_id: int,
+    created: int = 0,
+    categorized: int = 0,
+    drift: Decimal | None = None,
+    source: str = "import",
+) -> list[dict[str, str]]:
+    """Structured CTAs after CSV / OFX / PDF import (open-rarely habit).
+
+    Each step: {action, label, detail} where action is review|reconcile|home|hold.
+    """
+    steps: list[dict[str, str]] = []
+    uncat = (
+        session.query(Transaction)
+        .filter(Transaction.profile_id == profile_id, Transaction.category_id.is_(None))
+        .count()
+    )
+    if uncat > 0:
+        steps.append(
+            {
+                "action": "review",
+                "label": "Sort charges",
+                "detail": f"{uncat} uncategorized — accept categories so tax/reports stay clean.",
+            }
+        )
+    elif created and categorized:
+        steps.append(
+            {
+                "action": "hold",
+                "label": "Categories filled",
+                "detail": f"{categorized} auto-categorized from rules.",
+            }
+        )
+
+    if drift is not None and abs(drift) >= Decimal("0.01"):
+        steps.append(
+            {
+                "action": "reconcile",
+                "label": "Reconcile drift",
+                "detail": f"Books vs bank differ by ${drift.quantize(Decimal('0.01'))}. Check Reconcile.",
+            }
+        )
+    elif drift is not None:
+        steps.append(
+            {
+                "action": "reconcile",
+                "label": "Balances match",
+                "detail": "Institution balance from OFX matches books.",
+            }
+        )
+
+    if not steps:
+        if created:
+            steps.append(
+                {
+                    "action": "home",
+                    "label": "Done",
+                    "detail": f"{created} transaction(s) from {source}. Safe to spend will refresh on Home.",
+                }
+            )
+        else:
+            steps.append(
+                {
+                    "action": "hold",
+                    "label": "No new rows",
+                    "detail": "Duplicates skipped. Drop a newer date range next time.",
+                }
+            )
+    return steps

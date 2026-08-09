@@ -2,6 +2,7 @@
 
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,7 +10,7 @@ from fastapi.testclient import TestClient
 from financial_os.config import settings
 from financial_os.db import Account, Transaction, init_db, make_engine, make_session_factory
 from financial_os.seed import seed_all
-from financial_os.services.import_brief import build_import_brief
+from financial_os.services.import_brief import build_import_brief, build_post_import_next_steps
 
 
 @pytest.fixture()
@@ -72,6 +73,50 @@ def test_import_brief_uncategorized(client: TestClient, tmp_path, monkeypatch):
         assert brief["attention"] == "action"
         assert brief["primary_action"] == "review"
         assert "COFFEE" in (brief["sample_uncategorized"][0] if brief["sample_uncategorized"] else "")
+
+
+def test_post_import_next_steps_uncategorized(tmp_path: Path):
+    from financial_os.db import Profile
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy import create_engine
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 't.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    try:
+        seed_all(s)
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        acct = Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Ops",
+            current_balance=Decimal("1000"),
+            is_cash_for_ifpp=True,
+        )
+        s.add(acct)
+        s.flush()
+        s.add(
+            Transaction(
+                profile_id=personal.id,
+                account_id=acct.id,
+                txn_date=date.today(),
+                amount=Decimal("-10"),
+                payee="UNCATEGORIZED SHOP",
+                category_id=None,
+                status="cleared",
+            )
+        )
+        s.flush()
+        steps = build_post_import_next_steps(
+            s, profile_id=personal.id, created=1, categorized=0, source="CSV"
+        )
+        assert steps
+        assert steps[0]["action"] == "review"
+        assert "Sort" in steps[0]["label"]
+    finally:
+        s.close()
+        eng.dispose()
 
 
 def test_home_simple_includes_books_brief(client: TestClient):

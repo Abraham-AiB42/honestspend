@@ -473,11 +473,7 @@ public sealed partial class ImportPage : Page
                             ? " · set for Reconcile"
                             : ""));
                 }
-                if (ofxRes.TryGetProperty("next_steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var step in steps.EnumerateArray())
-                        lines.Add($"→ {JsonUi.Str(step, "label")}: {JsonUi.Str(step, "detail")}");
-                }
+                AppendNextStepLines(lines, ofxRes);
                 ResultText.Text = string.Join("\n", lines);
                 ShowNextSteps(ofxRes);
                 return;
@@ -490,17 +486,22 @@ public sealed partial class ImportPage : Page
                 accountId,
                 sign,
                 AutoCatBox.IsChecked == true);
-            ResultText.Text =
+            var csvLines = new List<string>
+            {
                 $"CSV done · scanned {Prop(res, "rows_scanned")} · created {Prop(res, "transactions_created")} · " +
                 $"skipped existing {Prop(res, "skipped_existing")} · bad {Prop(res, "skipped_bad")} · " +
-                $"categorized {Prop(res, "categorized")}";
+                $"categorized {Prop(res, "categorized")}",
+            };
             if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);
                 var joined = string.Join("; ", list!);
                 if (!string.IsNullOrEmpty(joined))
-                    ResultText.Text += "\nErrors: " + joined;
+                    csvLines.Add("Errors: " + joined);
             }
+            AppendNextStepLines(csvLines, res);
+            ResultText.Text = string.Join("\n", csvLines);
+            ShowNextSteps(res);
         }
         catch (Exception ex)
         {
@@ -532,23 +533,36 @@ public sealed partial class ImportPage : Page
                 accountId,
                 sign,
                 AutoCatBox.IsChecked == true);
-            ResultText.Text =
+            var pdfLines = new List<string>
+            {
                 $"PDF done · pages {Prop(res, "pages")} · lines {Prop(res, "lines_scanned")} · " +
                 $"created {Prop(res, "transactions_created")} · skipped {Prop(res, "skipped_existing")} · " +
-                $"categorized {Prop(res, "categorized")}";
+                $"categorized {Prop(res, "categorized")}",
+            };
             if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);
                 var joined = string.Join("; ", list!);
                 if (!string.IsNullOrEmpty(joined))
-                    ResultText.Text += "\nErrors: " + joined;
+                    pdfLines.Add("Errors: " + joined);
             }
+            AppendNextStepLines(pdfLines, res);
+            ResultText.Text = string.Join("\n", pdfLines);
+            ShowNextSteps(res);
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private static void AppendNextStepLines(List<string> lines, JsonElement res)
+    {
+        if (!res.TryGetProperty("next_steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+            return;
+        foreach (var step in steps.EnumerateArray())
+            lines.Add($"→ {JsonUi.Str(step, "label")}: {JsonUi.Str(step, "detail")}");
     }
 
     private async void ImportXlsx_Click(object sender, RoutedEventArgs e)
