@@ -280,6 +280,45 @@ def cmd_glance(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_home(args: argparse.Namespace) -> int:
+    """Print Simple Home JSON (Safe to spend + Do this next + 3-minute check)."""
+    import json
+
+    import httpx
+
+    host = args.host or settings.host
+    port = args.port or settings.port
+    base = f"http://{host}:{port}"
+    headers = {}
+    if args.api_key:
+        headers["X-API-Key"] = args.api_key
+    params = {}
+    if args.scope:
+        params["scope"] = args.scope
+    if args.profile_id:
+        params["profile_id"] = args.profile_id
+    try:
+        r = httpx.get(f"{base}/api/home/simple", params=params, headers=headers, timeout=15.0)
+        r.raise_for_status()
+    except Exception as e:
+        print(f"home failed: {e}", file=sys.stderr)
+        print(f"Is the engine up? ledgerring serve → {base}", file=sys.stderr)
+        return 1
+    body = r.json()
+    if args.brief:
+        next_ = body.get("do_this_next") or {}
+        ritual = body.get("three_minute_check") or {}
+        print(f"Safe to spend: ${body.get('safe_to_spend')}  [{body.get('status_label')}]")
+        print(f"Do this next:  {next_.get('title')}")
+        if next_.get("reason"):
+            print(f"  {next_['reason']}")
+        if ritual:
+            print(f"3-min check:   {ritual.get('progress_label')} — {ritual.get('subtitle')}")
+        return 0
+    print(json.dumps(body, indent=2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ledgerring", description="LedgerRing liquidity cockpit")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -306,7 +345,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tax.add_argument("--year", type=int, default=None)
     p_tax.set_defaults(func=lambda a: cmd_tax_packet(_with_year(a)))
 
-    p_tray = sub.add_parser("tray", help="System tray Spendable Now")
+    p_tray = sub.add_parser("tray", help="System tray Safe to spend")
     p_tray.add_argument("--poll", type=int, default=60, help="Refresh seconds")
     p_tray.set_defaults(func=cmd_tray)
 
@@ -332,6 +371,19 @@ def main(argv: list[str] | None = None) -> int:
 
     p_ver = sub.add_parser("version", help="Print version")
     p_ver.set_defaults(func=cmd_version)
+
+    p_home = sub.add_parser("home", help="Simple Home JSON (Safe to spend + Do this next)")
+    p_home.add_argument("--host", default=None)
+    p_home.add_argument("--port", type=int, default=None)
+    p_home.add_argument("--api-key", default=None)
+    p_home.add_argument("--scope", default=None, choices=["entity", "group"])
+    p_home.add_argument("--profile-id", type=int, default=None)
+    p_home.add_argument(
+        "--brief",
+        action="store_true",
+        help="One-screen plain summary instead of full JSON",
+    )
+    p_home.set_defaults(func=cmd_home)
 
     p_gl = sub.add_parser("glance", help="Mobile/Mac/Linux glance JSON or open UI")
     p_gl.add_argument("--open", action="store_true", help="Open /glance in browser")

@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace LedgerRing_WinUI.Services;
 
 /// <summary>
-/// Starts the Python system-tray process (Spendable hover + digest toasts).
+/// Starts the Python system-tray process (Safe to spend hover + digest toasts).
 /// Uses tray.pid under data dir to avoid stacking trays.
 /// </summary>
 public static class TrayHost

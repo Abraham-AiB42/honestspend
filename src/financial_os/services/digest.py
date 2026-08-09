@@ -78,7 +78,10 @@ def build_digest(
             {
                 "level": "warn" if p["urgency"] != "expired" else "critical",
                 "code": "promo",
-                "message": f"{p['name']}: 0% ends in {p['days_left']}d — sink ${p['sinking_fund']['monthly']}/mo",
+                "message": (
+                    f"{p['name']}: 0% ends in {p['days_left']}d — "
+                    f"set aside ${p['sinking_fund']['monthly']}/mo"
+                ),
                 "action": "promo_sink",
                 "account_id": p.get("account_id"),
             }
@@ -88,7 +91,7 @@ def build_digest(
             {
                 "level": "info",
                 "code": "uncategorized",
-                "message": f"{uncat} uncategorized transactions — Review tab",
+                "message": f"{uncat} charges need a category — Sort charges",
                 "action": "review",
                 "count": uncat,
             }

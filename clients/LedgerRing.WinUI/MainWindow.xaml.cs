@@ -66,6 +66,8 @@ public sealed partial class MainWindow : Window
             await api.EnsureBackendAsync();
             var ob = await api.GetOnboardingAsync();
             var needs = ob.TryGetProperty("needs_setup", out var n) && n.GetBoolean();
+            AppState.ShowSetupNav = needs;
+            ApplySimpleChrome();
             if (needs && !AppState.ReadOnlySession)
             {
                 SelectNav("setup");
@@ -108,15 +110,28 @@ public sealed partial class MainWindow : Window
             if (AppState.ReadOnlySession)
                 continue; // ApplyReadOnlyChrome owns visibility
             if (AppState.SimpleMode)
-                nvi.Visibility = SimpleNavTags.Contains(tag) ? Visibility.Visible : Visibility.Collapsed;
+            {
+                var show = SimpleNavTags.Contains(tag);
+                if (tag == "setup" && !AppState.ShowSetupNav)
+                    show = false;
+                nvi.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            }
             else
-                nvi.Visibility = Visibility.Visible;
+            {
+                // Full books: hide Get started once accounts exist
+                if (tag == "setup" && !AppState.ShowSetupNav)
+                    nvi.Visibility = Visibility.Collapsed;
+                else
+                    nvi.Visibility = Visibility.Visible;
+            }
         }
-        // Always show add in simple
         ShellModeText.Text = AppState.SimpleMode
             ? "Simple · safe to spend first"
             : "Full books · every tool";
     }
+
+    /// <summary>Called from Home after setup completes so Get started disappears.</summary>
+    public void RefreshSimpleChrome() => ApplySimpleChrome();
 
     private async Task LoadShellEntitiesAsync()
     {

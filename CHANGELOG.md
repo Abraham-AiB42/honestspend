@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — Open-rarely polish
+
+- Hide **Get started** after first-run (Simple + Full nav)
+- Digest: plain “Sort charges” / “set aside” promo copy
+- CLI: `ledgerring home` (+ `--brief`) for Safe to spend summary
+- README oriented to Simple mode + grade-A package path
+
 ## 0.7.0 — Simple mode + wizards (north star)
 
 Polish: named autopay cards, first-run cold start, empty-state bill tip, Glance `/api/home/simple` + wealth card, plain Can I buy / Credit / Accounts labels.

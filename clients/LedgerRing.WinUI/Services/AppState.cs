@@ -12,6 +12,9 @@ public static class AppState
     /// <summary>When true, hide write navigation (CPA / viewer session).</summary>
     public static bool ReadOnlySession { get; set; }
 
+    /// <summary>Show Get started nav (cold install / no cash yet).</summary>
+    public static bool ShowSetupNav { get; set; } = true;
+
     /// <summary>Simple mode = north-star daily UI; FullBooks = cockpit.</summary>
     public static bool SimpleMode { get; set; } = true;
 

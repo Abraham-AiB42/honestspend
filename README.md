@@ -1,83 +1,60 @@
 # LedgerRing
 
-**Open-source freeware** liquidity cockpit for **small business owners** (and anyone) — not a spreadsheet companion, not an investment app.
+**Open-source freeware** liquidity cockpit — ridiculously powerful engine, **stupid-simple** daily UI.
 
-> **What can I spend or charge right now without going negative on checking, without fees, and without unnecessary interest — using intentional 0% float when it’s smart?**
+> **What can I safely spend or charge right now without bouncing checking, without dumb fees, and without unnecessary interest?**
 
 | Pillar | Rule |
 |--------|------|
 | Checking | **Never negative** |
 | 0% cards | Intentional float when payoff path is interest-free |
-| Cheap debt vs yield | Opportunity cost (e.g. don’t prepay 2.6% mortgage if cash pays 6%) |
+| Cheap debt vs yield | Opportunity cost (don’t prepay 2.6% mortgage if cash pays 6%) |
 | Priorities | Fiscal soundness #1 · credit health #2 |
-| Effort | Minimum user time — automation first |
+| Effort | Open rarely — automation first |
 | License | Free for anyone · open source |
 
-Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md)
+**v0.7 Simple mode (default):** Home · Add · Can I buy? · Sort charges · 3-minute check  
+**Full books:** flip the shell toggle for ledgers, tax, multi-user, reconcile.
 
-Everything lives in the app: accounts, cards, recurrences, live bank links/CSV, IRS-mapped categories, tax packets, multi-entity books (**Personal** + **Add Business(es)** + **Add Child(ren)**).
+Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple mode: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md) · Release: [`docs/RELEASE_0.7.0.md`](docs/RELEASE_0.7.0.md)
 
-Legacy spreadsheet import is **optional one-time migration only**.
-
-## Windows client (WinUI 3 — native)
+## Windows (primary)
 
 ```powershell
-# From repo root — engine + optional web
-.\scripts\start.ps1
-
-# Native WinUI app (auto-starts engine if needed)
+# Dev
 .\scripts\start-winui.ps1
+
+# Grade-A bar + one-folder package
+.\scripts\verify-grade-a.ps1
+.\scripts\package-release.ps1
+# → dist\LedgerRing-Windows-x64\LedgerRing.WinUI.exe  (+ engine\)
 ```
 
-**Install / distribute:** see [`docs/INSTALL.md`](docs/INSTALL.md)
+Install: [`docs/INSTALL.md`](docs/INSTALL.md)
 
-**Mac / Linux / phone:** Glance UI (same engine, no fiscal fork)
+## Mac / Linux / phone — Glance
 
 ```bash
 ./scripts/start-glance.sh
-# → http://127.0.0.1:7420/glance
-# ledgerring glance --open
+# http://127.0.0.1:7420/glance
+ledgerring glance --open
+ledgerring home --brief    # Safe to spend + Do this next
 ```
 
-```powershell
-# Self-contained UI + engine folder + zip
-.\scripts\package-release.ps1
-# → dist\LedgerRing-Windows-x64\  and  .zip
-```
+## Engine quick start
 
-Open Visual Studio → `clients\LedgerRing.WinUI\LedgerRing.WinUI.csproj` for designer/debug.
-
-## Quick start (engine / web)
-
-**Windows**
-```powershell
-cd path\to\financial-os
-.\scripts\start.ps1
-```
-
-**macOS / Linux**
-```bash
-cd path/to/financial-os
-chmod +x scripts/start.sh
-./scripts/start.sh
-```
-
-**Manual**
 ```powershell
 python -m venv .venv
-# activate venv, then:
+# activate, then:
 pip install -e ".[dev]"
 python -m financial_os.cli serve
 # or: ledgerring serve
 ```
 
-Open **http://127.0.0.1:7420**
-
-1. Complete the **setup wizard** (cash account + optional card)
-2. Add bills under **Bills**
-3. Feed transactions via **Connect** (CSV or Plaid)
-4. Optional tray: `python -m financial_os.cli tray`
-5. Optional Docker: `docker compose up --build`
+1. WinUI **Get started** (~2 min) or API first-run  
+2. Home → **Safe to spend** + **Do this next**  
+3. Optional: Add → Link bank / Import CSV  
+4. Open rarely — run the **3-minute check** when you return
 
 Data: `~/.financial-os/financial_os.db` (or `FOS_DATA_DIR`)
 

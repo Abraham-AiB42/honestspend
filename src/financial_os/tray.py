@@ -1,4 +1,4 @@
-"""Windows system tray — always-on Spendable Now + digest alerts."""
+"""Windows system tray — always-on Safe to spend + digest alerts."""
 
 from __future__ import annotations
 
@@ -72,8 +72,8 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         return img
 
     def open_app(icon=None, item=None):
-        # Primary client is WinUI — browser is fallback / Plaid only
-        webbrowser.open(f"{_base()}/")
+        # Multi-platform shell; primary desktop client is still WinUI
+        webbrowser.open(f"{_base()}/glance")
 
     def open_plaid(icon=None, item=None):
         webbrowser.open(f"{_base()}/static/plaid-link.html")
@@ -119,9 +119,9 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             alert_line = "All clear" if not alerts else f"{len(alerts)} alert(s)"
 
         state["title"] = (
-            f"Spendable {combined}\n"
-            f"Cash {cash} · Card float {card}\n"
-            f"Mode {mode} · Red day {red}\n"
+            f"Safe to spend {combined}\n"
+            f"Cash {cash} · Can charge {card}\n"
+            f"Next risk {red}\n"
             f"{alert_line}"
         )
         if icon:
@@ -156,10 +156,10 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             time.sleep(poll_seconds)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Refresh Spendable + digest", refresh_now, default=True),
-        pystray.MenuItem("Plaid Link (browser)", open_plaid),
+        pystray.MenuItem("Refresh Safe to spend", refresh_now, default=True),
+        pystray.MenuItem("Link bank (browser)", open_plaid),
         pystray.MenuItem("API docs", open_docs),
-        pystray.MenuItem("Web fallback UI", open_app),
+        pystray.MenuItem("Open Glance", open_app),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Quit tray", on_exit),
     )
@@ -177,5 +177,5 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         t.start()
 
     print(f"LedgerRing tray — polling {_base()}/api/ifpp + digest")
-    print("Hover for Spendable. Critical alerts toast once.")
+    print("Hover for Safe to spend. Critical alerts toast once.")
     icon.run(setup=setup)

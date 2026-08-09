@@ -163,6 +163,13 @@ public sealed partial class HomePage : Page
                 var hasCash = su.TryGetProperty("has_cash", out var hc) && hc.ValueKind == JsonValueKind.True;
                 SetupBar.IsOpen = needs && !AppState.ReadOnlySession;
                 EmptyBillBar.IsOpen = !needs && hasCash && !hasBill && !AppState.ReadOnlySession;
+                // Keep shell nav in sync (hide Get started after first-run)
+                if (AppState.ShowSetupNav != needs)
+                {
+                    AppState.ShowSetupNav = needs;
+                    if (App.MainWindowInstance is MainWindow mw)
+                        mw.RefreshSimpleChrome();
+                }
                 // Soft bank tip once setup is complete (dismissible)
                 BankTipBar.IsOpen = !needs && hasCash && !AppState.ReadOnlySession
                     && !EmptyBillBar.IsOpen
