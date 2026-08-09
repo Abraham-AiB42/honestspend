@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2 — Client power tools
+
+- **Audit log** Full books page (`GET /api/permissions/audit`)
+- **Rules** plain-language match labels + clearer add form
+- **WinUI path pointer** (`winui.path`) so tray finds the desktop EXE after launch
+- **Reports → Export CSV** cashflow by entity
+- Client-first tray path discovery hardened  
+
 ## 1.0.1 — Client-first (no PWA)
 
 - **[`docs/CLIENT_FIRST.md`](docs/CLIENT_FIRST.md)** — WinUI is the product; Glance is fallback only  

@@ -78,26 +78,47 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         from pathlib import Path
 
         candidates: list[Path] = []
-        cwd = Path.cwd()
-        candidates += [
-            cwd / "LedgerRing.WinUI.exe",
-            cwd.parent / "LedgerRing.WinUI.exe",
-            cwd / "clients" / "LedgerRing.WinUI" / "bin",  # dev layout — skip recurse
-        ]
-        # Package layout: EXE next to engine\
-        if cwd.name.lower() == "engine":
-            candidates.insert(0, cwd.parent / "LedgerRing.WinUI.exe")
+        # Pointer file written by WinUI on launch
+        try:
+            data = Path(settings.data_dir)
+            pointer = data / "winui.path"
+            if pointer.is_file():
+                line = pointer.read_text(encoding="utf-8", errors="ignore").strip().splitlines()
+                if line:
+                    candidates.append(Path(line[0].strip()))
+        except Exception:
+            pass
         env_exe = os.environ.get("LEDGERRING_WINUI")
         if env_exe:
             candidates.insert(0, Path(env_exe))
-        for exe in candidates:
+        cwd = Path.cwd()
+        candidates += [
+            cwd / "winui.path",
+            cwd.parent / "winui.path",
+            cwd / "LedgerRing.WinUI.exe",
+            cwd.parent / "LedgerRing.WinUI.exe",
+        ]
+        if cwd.name.lower() == "engine":
+            candidates.insert(0, cwd.parent / "LedgerRing.WinUI.exe")
+        # Resolve path files
+        resolved: list[Path] = []
+        for c in candidates:
             try:
-                if exe.is_file():
+                if c.name.lower() == "winui.path" and c.is_file():
+                    p = Path(c.read_text(encoding="utf-8", errors="ignore").strip().splitlines()[0].strip())
+                    resolved.append(p)
+                else:
+                    resolved.append(c)
+            except Exception:
+                continue
+        for exe in resolved:
+            try:
+                if exe.is_file() and exe.suffix.lower() in (".exe", ""):
                     subprocess.Popen([str(exe)], cwd=str(exe.parent), close_fds=True)
                     return
             except Exception:
                 continue
-        # Fallback: second-instance protocol not available — open API health as last resort
+        # Last resort: docs — not Glance as primary
         webbrowser.open(f"{_base()}/docs")
 
     def open_glance(icon=None, item=None):

@@ -302,6 +302,7 @@ public sealed partial class MainWindow : Window
             case "reconcile": NavFrame.Navigate(typeof(ReconcilePage)); break;
             case "data": NavFrame.Navigate(typeof(DataPage)); break;
             case "users": NavFrame.Navigate(typeof(UsersPage)); break;
+            case "audit": NavFrame.Navigate(typeof(AuditPage)); break;
             case "bills": NavFrame.Navigate(typeof(BillsPage)); break;
             case "credit": NavFrame.Navigate(typeof(CreditPage)); break;
             case "buy": NavFrame.Navigate(typeof(BuyPage)); break;

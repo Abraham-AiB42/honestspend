@@ -561,6 +561,9 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> RotateTokenAsync(int userId, CancellationToken ct = default)
         => PostJsonAsync($"api/permissions/users/{userId}/rotate-token", new { }, ct);
 
+    public Task<JsonElement> GetAuditAsync(int limit = 50, CancellationToken ct = default)
+        => GetJsonAsync($"api/permissions/audit?limit={limit}", ct);
+
     public Task<JsonElement> GetRulesAsync(CancellationToken ct = default)
         => GetJsonAsync("api/rules", ct);
 

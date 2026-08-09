@@ -17,7 +17,7 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Category rules" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Merchant patterns learned from Review. Rules first; Grok optional." />
+                        Text="When payee matches, assign a category. Learned from Sort charges — edit here anytime." />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
             </Grid>
@@ -49,16 +49,16 @@
             </ListView>
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Add rule" />
-            <TextBox x:Name="PatternBox" Header="Pattern (payee contains / exact)" PlaceholderText="AMAZON" />
-            <ComboBox x:Name="MatchBox" Header="Match type" SelectedIndex="0">
-                <ComboBoxItem Content="contains" Tag="contains" />
-                <ComboBoxItem Content="starts_with" Tag="starts_with" />
-                <ComboBoxItem Content="exact" Tag="exact" />
-                <ComboBoxItem Content="regex" Tag="regex" />
+            <TextBox x:Name="PatternBox" Header="Payee text to match" PlaceholderText="e.g. AMAZON or NETFLIX" />
+            <ComboBox x:Name="MatchBox" Header="How to match" SelectedIndex="0">
+                <ComboBoxItem Content="Contains (usual)" Tag="contains" />
+                <ComboBoxItem Content="Starts with" Tag="starts_with" />
+                <ComboBoxItem Content="Exact match" Tag="exact" />
+                <ComboBoxItem Content="Regex (advanced)" Tag="regex" />
             </ComboBox>
-            <ComboBox x:Name="CatBox" Header="Category" HorizontalAlignment="Stretch" />
-            <NumberBox x:Name="PriorityBox" Header="Priority (higher wins)" Value="100" />
-            <CheckBox x:Name="TransferBox" Content="Mark as transfer" />
+            <ComboBox x:Name="CatBox" Header="Assign category" HorizontalAlignment="Stretch" />
+            <NumberBox x:Name="PriorityBox" Header="Priority (higher wins if two match)" Value="100" />
+            <CheckBox x:Name="TransferBox" Content="Treat as transfer (not spend)" />
             <Button Content="Add rule" Click="Add_Click" Style="{StaticResource AccentButtonStyle}" />
 
             <TextBlock x:Name="MsgText" Opacity="0.85" />

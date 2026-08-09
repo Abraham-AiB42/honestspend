@@ -63,11 +63,25 @@ public sealed partial class RulesPage : Page
                 foreach (var r in rules.EnumerateArray())
                 {
                     var id = r.GetProperty("id").GetInt32();
-                    var title = $"{JsonUi.Str(r, "match_type")} · \"{JsonUi.Str(r, "pattern")}\" → {JsonUi.Str(r, "category_name")}";
+                    var mt = JsonUi.Str(r, "match_type") switch
+                    {
+                        "contains" => "contains",
+                        "starts_with" => "starts with",
+                        "exact" => "exact",
+                        "regex" => "regex",
+                        _ => JsonUi.Str(r, "match_type"),
+                    };
+                    var title = $"If payee {mt} \"{JsonUi.Str(r, "pattern")}\" → {JsonUi.Str(r, "category_name")}";
+                    var src = JsonUi.Str(r, "source") switch
+                    {
+                        "learned" => "learned from Sort charges",
+                        "seed" => "built-in",
+                        "user" => "you added",
+                        _ => JsonUi.Str(r, "source"),
+                    };
                     var sub =
-                        $"priority {JsonUi.Str(r, "priority")} · source {JsonUi.Str(r, "source")} · " +
-                        $"active {JsonUi.Str(r, "active")}" +
-                        (r.TryGetProperty("is_transfer", out var t) && t.GetBoolean() ? " · TRANSFER" : "");
+                        $"Priority {JsonUi.Str(r, "priority")} · {src}" +
+                        (r.TryGetProperty("is_transfer", out var t) && t.GetBoolean() ? " · transfer" : "");
                     rows.Add(new RuleRow(id, title, sub));
                 }
             }

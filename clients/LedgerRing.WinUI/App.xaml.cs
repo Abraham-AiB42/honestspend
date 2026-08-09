@@ -109,6 +109,9 @@ public partial class App : Application
             catch { /* ignore */ }
         }
 
+        // So tray / scripts can re-open this native client (not Glance/PWA)
+        WinUiPaths.PublishExePathForTray();
+
         if (Backend is not null)
         {
             _ = Task.Run(async () =>
@@ -116,6 +119,7 @@ public partial class App : Application
                 try
                 {
                     await Backend.EnsureRunningAsync();
+                    WinUiPaths.PublishExePathForTray();
                     if (AppConfig.StartTrayWithApp || AppConfig.TrayOnly)
                         TrayHost.TryStart();
                 }

@@ -1,15 +1,20 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using LedgerRing_WinUI.Helpers;
 using LedgerRing_WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace LedgerRing_WinUI.Pages;
 
 public sealed partial class ReportsPage : Page
 {
+    private JsonElement _lastCashflow;
+
     public ReportsPage()
     {
         InitializeComponent();
@@ -36,6 +41,7 @@ public sealed partial class ReportsPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var cf = await api.GetCashflowReportAsync(days);
+            _lastCashflow = cf.Clone();
             TitleText.Text = JsonUi.Str(cf, "title");
             if (cf.TryGetProperty("totals", out var tot))
             {
@@ -95,6 +101,55 @@ public sealed partial class ReportsPage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private async void Export_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (_lastCashflow.ValueKind != JsonValueKind.Object)
+            {
+                await LoadAsync();
+                if (_lastCashflow.ValueKind != JsonValueKind.Object)
+                    throw new InvalidOperationException("Load a report first.");
+            }
+            var sb = new StringBuilder();
+            sb.AppendLine("entity,entity_type,inflow,outflow,net,cash_balance");
+            if (_lastCashflow.TryGetProperty("entities", out var ent) && ent.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var row in ent.EnumerateArray())
+                {
+                    sb.Append(Csv(JsonUi.Str(row, "display_name"))).Append(',');
+                    sb.Append(Csv(JsonUi.Str(row, "entity_type"))).Append(',');
+                    sb.Append(JsonUi.Str(row, "inflow", "0")).Append(',');
+                    sb.Append(JsonUi.Str(row, "outflow", "0")).Append(',');
+                    sb.Append(JsonUi.Str(row, "net", "0")).Append(',');
+                    sb.Append(JsonUi.Str(row, "cash_balance", "0")).AppendLine();
+                }
+            }
+            var picker = new FileSavePicker();
+            var hwnd = WindowNative.GetWindowHandle(App.MainWindowInstance);
+            InitializeWithWindow.Initialize(picker, hwnd);
+            picker.SuggestedFileName = "ledgerring-cashflow.csv";
+            picker.FileTypeChoices.Add("CSV", new List<string> { ".csv" });
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await File.WriteAllTextAsync(file.Path, sb.ToString(), Encoding.UTF8);
+            TotalsText.Text += " · Exported CSV.";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private static string Csv(string s)
+    {
+        if (s.Contains('"') || s.Contains(',') || s.Contains('\n'))
+            return "\"" + s.Replace("\"", "\"\"") + "\"";
+        return s;
     }
 
     private static string Money(JsonElement el, string prop)
