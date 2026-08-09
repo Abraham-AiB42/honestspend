@@ -94,7 +94,10 @@ def build_home_simple(
             }
         )
 
-    do_this = _do_this_next(ifpp, desk, alerts, wealth, cash)
+    from financial_os.services.import_reminders import build_import_reminder
+
+    import_rem = build_import_reminder(session, as_of=as_of)
+    do_this = _do_this_next(ifpp, desk, alerts, wealth, cash, import_rem=import_rem)
     plain_alerts = [_plain_alert(a) for a in alerts[:3]]
 
     sc = ifpp_d.get("ifpp_scope") or "entity"
@@ -162,6 +165,7 @@ def build_home_simple(
         "setup": setup,
         "three_minute_check": ritual,
         "books_brief": books,
+        "import_reminder": import_rem,
         "fee_brief": fees,
         "recurring_suggestions": recurring,
         "promo_brief": promo,
@@ -411,6 +415,7 @@ def _do_this_next(
     alerts: list[dict],
     wealth: list[dict],
     cash: Decimal,
+    import_rem: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     head = desk.get("headline") or {}
 
@@ -469,6 +474,25 @@ def _do_this_next(
         or head_priority == "optional"
         or (action == "fund_tax_vault" and head_priority != "fiscal")
     )
+
+    # Soft headline: money-in reminder (if due) before wealth tips — books honesty first
+    if soft and import_rem and import_rem.get("due") and import_rem.get("title"):
+        return {
+            "title": import_rem["title"],
+            "reason": import_rem.get("reason") or "Refresh books from a bank export.",
+            "action": "import",
+            "button_label": import_rem.get("button_label") or "Import file",
+            "params": {
+                "cadence": import_rem.get("cadence"),
+                "focus": import_rem.get("focus"),
+            },
+            "alternatives": [
+                "Full books → Import",
+                "Optional: Banks (Plaid) with your own keys",
+                "Change reminder cadence in Settings",
+            ],
+            "priority": "books",
+        }
 
     # Soft headline: prefer wealth tip, else "open rarely" — never nag tax vault on day one
     if soft:

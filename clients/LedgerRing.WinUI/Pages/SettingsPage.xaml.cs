@@ -42,6 +42,89 @@ public sealed partial class SettingsPage : Page
         RefreshTaskStatus();
         await LoadPathsAsync();
         await LoadFiscalAsync();
+        await LoadImportReminderAsync();
+    }
+
+    private async Task LoadImportReminderAsync()
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var s = await api.GetSettingsAsync();
+            SelectTag(ImportCadenceBox, JsonUi.Str(s, "import_reminder_cadence", "weekly"));
+            SelectTag(ImportFocusBox, JsonUi.Str(s, "import_reminder_focus", "transactions"));
+            var rem = await api.GetImportReminderAsync();
+            var due = rem.TryGetProperty("due", out var d) && d.GetBoolean();
+            ImportReminderStatusText.Text = due
+                ? (JsonUi.Str(rem, "title") + " — " + JsonUi.Str(rem, "reason"))
+                : ("On track · cadence " + JsonUi.Str(rem, "cadence") +
+                   (string.IsNullOrEmpty(JsonUi.Str(rem, "last_import_at", ""))
+                       ? " · never imported yet"
+                       : " · last " + JsonUi.Str(rem, "last_import_at")));
+        }
+        catch (Exception ex)
+        {
+            ImportReminderStatusText.Text = "Money-in: start engine to load. " + ex.Message;
+        }
+    }
+
+    private async void SaveImportReminder_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.PatchSettingsAsync(new Dictionary<string, object?>
+            {
+                ["import_reminder_cadence"] = TagOf(ImportCadenceBox) ?? "weekly",
+                ["import_reminder_focus"] = TagOf(ImportFocusBox) ?? "transactions",
+            });
+            StatusText.Text = "Money-in reminder settings saved.";
+            await LoadImportReminderAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void SnoozeImport_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.SnoozeImportReminderAsync(7);
+            StatusText.Text = "Import reminder snoozed 7 days.";
+            await LoadImportReminderAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void AckImport_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.AckImportReminderAsync();
+            StatusText.Text = "Marked books as refreshed (reminder clock reset).";
+            await LoadImportReminderAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private void RefreshTasks_Click(object sender, RoutedEventArgs e) => RefreshTaskStatus();

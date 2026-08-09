@@ -16,6 +16,18 @@
 - **No PWA** as a product track (no “install this web app”)  
 - No Electron/Tauri wrapper as the primary Windows app (WinUI stays)  
 - No “mobile web first” redesign of Simple mode  
+- **No paid cloud bank feed** we operate — full freeware; Plaid/Grok are **BYOK only**  
+- **No storing bank website passwords** (CSV/OFX/statements + optional OAuth tokens only)  
+
+## Freeware money-in
+
+| Path | Role |
+|------|------|
+| **Import CSV/OFX** | Default free path |
+| **Import reminders** | User-chosen cadence: off · daily · weekly · monthly |
+| **BYOK Plaid** | Optional live link with *user’s* keys |
+| **BYOK Grok** | Optional AI categorize with *user’s* xAI key |
+| **Rules categorizer** | Always free, offline |
 
 ## Engine vs client
 

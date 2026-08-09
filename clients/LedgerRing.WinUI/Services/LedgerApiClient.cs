@@ -382,6 +382,15 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> PatchSettingsAsync(object body, CancellationToken ct = default)
         => PatchJsonAsync("api/settings", body, ct);
 
+    public Task<JsonElement> GetImportReminderAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/import/reminder", ct);
+
+    public Task<JsonElement> SnoozeImportReminderAsync(int days = 7, CancellationToken ct = default)
+        => PostJsonAsync("api/import/reminder/snooze", new { days }, ct);
+
+    public Task<JsonElement> AckImportReminderAsync(CancellationToken ct = default)
+        => PostJsonAsync("api/import/reminder/ack", new { }, ct);
+
     public Task<JsonElement> GetPlaidStatusAsync(CancellationToken ct = default)
         => GetJsonAsync("api/plaid/status", ct);
 

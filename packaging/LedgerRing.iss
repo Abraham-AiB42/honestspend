@@ -6,7 +6,7 @@
 ;   - dist\LedgerRing-Windows-x64\ populated by package-release.ps1
 
 #define MyAppName "LedgerRing"
-#define MyAppVersion "1.0.4"
+#define MyAppVersion "1.0.5"
 ; Keep in sync with pyproject.toml / financial_os.__version__
 #define MyAppPublisher "LedgerRing contributors"
 #define MyAppExeName "LedgerRing.WinUI.exe"

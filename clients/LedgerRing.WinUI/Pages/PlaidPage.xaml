@@ -15,9 +15,9 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Bank connect (Plaid)" />
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Bank connect (optional BYOK Plaid)" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Optional. CSV import works offline. Link opens in the browser (not a WebView shell)." />
+                        Text="Free core path: Import CSV/OFX. Plaid is optional with your own keys (we never bill). Link opens in the browser." />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
             </Grid>

@@ -96,6 +96,24 @@ def build_digest(
                 "count": uncat,
             }
         )
+
+    try:
+        from financial_os.services.import_reminders import build_import_reminder
+
+        ir = build_import_reminder(session, as_of=as_of)
+        if ir.get("due") and ir.get("title"):
+            alerts.append(
+                {
+                    "level": "info",
+                    "code": "import_reminder",
+                    "message": ir["title"] + " — " + (ir.get("reason") or "Import CSV/OFX"),
+                    "action": "import",
+                    "cadence": ir.get("cadence"),
+                    "focus": ir.get("focus"),
+                }
+            )
+    except Exception:
+        pass
     if pending > 0:
         # Sum pending outflows for loud Spendable warning
         pend_rows = (

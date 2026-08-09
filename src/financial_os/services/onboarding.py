@@ -159,9 +159,14 @@ def apply_first_run(
     bill_name: str | None = None,
     bill_amount: Decimal | None = None,
     bill_next_date: str | None = None,
+    # freeware money-in reminders
+    import_reminder_cadence: str = "weekly",
+    import_reminder_focus: str = "transactions",
 ) -> dict[str, Any]:
     """Atomic first-run: cash + optional card + optional bill + onboarding complete."""
     from datetime import date as date_cls
+
+    from financial_os.services.import_reminders import normalize_cadence, normalize_focus
 
     result = apply_quick_setup(
         session,
@@ -179,6 +184,14 @@ def apply_first_run(
         safety_buffer=safety_buffer,
         ifpp_mode=ifpp_mode,
     )
+
+    settings = session.get(AppSettings, 1)
+    if settings:
+        settings.import_reminder_cadence = normalize_cadence(import_reminder_cadence)
+        settings.import_reminder_focus = normalize_focus(import_reminder_focus)
+        session.flush()
+        result["import_reminder_cadence"] = settings.import_reminder_cadence
+        result["import_reminder_focus"] = settings.import_reminder_focus
 
     if bill_name and bill_amount is not None and abs(Decimal(bill_amount)) > 0:
         profile = session.query(Profile).filter(Profile.slug == profile_slug).one()

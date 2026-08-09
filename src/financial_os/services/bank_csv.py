@@ -358,6 +358,15 @@ def import_bank_csv(
 
     session.flush()
 
+    if result.transactions_created > 0 or result.rows_scanned > 0:
+        # Any completed import run resets the freeware download reminder clock
+        try:
+            from financial_os.services.import_reminders import mark_import_activity
+
+            mark_import_activity(session)
+        except Exception:
+            pass
+
     if auto_categorize and result.transactions_created:
         applied = categorize_uncategorized(
             session,

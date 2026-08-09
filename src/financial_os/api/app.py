@@ -416,6 +416,10 @@ class SettingsIn(BaseModel):
     ifpp_scope: str | None = None  # entity | group
     ifpp_cleared_only: bool | None = None
     never_negative_enforcement: str | None = None  # off | warn | hard
+    import_reminder_cadence: str | None = None  # off | daily | weekly | monthly
+    import_reminder_focus: str | None = None  # transactions | statements | both
+    import_last_at: datetime | None = None
+    import_reminder_snooze_until: date | None = None
 
 
 class SettingsPatch(BaseModel):
@@ -455,6 +459,10 @@ class SettingsPatch(BaseModel):
     ifpp_scope: str | None = None
     ifpp_cleared_only: bool | None = None
     never_negative_enforcement: str | None = None
+    import_reminder_cadence: str | None = None
+    import_reminder_focus: str | None = None
+    import_last_at: datetime | None = None
+    import_reminder_snooze_until: date | None = None
 
 
 class SettingsOut(BaseModel):
@@ -494,6 +502,10 @@ class SettingsOut(BaseModel):
     ifpp_scope: str = "entity"
     ifpp_cleared_only: bool = True
     never_negative_enforcement: str = "warn"
+    import_reminder_cadence: str = "weekly"
+    import_reminder_focus: str = "transactions"
+    import_last_at: datetime | None = None
+    import_reminder_snooze_until: date | None = None
 
 
 class QuickSetupIn(BaseModel):
@@ -578,6 +590,9 @@ class FirstRunIn(BaseModel):
     bill_name: str | None = None
     bill_amount: Decimal | None = None
     bill_next_date: date | None = None
+    # Freeware money-in reminders
+    import_reminder_cadence: str = "weekly"  # off | daily | weekly | monthly
+    import_reminder_focus: str = "transactions"  # transactions | statements | both
 
 
 @app.post("/api/onboarding/first-run")
@@ -1803,7 +1818,7 @@ def categorizer_status():
         "grok_enabled": app_settings.grok_enabled,
         "model": app_settings.xai_model if app_settings.grok_enabled else None,
         "auto_apply_min_confidence": app_settings.auto_apply_min_confidence,
-        "hint": "Set FOS_XAI_API_KEY to enable Grok. Rules work offline.",
+        "hint": "Optional BYOK: set your FOS_XAI_API_KEY for Grok. Rules work offline forever (free).",
     }
 
 
@@ -2381,9 +2396,41 @@ def plaid_status():
         "enabled": app_settings.plaid_enabled,
         "env": app_settings.plaid_env,
         "link_url": link_url,
-        "hint": "Set FOS_PLAID_CLIENT_ID and FOS_PLAID_SECRET. CSV import works without Plaid.",
+        "hint": (
+            "Optional BYOK: set your own FOS_PLAID_CLIENT_ID and FOS_PLAID_SECRET. "
+            "LedgerRing is free — we never bill for bank feeds. CSV/OFX import works offline."
+        ),
         "sandbox_hint": "POST /api/plaid/sandbox-link?profile_id=N for one-click sandbox bank (no Link UI).",
+        "freeware": True,
+        "byok": True,
     }
+
+
+class ImportSnoozeIn(BaseModel):
+    days: int = 7
+
+
+@app.get("/api/import/reminder")
+def import_reminder_status(db: Session = Depends(get_db)):
+    from financial_os.services.import_reminders import build_import_reminder
+
+    return build_import_reminder(db)
+
+
+@app.post("/api/import/reminder/snooze")
+def import_reminder_snooze(body: ImportSnoozeIn, db: Session = Depends(get_db)):
+    from financial_os.services.import_reminders import snooze_import_reminder
+
+    return snooze_import_reminder(db, days=body.days)
+
+
+@app.post("/api/import/reminder/ack")
+def import_reminder_ack(db: Session = Depends(get_db)):
+    """User says they refreshed books (marks last import now without a file)."""
+    from financial_os.services.import_reminders import mark_import_activity
+
+    mark_import_activity(db)
+    return {"ok": True}
 
 
 @app.post("/api/plaid/link-token")

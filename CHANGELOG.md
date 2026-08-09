@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5 — Freeware money-in + customizable import reminders
+
+- **Policy:** full freeware · optional **BYOK Plaid** · optional **BYOK Grok** · no paid services  
+- **First-run:** choose import reminder cadence (off / daily / weekly / monthly) + focus (transactions / statements / both)  
+- **Settings:** money-in section · snooze 7d · mark refreshed  
+- **Home / digest:** nudge when due → Import (after fiscal safety)  
+- Schema **v11** · `import_reminder_*` + `import_last_at`  
+
 ## 1.0.4 — Sort polish · debt CSV · tray deep-links
 
 - **Sort charges** Skip · Accept all shown (learns rules)

@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("lederring.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -171,6 +171,20 @@ def _mig_10_whatif_scenarios(conn) -> None:
     )
 
 
+def _mig_11_import_reminders(conn) -> None:
+    """Customizable CSV/statement download reminders (freeware money-in path)."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN import_reminder_cadence VARCHAR(16) DEFAULT 'weekly'",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN import_reminder_focus VARCHAR(16) DEFAULT 'transactions'",
+    )
+    _exec_ignore(conn, "ALTER TABLE app_settings ADD COLUMN import_last_at DATETIME")
+    _exec_ignore(conn, "ALTER TABLE app_settings ADD COLUMN import_reminder_snooze_until DATE")
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -183,6 +197,7 @@ MIGRATIONS: dict[int, Callable] = {
     8: _mig_8_audit_events,
     9: _mig_9_autopay_policy,
     10: _mig_10_whatif_scenarios,
+    11: _mig_11_import_reminders,
 }
 
 

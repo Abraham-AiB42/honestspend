@@ -52,11 +52,19 @@ Locked decisions from product discovery (2026). This is the source of truth for 
 
 | Area | Decision |
 |------|----------|
-| Bank / cards | **As live as possible** (Plaid etc.) + CSV fallback |
-| Source of truth | **Live integrations** where available; app books are operational truth day-to-day |
+| **Licensing** | **Full freeware** — no paid tiers, no hosted bank feed we bill for |
+| Bank / cards | **CSV/OFX (+ statements) first** · customizable import reminders · optional **BYOK Plaid** |
+| Source of truth | **Local books** day-to-day; bank exports / optional Plaid keep them honest |
 | Payroll | **No** payroll product integrations — enter straight numbers |
 | Tax geography | **Multi-state** ready (tax lines / settings; not single-state locked) |
-| AI | Grok-class assistance for categorize/suggest; rules first |
+| AI | **Rules first** · optional **BYOK Grok** (`FOS_XAI_API_KEY`) — never required |
+
+### Money-in (freeware)
+
+1. First-run: pick **how often** to remind (off / daily / weekly / monthly) and **what** (transactions / statements / both).  
+2. User downloads files from their bank site (we never store bank passwords).  
+3. Import → clock resets · Home/digest nags only when due.  
+4. Optional: user brings **their** Plaid keys for live link; optional **their** xAI key for AI categorize.
 
 ---
 

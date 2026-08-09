@@ -42,6 +42,10 @@ public sealed partial class FirstRunPage : Page
     private string _billNameV = "Housing / rent";
     private decimal _billAmtV = 1500;
     private DateTimeOffset _billNextV = DateTimeOffset.Now.AddDays(14);
+    private string _importCadenceV = "weekly"; // off | daily | weekly | monthly
+    private string _importFocusV = "transactions"; // transactions | statements | both
+    private ComboBox? _importCadenceBox;
+    private ComboBox? _importFocusBox;
 
     public FirstRunPage()
     {
@@ -102,17 +106,56 @@ public sealed partial class FirstRunPage : Page
                 BillFields(_wantBillV);
                 break;
             case 4:
-                QuestionText.Text = "Link your bank later?";
+                QuestionText.Text = "How often should we remind you to refresh from your bank?";
                 HintText.Text =
-                    "Manual balances work today. When you're ready, Full books → Banks (Plaid) or Import CSV. " +
-                    "No bank login required to start.";
+                    "Free & local: download CSV/OFX (or statements) from your bank site, then Import. " +
+                    "We never store bank passwords. Optional live link = your own Plaid keys later.";
+                var cadenceBox = new ComboBox
+                {
+                    Header = "Reminder cadence",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                _importCadenceBox = cadenceBox;
+                void addCadence(string tag, string label, bool selected)
+                {
+                    var item = new ComboBoxItem { Content = label, Tag = tag };
+                    cadenceBox.Items.Add(item);
+                    if (selected) cadenceBox.SelectedItem = item;
+                }
+                addCadence("off", "Off — I update myself (daily sheet habit)", _importCadenceV == "off");
+                addCadence("daily", "Daily", _importCadenceV == "daily");
+                addCadence("weekly", "Weekly (good default)", _importCadenceV == "weekly");
+                addCadence("monthly", "Monthly (open rarely / statements)", _importCadenceV == "monthly");
+                if (cadenceBox.SelectedItem is null && cadenceBox.Items.Count > 0)
+                    cadenceBox.SelectedIndex = 2;
+
+                var focusBox = new ComboBox
+                {
+                    Header = "What to download",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                };
+                _importFocusBox = focusBox;
+                void addFocus(string tag, string label, bool selected)
+                {
+                    var item = new ComboBoxItem { Content = label, Tag = tag };
+                    focusBox.Items.Add(item);
+                    if (selected) focusBox.SelectedItem = item;
+                }
+                addFocus("transactions", "Transactions CSV/OFX (mid-cycle accuracy)", _importFocusV == "transactions");
+                addFocus("statements", "Monthly statements (PDF/CSV)", _importFocusV == "statements");
+                addFocus("both", "Both transactions and statements", _importFocusV == "both");
+                if (focusBox.SelectedItem is null && focusBox.Items.Count > 0)
+                    focusBox.SelectedIndex = 0;
+
+                Fields.Children.Add(cadenceBox);
+                Fields.Children.Add(focusBox);
                 Fields.Children.Add(new TextBlock
                 {
                     TextWrapping = TextWrapping.Wrap,
-                    Opacity = 0.85,
+                    Opacity = 0.75,
                     Text =
-                        "Tip: start with the numbers you know. Link banks once Safe to spend feels right — " +
-                        "that keeps first-run under two minutes.",
+                        "Change anytime in Settings. Optional: Full books → Banks (Plaid) with your keys, " +
+                        "or Grok categorize with your xAI key. Core app stays free forever.",
                 });
                 break;
             case 5:
@@ -127,7 +170,21 @@ public sealed partial class FirstRunPage : Page
                     lines.Add($"Card: {_cardNameV} · owed {_cardBalV:C} · due day {_cardDueV}");
                 if (_wantBillV)
                     lines.Add($"Bill: {_billNameV} · {_billAmtV:C}/mo");
-                lines.Add("Bank link: later (optional)");
+                var cadLabel = _importCadenceV switch
+                {
+                    "off" => "off (no nag)",
+                    "daily" => "daily",
+                    "monthly" => "monthly",
+                    _ => "weekly",
+                };
+                var focLabel = _importFocusV switch
+                {
+                    "statements" => "statements",
+                    "both" => "transactions + statements",
+                    _ => "transactions CSV/OFX",
+                };
+                lines.Add($"Money-in reminders: {cadLabel} · {focLabel}");
+                lines.Add("Plaid / Grok: optional BYOK later (not required)");
                 Fields.Children.Add(new ItemsControl { ItemsSource = lines });
                 break;
             default:
@@ -182,6 +239,10 @@ public sealed partial class FirstRunPage : Page
         if (_billName is not null) _billNameV = _billName.Text?.Trim() ?? "Bill";
         if (_billAmt is not null && !double.IsNaN(_billAmt.Value)) _billAmtV = (decimal)_billAmt.Value;
         if (_billNext?.Date is not null) _billNextV = _billNext.Date.Value;
+        if (_importCadenceBox?.SelectedItem is ComboBoxItem ci && ci.Tag is string cad)
+            _importCadenceV = cad;
+        if (_importFocusBox?.SelectedItem is ComboBoxItem fi && fi.Tag is string foc)
+            _importFocusV = foc;
     }
 
     private void Back_Click(object sender, RoutedEventArgs e)
@@ -265,6 +326,8 @@ public sealed partial class FirstRunPage : Page
             body["bill_amount"] = _billAmtV;
             body["bill_next_date"] = _billNextV.Date.ToString("yyyy-MM-dd");
         }
+        body["import_reminder_cadence"] = _importCadenceV;
+        body["import_reminder_focus"] = _importFocusV;
 
         var res = await api.FirstRunAsync(body);
         var home = await api.GetHomeSimpleAsync();

@@ -608,6 +608,9 @@ public sealed partial class HomePage : Page
             case "plaid":
                 Frame?.Navigate(typeof(PlaidPage));
                 break;
+            case "import":
+                Frame?.Navigate(typeof(ImportPage));
+                break;
             case "promo_sink":
             case "promo_balloon":
                 Frame?.Navigate(typeof(CreditPage));

@@ -345,6 +345,15 @@ class AppSettings(Base):
     ifpp_cleared_only: Mapped[bool] = mapped_column(Boolean, default=True)
     # off | warn | hard — write path never-negative checking enforcement
     never_negative_enforcement: Mapped[str] = mapped_column(String(16), default="warn")
+    # Freeware money-in: remind to download CSV/OFX/statements (not bank passwords)
+    # off | daily | weekly | monthly
+    import_reminder_cadence: Mapped[str] = mapped_column(String(16), default="weekly")
+    # transactions | statements | both
+    import_reminder_focus: Mapped[str] = mapped_column(String(16), default="transactions")
+    # Last successful CSV/OFX/Plaid import (drives due logic)
+    import_last_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # User snoozed until this date (inclusive quiet until after)
+    import_reminder_snooze_until: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:

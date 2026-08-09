@@ -216,6 +216,12 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
     item.transactions_cursor = cursor
     item.last_synced_at = datetime.now()
     session.flush()
+    try:
+        from financial_os.services.import_reminders import mark_import_activity
+
+        mark_import_activity(session, when=item.last_synced_at)
+    except Exception:
+        pass
 
     categorized = 0
     if auto_categorize and added:
