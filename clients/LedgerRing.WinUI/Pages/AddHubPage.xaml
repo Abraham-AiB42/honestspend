@@ -57,6 +57,10 @@
                         HorizontalAlignment="Stretch" Padding="16" Grid.Column="1" />
             </Grid>
 
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Move money" />
+            <Button Content="Playbooks — reimburse · pay myself · kid allowance"
+                    Click="Playbooks_Click" HorizontalAlignment="Stretch" Padding="16" />
+
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Banks &amp; files" />
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>

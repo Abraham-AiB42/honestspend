@@ -104,6 +104,34 @@
                     </StackPanel>
                 </Border>
 
+                <Border x:Name="PromoCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="0% promo" />
+                        <TextBlock x:Name="PromoTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:Name="PromoReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <Button x:Name="PromoBtn" Content="Create set-aside" HorizontalAlignment="Left"
+                                Click="Promo_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock x:Name="PromoMsg" Opacity="0.85" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="MonthCloseCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Close the month" />
+                        <TextBlock x:Name="MonthCloseSubtitle" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:Name="MonthCloseProgress" FontWeight="SemiBold" />
+                        <ItemsControl x:Name="MonthCloseList" />
+                        <Button x:Name="MonthCloseBtn" Content="Do next close step" HorizontalAlignment="Left"
+                                Click="MonthClose_Click" Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                </Border>
+
                 <Border x:Name="RitualCard"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

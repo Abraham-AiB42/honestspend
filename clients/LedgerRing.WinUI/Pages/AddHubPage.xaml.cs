@@ -22,4 +22,7 @@ public sealed partial class AddHubPage : Page
 
     private void Import_Click(object sender, RoutedEventArgs e)
         => Frame?.Navigate(typeof(ImportPage));
+
+    private void Playbooks_Click(object sender, RoutedEventArgs e)
+        => Frame?.Navigate(typeof(PlaybooksPage));
 }

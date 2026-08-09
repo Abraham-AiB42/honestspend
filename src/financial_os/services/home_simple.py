@@ -14,6 +14,8 @@ from financial_os.services.digest import build_digest
 from financial_os.services.ifpp_service import ifpp_to_dict, run_ifpp
 from financial_os.services.fee_brief import build_fee_brief
 from financial_os.services.import_brief import build_import_brief
+from financial_os.services.month_close import build_month_close
+from financial_os.services.promo_brief import build_promo_brief
 from financial_os.services.recurring_detect import detect_recurring
 from financial_os.services.wealth_basics import build_wealth_tips
 
@@ -123,6 +125,16 @@ def build_home_simple(
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
+    promo = build_promo_brief(
+        session,
+        profile_id=pid if sc == "entity" else None,
+        as_of=as_of,
+    )
+    close = build_month_close(
+        session,
+        profile_id=pid if sc == "entity" else None,
+        as_of=as_of,
+    )
     # Enrich 3-min check from books + fees + bank health
     ritual = _enrich_ritual(ritual, books=books, fees=fees)
 
@@ -150,6 +162,8 @@ def build_home_simple(
         "books_brief": books,
         "fee_brief": fees,
         "recurring_suggestions": recurring,
+        "promo_brief": promo,
+        "month_close": close,
         "digest_message": dig.get("message"),
         "headline": desk.get("headline"),
         "principles": [

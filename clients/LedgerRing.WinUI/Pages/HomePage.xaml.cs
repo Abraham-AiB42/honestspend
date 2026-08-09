@@ -16,6 +16,9 @@ public sealed partial class HomePage : Page
     private string _nextAction = "hold";
     private string _ritualNextAction = "hold";
     private string _booksAction = "hold";
+    private int? _promoAccountId;
+    private string _monthCloseAction = "hold";
+    private int? _monthCloseAccountId;
 
     public HomePage()
     {
@@ -193,6 +196,52 @@ public sealed partial class HomePage : Page
                 RecurringCard.Visibility = Visibility.Collapsed;
             }
 
+            // Promo set-aside (H1-C3)
+            _promoAccountId = null;
+            if (_home.TryGetProperty("promo_brief", out var promo) && promo.ValueKind == JsonValueKind.Object
+                && promo.TryGetProperty("needs_attention", out var pna) && pna.ValueKind == JsonValueKind.True)
+            {
+                PromoCard.Visibility = Visibility.Visible;
+                PromoTitle.Text = JsonUi.Str(promo, "title");
+                PromoReason.Text = JsonUi.Str(promo, "reason");
+                PromoBtn.Content = JsonUi.Str(promo, "button_label", "Create set-aside");
+                PromoMsg.Text = "";
+                if (promo.TryGetProperty("account_id", out var paid) && paid.ValueKind == JsonValueKind.Number)
+                    _promoAccountId = paid.GetInt32();
+            }
+            else
+            {
+                PromoCard.Visibility = Visibility.Collapsed;
+            }
+
+            // Month-close (H1-B)
+            _monthCloseAction = "hold";
+            _monthCloseAccountId = null;
+            if (_home.TryGetProperty("month_close", out var mc) && mc.ValueKind == JsonValueKind.Object)
+            {
+                MonthCloseSubtitle.Text = JsonUi.Str(mc, "subtitle");
+                MonthCloseProgress.Text = JsonUi.Str(mc, "progress_label");
+                var mLines = new List<string>();
+                if (mc.TryGetProperty("steps", out var ms) && ms.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var st in ms.EnumerateArray())
+                    {
+                        var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
+                        var opt = st.TryGetProperty("optional", out var o) && o.ValueKind == JsonValueKind.True;
+                        mLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")}" + (opt ? " (optional)" : ""));
+                        if (!done && _monthCloseAction == "hold" && !opt)
+                        {
+                            _monthCloseAction = JsonUi.Str(st, "action", "hold");
+                            if (st.TryGetProperty("account_id", out var maid) && maid.ValueKind == JsonValueKind.Number)
+                                _monthCloseAccountId = maid.GetInt32();
+                        }
+                    }
+                }
+                MonthCloseList.ItemsSource = mLines;
+                var allDone = mc.TryGetProperty("all_done", out var mad) && mad.ValueKind == JsonValueKind.True;
+                MonthCloseBtn.Visibility = allDone ? Visibility.Collapsed : Visibility.Visible;
+            }
+
             // 3-minute open-rarely ritual
             _ritualNextAction = "hold";
             if (_home.TryGetProperty("three_minute_check", out var ritual) && ritual.ValueKind == JsonValueKind.Object)
@@ -313,6 +362,81 @@ public sealed partial class HomePage : Page
 
     private void Recurring_Click(object sender, RoutedEventArgs e)
         => Frame?.Navigate(typeof(MoneyWizardPage), "bill");
+
+    private async void Promo_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (_promoAccountId is not int id)
+            {
+                Frame?.Navigate(typeof(CreditPage));
+                return;
+            }
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.CreatePromoSinkBillAsync(id);
+            PromoMsg.Text =
+                $"Set-aside ready · {JsonUi.Str(res, "name")} · ${JsonUi.Str(res, "monthly_sink")}/mo";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void MonthClose_Click(object sender, RoutedEventArgs e)
+    {
+        switch (_monthCloseAction)
+        {
+            case "review":
+                Frame?.Navigate(typeof(ReviewPage));
+                break;
+            case "fees":
+                _nextAction = "fees";
+                DoNext_Click(sender, e);
+                break;
+            case "promo_sink":
+                if (_monthCloseAccountId is int pid)
+                {
+                    _promoAccountId = pid;
+                    await Promo_Click_Core(pid);
+                }
+                else
+                    Frame?.Navigate(typeof(CreditPage));
+                break;
+            case "fund_tax_vault":
+                Frame?.Navigate(typeof(TaxVaultPage));
+                break;
+            case "reconcile":
+                Frame?.Navigate(typeof(ReconcilePage));
+                break;
+            case "backup":
+                Frame?.Navigate(typeof(DataPage));
+                break;
+            default:
+                Done_Click(sender, e);
+                break;
+        }
+    }
+
+    private async Task Promo_Click_Core(int accountId)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.CreatePromoSinkBillAsync(accountId);
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
 
     private void DoNext_Click(object sender, RoutedEventArgs e)
     {

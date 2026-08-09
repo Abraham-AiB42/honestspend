@@ -244,6 +244,23 @@ if r_rec.status_code == 200 and "suggestions" in r_rec.json():
 else:
     bad("recurring API", f"{r_rec.status_code}")
 
+mc = home1.get("month_close") or {}
+if mc.get("title") == "Close the month" and mc.get("steps"):
+    ok("month_close on home", mc.get("progress_label") or "")
+else:
+    bad("month_close", str(mc)[:100])
+
+r_mc = c.get("/api/home/month-close")
+if r_mc.status_code == 200 and r_mc.json().get("steps"):
+    ok("GET /api/home/month-close")
+else:
+    bad("month-close API", f"{r_mc.status_code}")
+
+if "promo_brief" in home1:
+    ok("promo_brief on home", (home1.get("promo_brief") or {}).get("title", "")[:40])
+else:
+    bad("promo_brief", "missing")
+
 next1 = home1.get("do_this_next") or {}
 if next1.get("title") and next1.get("reason") and next1.get("button_label"):
     ok("Do this next is complete", next1.get("title")[:60])

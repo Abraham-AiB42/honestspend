@@ -15,6 +15,9 @@
 | **After import / bank** | `books_brief` — uncategorized · pending · stale Plaid → Sort charges / re-link |
 | **Fee check** | `fee_brief` — fee-like charges last 45d |
 | **Possible bills** | `recurring_suggestions` — repeat charges not yet scheduled |
+| **0% promo** | `promo_brief` — one-tap monthly set-aside |
+| **Close the month** | `month_close` — fees · charges · promo · tax · reconcile · backup |
+| **Move money** | Add → Playbooks (reimburse · pay myself · fund biz · kid allowance) |
 
 **Full books** (shell toggle) restores the full nav for month-end / CPA / power users.
 

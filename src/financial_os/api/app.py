@@ -1377,6 +1377,17 @@ def recurring_suggestions(
     return detect_recurring(db, profile_id=profile_id, lookback_days=lookback_days)
 
 
+@app.get("/api/home/month-close")
+def home_month_close(
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Month-close checklist (fees · charges · promo · tax · reconcile · backup)."""
+    from financial_os.services.month_close import build_month_close
+
+    return build_month_close(db, profile_id=profile_id)
+
+
 @app.get("/api/payments/candidates")
 def payment_candidates(
     days: int = Query(14, ge=1, le=60),

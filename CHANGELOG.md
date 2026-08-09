@@ -1,13 +1,12 @@
 # Changelog
 
-## Unreleased — Dream H1 / v0.8 prep
+## 0.8.0 — Dream H1 live books + month-close
 
-- **`docs/DREAM_ROADMAP.md`** — plan to realize Excel+CK+QB+TT+Rocket Money *jobs*
-- **`books_brief`** on `GET /api/home/simple` — post-import / bank health for Simple Home
-- **`fee_brief`** + Home **Fee check** card
-- **`recurring_suggestions`** + `GET /api/recurring/suggestions` + Home **Possible bills**
-- 3-minute check enriched with bank re-auth/stale + fee state
-- WinUI cards: After import / bank · Fee check · Possible bills
+- **`docs/DREAM_ROADMAP.md`** — Excel+CK+QB+TT+Rocket Money *jobs* plan
+- **`books_brief`**, **`fee_brief`**, **`recurring_suggestions`**, **`promo_brief`**, **`month_close`**
+- APIs: `GET /api/recurring/suggestions`, `GET /api/home/month-close`
+- WinUI: After import · Fee check · Possible bills · 0% promo one-tap · **Close the month** · **Move money playbooks**
+- 3-minute check: bank re-auth/stale + fee enrichment
 
 ## 0.7.1 — Open-rarely polish
 
