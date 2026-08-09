@@ -11,8 +11,10 @@
         <StackPanel Spacing="12" MaxWidth="640">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="LedgerRing" />
             <TextBlock x:Name="VersionText" Opacity="0.8" Text="Connecting…" />
+            <TextBlock x:Name="MaturityText" Opacity="0.75" TextWrapping="Wrap"
+                Text="Pre-1.0 · product maturity ~65% dream (~0.6.5-class). Feature tags can read 0.9.x — that is not “almost 1.0.”" />
             <TextBlock TextWrapping="Wrap" FontSize="16">
-                Open-source freeware multi-entity budgeting / liquidity OS.
+                Open-source freeware multi-entity liquidity OS — not a bureau, not e-file, not payroll.
             </TextBlock>
             <TextBlock Opacity="0.8" TextWrapping="Wrap">
                 • Never bounce checking&#x0a;
@@ -26,7 +28,7 @@
                 Simple mode for daily use. Full books when you want ledgers and tax. Engine stays local on port 7420.
             </TextBlock>
             <TextBlock x:Name="PathsText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-            <TextBlock x:Name="LicenseText" Opacity="0.7" Text="MIT License · freeware" />
+            <TextBlock x:Name="LicenseText" Opacity="0.7" Text="MIT License · freeware · pre-1.0" />
         </StackPanel>
     </ScrollViewer>
 </Page>

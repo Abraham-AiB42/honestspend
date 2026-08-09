@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 — Version honesty (pre-1.0 freeze)
+
+- **[`docs/VERSIONING.md`](docs/VERSIONING.md)** — feature tags vs ~65% dream / **0.6.5-class** maturity  
+- **[`docs/RC_1.0.md`](docs/RC_1.0.md)** — hard checklist; **no `v1.0.0` until green**  
+- Stay on **0.9.x** for fixes/RC work; About + README state pre-1.0 honestly  
+- Do not rewrite historical tags (0.7–0.9 remain)
+
 ## 0.9.0 — Tax year prep + scenarios + debt report
 
 - **Tax year checklist** on Home + `GET /api/tax/year-checklist` (categorize · vault · packet)

@@ -13,10 +13,13 @@
 | Effort | Open rarely — automation first |
 | License | Free for anyone · open source |
 
-**v0.7 Simple mode (default):** Home · Add · Can I buy? · Sort charges · 3-minute check  
-**Full books:** flip the shell toggle for ledgers, tax, multi-user, reconcile.
+**Simple mode (default):** Home · Add · Can I buy? · Sort charges · 3-minute check · month-close / tax-year prep  
+**Full books:** shell toggle for ledgers, tax, reports, multi-user, reconcile.
 
-Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple mode: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md) · Dream roadmap: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md) · Release: [`docs/RELEASE_0.7.0.md`](docs/RELEASE_0.7.0.md)
+**Version honesty:** feature tag **0.9.x** · product maturity **~65% dream (~0.6.5-class)** · **not 1.0 yet**.  
+1.0 only after [`docs/RC_1.0.md`](docs/RC_1.0.md). Policy: [`docs/VERSIONING.md`](docs/VERSIONING.md).
+
+Product constitution: [`docs/PRODUCT.md`](docs/PRODUCT.md) · Simple: [`docs/SIMPLE_MODE.md`](docs/SIMPLE_MODE.md) · Dream: [`docs/DREAM_ROADMAP.md`](docs/DREAM_ROADMAP.md)
 
 ## Windows (primary)
 

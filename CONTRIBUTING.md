@@ -34,12 +34,19 @@ Data: `~/.financial-os/financial_os.db`
 4. **Not tax/legal/investment advice** — keep disclaimers on tax/credit simulators.
 5. Prefer pure engine functions + unit tests (see `tests/`).
 
+## Versioning (pre-1.0)
+
+- Feature tags (**0.9.x**) ≠ dream completion (~**65%** / **0.6.5-class**).  
+- **Do not tag 1.0.0** until [`docs/RC_1.0.md`](docs/RC_1.0.md) is fully checked.  
+- Policy: [`docs/VERSIONING.md`](docs/VERSIONING.md).
+
 ## PR checklist
 
-- [ ] `pytest -q` passes  
+- [ ] `pytest -q` passes (or `.\scripts\verify-grade-a.ps1`)  
 - [ ] New fiscal logic has unit tests  
-- [ ] UI copy matches PRODUCT.md priorities  
-- [ ] No secrets committed (`.env`, API keys)
+- [ ] UI copy matches PRODUCT.md priorities · Simple path stays jargon-free  
+- [ ] No secrets committed (`.env`, API keys)  
+- [ ] Do not bump to 1.0.0 without RC checklist
 
 ## License
 

@@ -1,8 +1,9 @@
 # Plan: Realize the Dream
 
 **Product:** LedgerRing (financial-os)  
-**Baseline:** **v0.7.1** — Simple mode north star shipped (engine + WinUI + Glance + grade-A ship bar)  
-**Schema:** **v9**  
+**Baseline:** **v0.9.x** feature tags · product maturity **~65% dream (~0.6.5-class)** — see [`VERSIONING.md`](./VERSIONING.md)  
+**Schema:** **v10**  
+**1.0:** Only after [`RC_1.0.md`](./RC_1.0.md) — do **not** treat 0.9 as “almost 1.0.”  
 **Dream:** One app that *does the job* of Excel-nerd control + Credit Karma awareness + QuickBooks books hygiene + TurboTax handoff + Rocket Money daily simplicity — without becoming five mediocre clones.
 
 **Constitution (non-negotiable):** local-first freeware · never bounce checking · no dumb fees/interest · intentional 0% float · options + why · fiscal #1 · credit #2 · open rarely · **no** bureau marketplace · **no** payroll product · **no** trading product · **no** e-file as core product.
@@ -26,13 +27,14 @@ LedgerRing is “best of all worlds” when a real household + side hustle can:
 
 ### North-star score target by horizon
 
-| Horizon | Version band | Overall dream completion (est.) |
-|---------|--------------|----------------------------------|
-| **Now** | 0.7.x | ~40% dream · **A** on liquidity constitution |
-| **H1** | 0.8–0.9 | ~55–60% — daily + live books + month-close |
-| **H2** | 1.0 | ~70–75% — “I live here” product |
-| **H3** | 1.x–2.0 | ~85% — multi-client parity + nerd power tools |
-| **Never** | — | Full Intuit/CK marketplace parity (out of scope) |
+| Horizon | Feature tags | Dream completion (est.) | Honest label |
+|---------|--------------|-------------------------|--------------|
+| **Past** | 0.6–0.7 | ~40–50% | Simple + multi-entity spine |
+| **Now** | **0.9.x** | **~65%** | **0.6.5-class** on 0→1.0 dream scale |
+| **H1** | 0.8.x | ~55–65% | Live books + month-close |
+| **H2 → 1.0** | **1.0.0 only after RC** | ~70–75% | “I live here” + dogfood |
+| **H3** | 1.x–2.0 | ~85% | Platforms + nerd tools |
+| **Never** | — | — | Full Intuit/CK marketplace parity |
 
 ---
 
