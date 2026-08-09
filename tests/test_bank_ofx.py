@@ -127,5 +127,20 @@ def test_inbox_ofx(tmp_path: Path, monkeypatch):
     result = process_inbox(s)
     s.commit()
     assert result["transactions_created"] >= 1
+    assert result.get("next_steps")
     assert not path.exists()  # archived
+    # ACCTID learned on account
+    acct = s.query(Account).filter(Account.kind == "checking").one()
+    assert acct.external_id == "ofx:123456789"
+
+    # Second drop: match by learned ACCTID even with unrelated filename
+    path2 = Path(layout["inbox"]) / "random-export.ofx"
+    path2.write_text(SAMPLE_OFX, encoding="utf-8")
+    result2 = process_inbox(s)
+    s.commit()
+    assert result2["files_seen"] == 1
+    assert result2.get("ofx_acctid_matches", 0) >= 1
+    row = result2["results"][0]
+    assert row.get("match_mode") == "ofx_acctid"
+    assert row.get("account_id") == acct.id
     s.close()

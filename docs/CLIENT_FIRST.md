@@ -27,7 +27,8 @@
 | **Import OFX/QFX** | Quicken-style downloads · FITID dedupe · **LEDGERBAL → Reconcile** |
 | **PDF statements** | Best-effort text extract (prefer CSV/OFX when offered) |
 | **Bank guides** | Login links + download steps (no passwords) |
-| **Inbox folder** | Drop `.csv` / `.ofx` / `.qfx` / `.pdf` → `honestspend import-inbox` / daily task |
+| **Inbox folder** | Drop `.csv` / `.ofx` / `.qfx` / `.pdf` → `honestspend import-inbox` / daily task · next_steps after process |
+| **OFX ACCTID match** | First OFX import learns account id; later drops auto-route without nickname in filename |
 | **Import reminders** | User-chosen cadence: off · daily · weekly · monthly |
 | **Post-import next steps** | After CSV / OFX / PDF: Sort charges · Reconcile drift · Home |
 | **BYOK Plaid** | Optional live link with *user’s* keys |

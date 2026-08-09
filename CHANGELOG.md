@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.13 — Inbox next steps + OFX ACCTID auto-match
+
+- **Inbox process** returns aggregated `next_steps` (Sort charges / Home)
+- **OFX ACCTID** stored on `Account.external_id` after first import
+- Later inbox OFX/QFX files match by ACCTID even with unrelated filenames
+- Import page shows match mode + CTAs after “Import inbox now”
+
 ## 1.0.12 — Post-import next steps for all money-in paths
 
 - Shared **`build_post_import_next_steps`** (Sort charges · Reconcile · Home)

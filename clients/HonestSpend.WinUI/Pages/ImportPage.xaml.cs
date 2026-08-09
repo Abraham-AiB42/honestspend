@@ -194,6 +194,7 @@ public sealed partial class ImportPage : Page
     {
         ErrorBar.IsOpen = false;
         ResultText.Text = "";
+        HideNextSteps();
         try
         {
             int? defaultAcct = null;
@@ -204,21 +205,31 @@ public sealed partial class ImportPage : Page
             var res = await api.ProcessImportInboxAsync(
                 defaultAccountId: defaultAcct,
                 autoCategorize: AutoCatBox.IsChecked == true);
-            var created = JsonUi.Str(res, "transactions_created", "0");
-            var seen = JsonUi.Str(res, "files_seen", "0");
-            ResultText.Text = $"Inbox · {seen} file(s) · {created} transactions created.";
+            var lines = new List<string>
+            {
+                $"Inbox · {JsonUi.Str(res, "files_seen", "0")} file(s) · " +
+                $"{JsonUi.Str(res, "transactions_created", "0")} created · " +
+                $"categorized {JsonUi.Str(res, "categorized", "0")}" +
+                (string.IsNullOrEmpty(JsonUi.Str(res, "ofx_acctid_matches")) || JsonUi.Str(res, "ofx_acctid_matches") == "0"
+                    ? ""
+                    : $" · OFX ACCTID matches {JsonUi.Str(res, "ofx_acctid_matches")}"),
+            };
             if (res.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
             {
                 foreach (var r in results.EnumerateArray().Take(12))
                 {
                     var line =
                         $"{JsonUi.Str(r, "file")} → {JsonUi.Str(r, "account_nickname", "?")} · " +
-                        $"+{JsonUi.Str(r, "transactions_created", "0")}";
+                        $"+{JsonUi.Str(r, "transactions_created", "0")}" +
+                        (string.IsNullOrEmpty(JsonUi.Str(r, "match_mode")) ? "" : $" · match:{JsonUi.Str(r, "match_mode")}");
                     if (r.TryGetProperty("error", out var er) && er.ValueKind == JsonValueKind.String)
                         line += " · " + er.GetString();
-                    ResultText.Text += "\n" + line;
+                    lines.Add(line);
                 }
             }
+            AppendNextStepLines(lines, res);
+            ResultText.Text = string.Join("\n", lines);
+            ShowNextSteps(res);
             await RefreshInboxAsync(api);
         }
         catch (Exception ex)

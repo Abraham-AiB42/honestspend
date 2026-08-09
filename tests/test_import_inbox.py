@@ -69,6 +69,7 @@ def test_inbox_import_matches_account(tmp_path: Path, monkeypatch):
     s.commit()
     assert result["files_seen"] == 1
     assert result["transactions_created"] >= 1
+    assert result.get("next_steps")
     # file archived
     assert not csv.exists()
     s.close()

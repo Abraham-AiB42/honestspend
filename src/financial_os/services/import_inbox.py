@@ -42,6 +42,7 @@ def ensure_inbox_layout() -> dict[str, str]:
             "  .pdf  text statements (best-effort)\n"
             "  e.g. chase.ofx, Everyday-card.csv, Primary-checking.qfx\n"
             "Name files with account nicknames when you can.\n"
+            "OFX/QFX: after the first import, ACCTID is remembered for auto-match.\n"
             "\n"
             "Run:  honestspend import-inbox\n"
             "Or:   Import → Import inbox now · tray → Import inbox now\n"
@@ -70,6 +71,12 @@ def _score_account(acct: Account, stem: str) -> int:
     for tok in re.split(r"[^a-z0-9]+", inst):
         if len(tok) >= 3 and tok in s:
             score += 10
+    # last-4 of learned OFX ACCTID in filename
+    ext = (acct.external_id or "").lower()
+    if ext.startswith("ofx:"):
+        digits = re.sub(r"\D+", "", ext[4:])
+        if len(digits) >= 4 and digits[-4:] in re.sub(r"\D+", "", s):
+            score += 40
     # kind keywords
     kind_words = {
         "checking": ("checking", "chk", "chequing"),
@@ -102,6 +109,21 @@ def _score_account(acct: Account, stem: str) -> int:
     return score
 
 
+def match_account_by_ofx_acctid(session: Session, acctid: str | None) -> Account | None:
+    """Exact match on learned Account.external_id = ofx:{ACCTID}."""
+    from financial_os.services.bank_ofx import ofx_external_account_key
+
+    key = ofx_external_account_key(acctid)
+    if not key:
+        return None
+    return (
+        session.query(Account)
+        .filter(Account.archived_at.is_(None), Account.external_id == key)
+        .order_by(Account.id.asc())
+        .first()
+    )
+
+
 def resolve_account_for_file(
     session: Session,
     path: Path,
@@ -116,9 +138,30 @@ def resolve_account_for_file(
     )
     if not accounts:
         return None
+
+    # OFX/QFX: prefer previously learned ACCTID binding
+    if path.suffix.lower() in (".ofx", ".qfx"):
+        try:
+            from financial_os.services.bank_ofx import peek_ofx_meta
+
+            meta = peek_ofx_meta(path)
+            matched = match_account_by_ofx_acctid(session, meta.get("acctid"))
+            if matched is not None:
+                return matched
+            # last-4 of ACCTID vs nickname/filename still via scoring below
+            if meta.get("acctid"):
+                last4 = re.sub(r"\D+", "", meta["acctid"])[-4:]
+                if last4:
+                    for a in accounts:
+                        blob = f"{a.nickname or ''} {a.institution or ''} {a.external_id or ''}"
+                        if last4 in re.sub(r"\D+", "", blob):
+                            return a
+        except Exception:
+            pass
+
     stem = path.stem
     ranked = sorted(
-        (( _score_account(a, stem), a.id, a) for a in accounts),
+        ((_score_account(a, stem), a.id, a) for a in accounts),
         key=lambda t: (-t[0], t[1]),
     )
     best_score, _, best = ranked[0]
@@ -165,15 +208,19 @@ def process_inbox(
     amount_sign: str = "bank",
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Import all CSV/TXT files in inbox; move successes to archive."""
+    """Import all CSV/OFX/PDF files in inbox; move successes to archive."""
     layout = ensure_inbox_layout()
     files = list_inbox_files()
     results: list[dict[str, Any]] = []
     total_created = 0
+    total_categorized = 0
     any_ok = False
+    profile_ids: set[int] = set()
+    match_modes: list[str] = []
 
     for meta in files:
         path = Path(meta["path"])
+        match_mode = "filename"
         acct = resolve_account_for_file(session, path, default_account_id=default_account_id)
         if acct is None:
             results.append(
@@ -184,12 +231,24 @@ def process_inbox(
                 }
             )
             continue
+        if path.suffix.lower() in (".ofx", ".qfx"):
+            try:
+                from financial_os.services.bank_ofx import peek_ofx_meta
+
+                ofx_meta = peek_ofx_meta(path)
+                linked = match_account_by_ofx_acctid(session, ofx_meta.get("acctid"))
+                if linked is not None and linked.id == acct.id:
+                    match_mode = "ofx_acctid"
+            except Exception:
+                pass
         entry: dict[str, Any] = {
             "file": path.name,
             "account_id": acct.id,
             "account_nickname": acct.nickname,
             "match_score": _score_account(acct, path.stem),
+            "match_mode": match_mode,
         }
+        match_modes.append(match_mode)
         if dry_run:
             entry["ok"] = True
             entry["dry_run"] = True
@@ -227,6 +286,9 @@ def process_inbox(
                 entry["format"] = suffix.lstrip(".")
                 entry["rows_scanned"] = res.transactions_found
                 entry["account_hint"] = res.account_hint
+                if res.ledger_balance:
+                    entry["ledger_balance"] = res.ledger_balance
+                    entry["drift"] = res.drift
             else:
                 with path.open("rb") as fh:
                     res = import_bank_csv(
@@ -249,6 +311,8 @@ def process_inbox(
             if res.transactions_created or res.skipped_existing:
                 any_ok = True
                 total_created += res.transactions_created
+                total_categorized += int(res.categorized or 0)
+                profile_ids.add(acct.profile_id)
                 dest = archive_dir() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{path.name}"
                 shutil.move(str(path), str(dest))
                 entry["archived_to"] = str(dest)
@@ -266,15 +330,33 @@ def process_inbox(
             pass
         session.flush()
 
+    next_steps: list[dict[str, str]] = []
+    if any_ok and not dry_run and profile_ids:
+        from financial_os.services.import_brief import build_post_import_next_steps
+
+        # Prefer the first touched profile; books brief is per-entity
+        pid = sorted(profile_ids)[0]
+        next_steps = build_post_import_next_steps(
+            session,
+            profile_id=pid,
+            created=total_created,
+            categorized=total_categorized,
+            source="inbox",
+        )
+
+    ofx_linked = sum(1 for m in match_modes if m == "ofx_acctid")
     return {
         "inbox": layout["inbox"],
         "archive": layout["archive"],
         "files_seen": len(files),
         "transactions_created": total_created,
+        "categorized": total_categorized,
         "results": results,
+        "next_steps": next_steps,
+        "ofx_acctid_matches": ofx_linked,
         "hint": (
-            "Name files with account nicknames (e.g. Primary-checking.csv) for better auto-match."
+            "OFX ACCTID is remembered after first import; name files with nicknames for CSV/PDF."
             if files
-            else "Inbox is empty — drop bank CSV exports here."
+            else "Inbox is empty — drop bank CSV/OFX exports here."
         ),
     }

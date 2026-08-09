@@ -90,6 +90,39 @@ def _parse_amount(raw: str) -> Decimal | None:
         return None
 
 
+def ofx_external_account_key(acctid: str | None) -> str | None:
+    """Stable Account.external_id for bank ACCTID (enables inbox auto-match)."""
+    if not acctid:
+        return None
+    digits = re.sub(r"\D+", "", str(acctid).strip())
+    raw = (str(acctid).strip() or digits)[:64]
+    if not raw:
+        return None
+    return f"ofx:{raw}"[:128]
+
+
+def extract_ofx_acctid(text: str) -> str | None:
+    m = re.search(r"<ACCTID>([^<\r\n]+)", text, re.I)
+    if not m:
+        return None
+    return m.group(1).strip() or None
+
+
+def peek_ofx_meta(file_obj: BinaryIO | TextIO | bytes | str | Path) -> dict[str, str]:
+    """Lightweight account hints for matching before full import."""
+    text = _read_text(file_obj)
+    meta: dict[str, str] = {}
+    for key in ("ACCTID", "BANKID", "ORG", "ACCTTYPE"):
+        m = re.search(rf"<{key}>([^<\r\n]+)", text, re.I)
+        if m:
+            meta[key.lower()] = m.group(1).strip()
+    if "acctid" in meta:
+        key = ofx_external_account_key(meta["acctid"])
+        if key:
+            meta["external_key"] = key
+    return meta
+
+
 def parse_ofx_ledger_balance(text: str) -> dict[str, Any]:
     """Extract LEDGERBAL / AVAILBAL BALAMT (+ optional DTASOF)."""
     out: dict[str, Any] = {"balance": None, "as_of": None, "source": None}
@@ -331,6 +364,17 @@ def import_ofx(
         result.drift = str(drift)
     else:
         result.books_balance = str(acct.current_balance or 0)
+
+    # Learn ACCTID → account for future inbox auto-match
+    if meta.get("acctid") and (
+        result.transactions_created
+        or result.skipped_existing
+        or result.institution_balance_set
+    ):
+        key = ofx_external_account_key(meta["acctid"])
+        if key and (not acct.external_id or str(acct.external_id).startswith("ofx:")):
+            acct.external_id = key
+            session.flush()
 
     if result.transactions_created or result.skipped_existing or result.institution_balance_set:
         try:
