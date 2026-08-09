@@ -45,23 +45,36 @@ if (-not $SkipEngine) {
 
 # 4) Install notes
 $notes = @"
-LedgerRing — Windows package
-============================
+LedgerRing — Windows package (v0.7 Simple mode)
+================================================
 
-1. Run LedgerRing.WinUI.exe
-2. Complete Setup (creates first backup automatically)
-3. Optional: enable logon tray-only in Settings
-4. Data lives in %USERPROFILE%\.financial-os (or FOS_DATA_DIR)
+ONE-CLICK USE
+1. Unzip this folder anywhere (keep engine\ next to the EXE)
+2. Run LedgerRing.WinUI.exe
+3. 2-minute Get started → Safe to spend on Home
+4. Optional: Add → Link bank, or Import CSV
 
-Engine folder: .\engine  (auto-detected)
-Docs: https://github.com/ — see docs/INSTALL.md in source tree
+DAILY
+- Simple mode (default): Home · Add · Can I buy? · Sort charges
+- 3-minute check on Home when you open the app rarely
+- Full books toggle in the top bar when you need ledgers/tax
 
-Version package built: $(Get-Date -Format o)
+ENGINE
+- .\engine\ is auto-detected (no Python install required for end users
+  if this package was built with package-release.ps1)
+- If Home says offline: Settings → Start engine
+
+DATA
+- %USERPROFILE%\.financial-os  (or Settings → data folder / OneDrive)
+
+Docs: INSTALL.md · SIMPLE_MODE.md · RELEASE_0.7.0.md in this folder or source tree.
+
+Built: $(Get-Date -Format o)
 "@
 Set-Content -Path (Join-Path $Stage "README-INSTALL.txt") -Value $notes -Encoding UTF8
 
 # Copy key docs if present
-foreach ($doc in @("docs\INSTALL.md", "docs\AUTOMATION.md", "LICENSE", "CHANGELOG.md")) {
+foreach ($doc in @("docs\INSTALL.md", "docs\SIMPLE_MODE.md", "docs\RELEASE_0.7.0.md", "docs\AUTOMATION.md", "LICENSE", "CHANGELOG.md")) {
     $src = Join-Path $Root $doc
     if (Test-Path $src) {
         $destName = Split-Path $doc -Leaf

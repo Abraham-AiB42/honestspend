@@ -12,8 +12,15 @@ public static class AppState
     /// <summary>When true, hide write navigation (CPA / viewer session).</summary>
     public static bool ReadOnlySession { get; set; }
 
+    /// <summary>Simple mode = north-star daily UI; FullBooks = cockpit.</summary>
+    public static bool SimpleMode { get; set; } = true;
+
     /// <summary>Raised when shell entity/scope changes so pages can refresh.</summary>
     public static event Action? ScopeChanged;
+
+    public static event Action? ModeChanged;
+
+    public static void NotifyModeChanged() => ModeChanged?.Invoke();
 
     public static void NotifyScopeChanged() => ScopeChanged?.Invoke();
 

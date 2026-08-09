@@ -563,6 +563,38 @@ def onboarding_quick_setup(body: QuickSetupIn, db: Session = Depends(get_db)):
         raise HTTPException(400, str(e)) from e
 
 
+class FirstRunIn(BaseModel):
+    profile_slug: str = "personal"
+    cash_name: str = "Primary checking"
+    cash_balance: Decimal = Decimal("0")
+    cash_institution: str | None = None
+    safety_buffer: Decimal = Decimal("1000")
+    ifpp_mode: str = "conservative"
+    card_name: str | None = None
+    card_balance: Decimal = Decimal("0")
+    card_limit: Decimal | None = None
+    card_due_day: int | None = 15
+    card_promo_end: str | None = None
+    bill_name: str | None = None
+    bill_amount: Decimal | None = None
+    bill_next_date: date | None = None
+
+
+@app.post("/api/onboarding/first-run")
+def onboarding_first_run(body: FirstRunIn, db: Session = Depends(get_db)):
+    """Atomic first-run wizard: cash + optional card + optional bill."""
+    from financial_os.services.onboarding import apply_first_run
+
+    data = body.model_dump()
+    if data.get("bill_next_date") is not None:
+        data["bill_next_date"] = data["bill_next_date"].isoformat()
+    try:
+        result = apply_first_run(db, **data)
+        return {"ok": True, **result}
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.get("/api/profiles", response_model=list[ProfileOut])
 def list_profiles(
     include_archived: bool = False,
@@ -1318,6 +1350,19 @@ def glance(
     from financial_os.services.glance import build_glance
 
     return build_glance(db, profile_id=profile_id, scope=scope, mode=mode)
+
+
+@app.get("/api/home/simple")
+def home_simple(
+    profile_id: Optional[int] = None,
+    scope: Optional[str] = None,
+    mode: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Stupid-simple Home payload: safe to spend, status, do-this-next, wealth tips."""
+    from financial_os.services.home_simple import build_home_simple
+
+    return build_home_simple(db, profile_id=profile_id, scope=scope, mode=mode)
 
 
 @app.get("/api/payments/candidates")

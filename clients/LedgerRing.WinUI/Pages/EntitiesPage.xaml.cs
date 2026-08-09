@@ -34,12 +34,11 @@ public sealed partial class EntitiesPage : Page
             var lines = new List<string>();
             foreach (var p in profiles.EnumerateArray())
             {
-                var parent = JsonUi.Str(p, "parent_profile_id", "");
+                var et = UiCopy.EntityType(JsonUi.Str(p, "entity_type"));
+                var tax = JsonUi.Str(p, "tax_form_primary", "");
+                var taxBit = string.IsNullOrEmpty(tax) || tax == "—" || et == "Child" ? "" : $" · tax {tax}";
                 lines.Add(
-                    $"#{JsonUi.Str(p, "id")} · {JsonUi.Str(p, "display_name")} · " +
-                    $"{JsonUi.Str(p, "entity_type")} · {JsonUi.Str(p, "tax_form_primary")} · " +
-                    $"slug {JsonUi.Str(p, "slug")}" +
-                    (string.IsNullOrEmpty(parent) || parent == "—" ? "" : $" · parent #{parent}") +
+                    $"{JsonUi.Str(p, "display_name")} · {et}{taxBit}" +
                     (p.TryGetProperty("is_default", out var d) && d.ValueKind == JsonValueKind.True
                         ? " · default"
                         : ""));
@@ -75,7 +74,7 @@ public sealed partial class EntitiesPage : Page
                 entity_type = "business",
                 tax_form_primary = tax,
             });
-            MsgText.Text = $"Added business · {JsonUi.Str(res, "display_name")} ({JsonUi.Str(res, "slug")})";
+            MsgText.Text = $"Added business · {JsonUi.Str(res, "display_name")}";
             BizNameBox.Text = "";
             await RefreshAsync();
         }
@@ -112,7 +111,7 @@ public sealed partial class EntitiesPage : Page
                 entity_type = "child",
                 parent_profile_id = personalId,
             });
-            MsgText.Text = $"Added child · {JsonUi.Str(res, "display_name")} ({JsonUi.Str(res, "slug")})";
+            MsgText.Text = $"Added child · {JsonUi.Str(res, "display_name")}";
             ChildNameBox.Text = "";
             await RefreshAsync();
         }

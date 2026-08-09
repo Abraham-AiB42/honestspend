@@ -25,6 +25,8 @@ public sealed partial class BillsPage : Page
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadAsync();
+    private void WizardBill_Click(object sender, RoutedEventArgs e) => Frame?.Navigate(typeof(MoneyWizardPage), "bill");
+    private void WizardIncome_Click(object sender, RoutedEventArgs e) => Frame?.Navigate(typeof(MoneyWizardPage), "income");
 
     private async void Profile_Changed(object sender, SelectionChangedEventArgs e)
         => FillAccounts();

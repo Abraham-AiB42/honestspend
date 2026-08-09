@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 — Simple mode + wizards (north star)
+
+Polish: named autopay cards, first-run cold start, empty-state bill tip, Glance `/api/home/simple` + wealth card, plain Can I buy / Credit / Accounts labels.
+Tax vault no longer headlines personal day-one (optional unless business / rate set); Home soft-routes to wealth or “open rarely”.
+A-path polish: Simple **Sort charges** review, 3-minute check on Home, kill residual `#id` chrome, first-run bank-later step, Settings engine-first.
+Ship bar: `scripts/verify-grade-a.ps1`, package-release one-folder install, Inno **0.7.0**, Add → Link bank, Home start-engine + bank tip.
+
+- **`GET /api/home/simple`** — safe to spend, status, do-this-next, setup flags, wealth tips
+- **`POST /api/onboarding/first-run`** — atomic first-run (cash + optional card + bill)
+- **Wealth basics** (educational, after safety): 401(k) match, IRA habit, 529 if kids, IUL disclaimer
+- **WinUI Simple mode** (default nav): Home · Add · Get started · Can I buy? · Review · About
+- **First-run wizard** page (cold start) — ~2 min, plain language
+- **Add hub + Money wizards**: cash, savings, card, loan, bill, income, business, child
+- Home rebuilt around **Safe to spend** + **Do this next** (no IFPP jargon)
+- Named pickers for void + payment matches + autopay cards (no raw IDs on happy path)
+- Settings: everyday safety first; jargon under **Advanced** expander
+- Glance: plain money view, dedicated wealth tips card
+- `UiCopy` plain-language helpers (autopay policy, pay method, money view)
+- `docs/SIMPLE_MODE.md`
+
 ## 0.6.0 — Public multi-entity release
 
 **Ship bar for freeware release:** Personal + Add Business(es) + Add Child(ren); never-neg write gate + rescue coach; multi-user keys; encrypted cloud snapshots; Glance for Mac/Linux/phone; schema **v9**.

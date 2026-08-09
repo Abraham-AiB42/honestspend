@@ -21,6 +21,7 @@ Get-ChildItem -Recurse -File -Include $include | Where-Object {
     if ($_.Name -eq "check-no-private-names.ps1") { return $false }
     if ($_.Name -eq "smoke-e2e.ps1") { return $false }
     if ($_.Name -eq "_smoke_e2e.py") { return $false }
+    if ($_.Name -eq "_northstar_e2e.py") { return $false }
     foreach ($d in $excludeDirs) {
         if ($p -match [regex]::Escape([IO.Path]::DirectorySeparatorChar + $d + [IO.Path]::DirectorySeparatorChar)) {
             return $false

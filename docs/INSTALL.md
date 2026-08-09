@@ -47,12 +47,14 @@ pip install -e ".[dev]"
 
 ---
 
-## Option B — Publish zip (self-contained UI + engine)
+## Option B — One-folder Windows package (recommended ship)
 
-**Requires:** .NET 10 SDK, Python 3.11+
+**Requires (builder only):** .NET 10 SDK, Python 3.11+  
+**End user:** just unzip + double-click — no Python required.
 
 ```powershell
-# From repo root
+# From repo root — grade-A bar first, then package
+.\scripts\verify-grade-a.ps1
 .\scripts\package-release.ps1
 # → dist\LedgerRing-Windows-x64\
 # → dist\LedgerRing-Windows-x64.zip
@@ -62,10 +64,18 @@ What it does:
 
 1. `publish-winui.ps1` → self-contained WinUI  
 2. `prepare-engine-bundle.ps1` → `engine\` with venv + package  
-3. Copies install notes into the folder  
+3. Copies install notes + Simple mode docs  
 4. Zips for distribution  
 
-Unzip anywhere, run `LedgerRing.WinUI.exe`.
+**End user path**
+
+1. Unzip (keep `engine\` next to `LedgerRing.WinUI.exe`)  
+2. Run `LedgerRing.WinUI.exe`  
+3. Complete **Get started** (~2 min)  
+4. Home shows **Safe to spend** + **3-minute check**  
+5. Optional: **Add → Link bank** or Import CSV  
+
+Engine is auto-detected from `.\engine\`. If offline: Settings → **Start engine**.
 
 ---
 
@@ -119,11 +129,12 @@ Data: `~/.financial-os/` (override with `FOS_DATA_DIR`).
 
 ## First run checklist
 
-1. Launch **LedgerRing.WinUI.exe** (engine auto-starts).  
-2. **Setup** → primary checking (+ optional 0% card).  
-   - Completing setup creates a **post-setup backup** automatically.  
-3. **Settings** (optional): logon tray-only, data dir, safety buffer.  
-4. Automation (optional):
+1. Launch **LedgerRing.WinUI.exe** (engine auto-starts from `.\engine\`).  
+2. **Get started** (~2 min) → checking + optional card/bill.  
+3. **Home** → Safe to spend · Do this next · 3-minute check.  
+4. Optional: **Add → Link bank** or Import CSV.  
+5. **Settings** (optional): logon tray, rainy-day floor.  
+6. Automation (optional):
 
 ```powershell
 # From a full repo clone (or copy scripts next to engine)

@@ -26,6 +26,33 @@ from financial_os.services.ifpp_service import run_ifpp
 
 ZERO = Decimal("0")
 
+# Soft steps may appear on capital desk but should not dominate Simple "Do this next"
+SOFT_HEADLINE_ACTIONS = frozenset(
+    {
+        "fund_tax_vault",
+        "respect_tax_vault",
+        "park_yield",
+        "min_only_cheap_debt",
+        "credit_util",
+        "hold",
+    }
+)
+
+
+def _tax_vault_is_urgent(session: Session, vault: dict[str, Any]) -> bool:
+    """Hard-push tax set-aside only for self-employed / business / explicit rate."""
+    if not vault.get("enabled"):
+        return False
+    if vault.get("income_rate"):
+        return True
+    from financial_os.db import Profile
+
+    if session.query(Profile).filter(Profile.entity_type == "business", Profile.archived_at.is_(None)).count():
+        return True
+    # Variable / self-employed style scheduled income without a linked employer paycheck name is rare;
+    # presence of any positive scheduled income alone is not enough (W-2 paycheck).
+    return False
+
 
 @dataclass
 class AllocationStep:
@@ -60,7 +87,7 @@ def _fee_warnings(
         return []
     return [
         f"Detected ~{fees['count']} fee-like transactions (~${fees['total_abs']}) in last 45 days — "
-        f"fees are avoidable drag on IFPP."
+        f"fees are avoidable drag on Safe to spend."
     ]
 
 
@@ -112,10 +139,10 @@ def build_capital_desk(
                 amount_hint="Cover gap before any discretionary spend; open rescue options",
                 reason=gap,
                 alternatives=[
-                    "POST /api/liquidity/rescue — ranked transfer / defer / float options",
+                    "Open Rescue options on Home",
                     "Delay non-essential purchases",
-                    "Move money from yield/savings into checking before bill hits",
-                    "Use interest-free card float only if full-pay path exists",
+                    "Move money from savings into checking before the bill hits",
+                    "Use interest-free card float only if you can pay in full",
                 ],
                 priority="fiscal",
             )
@@ -141,43 +168,65 @@ def build_capital_desk(
         )
         rank += 1
 
-    # 2b. Tax vault set-aside if enabled and thin
+    # 2b. Tax vault — only hard-push when self-employed / business / rate set.
+    # Personal W-2 first-run should not open on "Fund tax vault" (stupid-simple).
     from financial_os.services.tax_vault import get_tax_vault
 
     vault = get_tax_vault(session)
+    tax_step: AllocationStep | None = None
+    tax_urgent = _tax_vault_is_urgent(session, vault)
     if vault.get("enabled") and Decimal(vault.get("balance") or 0) > 0:
-        steps.append(
-            AllocationStep(
-                rank=rank,
-                action="respect_tax_vault",
-                title="Respect tax vault (already reserved)",
-                amount_hint=f"${vault['balance']} not in Spendable",
-                reason=vault.get("note") or "Tax reserve reduces safe-to-spend.",
-                alternatives=[
-                    "Add more via Tax vault on Tax tab or Settings",
-                    "Release only when filing/paying estimated tax",
-                ],
-                priority="fiscal",
-            )
+        tax_step = AllocationStep(
+            rank=0,  # filled when inserted
+            action="respect_tax_vault",
+            title="Taxes already set aside",
+            amount_hint=f"${vault['balance']} kept out of Safe to spend",
+            reason=vault.get("note")
+            or "Tax reserve is already reducing Safe to spend — leave it alone until you file.",
+            alternatives=[
+                "Add more under Full books → Tax vault",
+                "Release only when paying estimated tax",
+            ],
+            priority="optional" if not tax_urgent else "fiscal",
         )
-        rank += 1
     elif vault.get("enabled"):
         rate = vault.get("income_rate")
         hint = "Set a balance or income set-aside rate"
         if rate:
             hint = f"Suggested rate {vault.get('income_rate_pct')} of variable income"
-        steps.append(
-            AllocationStep(
-                rank=rank,
+        if tax_urgent:
+            tax_step = AllocationStep(
+                rank=0,
                 action="fund_tax_vault",
-                title="Fund tax vault",
+                title="Set aside money for taxes",
                 amount_hint=hint,
-                reason="Empty tax vault — April risk. Reserve estimated taxes so Spendable stays honest.",
-                alternatives=["Disable tax vault if you track elsewhere", "Use estimated quarterly amount"],
+                reason=(
+                    "Business or self-employed income usually needs estimated taxes. "
+                    "Reserve so Safe to spend stays honest."
+                ),
+                alternatives=[
+                    "Turn off tax set-aside if you track elsewhere",
+                    "Use your quarterly estimate",
+                ],
                 priority="fiscal",
             )
-        )
-        rank += 1
+        else:
+            # Soft optional — inserted after hard fiscal work so it never headlines cold start
+            tax_step = AllocationStep(
+                rank=0,
+                action="fund_tax_vault",
+                title="Optional: set aside for taxes",
+                amount_hint=hint,
+                reason=(
+                    "If any income isn't tax-withheld, park an estimate so Safe to spend "
+                    "doesn't tempt April surprises. Skip if your paycheck already withholds."
+                ),
+                alternatives=[
+                    "Skip — paycheck already withholds",
+                    "Turn off tax set-aside under Full books → Tax",
+                ],
+                priority="optional",
+            )
 
     # 3. Promo balloons nearing end
     for o in plan.order:
@@ -221,6 +270,12 @@ def build_capital_desk(
             rank += 1
             break  # only spotlight current #1 extra target
 
+    # Tax vault: urgent fiscal → now; optional → after hard fiscal (before buffer polish)
+    if tax_step is not None and tax_step.priority == "fiscal":
+        tax_step.rank = rank
+        steps.append(tax_step)
+        rank += 1
+
     # 5. Safety buffer
     buffer = _d(settings.safety_buffer or 0)
     cq = session.query(Account).filter(Account.kind == "checking", Account.archived_at.is_(None))
@@ -239,6 +294,12 @@ def build_capital_desk(
                 priority="fiscal",
             )
         )
+        rank += 1
+
+    # Optional tax set-aside (personal W-2) — after hard fiscal, before yield polish
+    if tax_step is not None and tax_step.priority == "optional":
+        tax_step.rank = rank
+        steps.append(tax_step)
         rank += 1
 
     # 6. Yield park
@@ -299,6 +360,38 @@ def build_capital_desk(
                 priority="credit",
             )
         )
+        rank += 1
+
+    # Wealth basics (educational) — only when fiscal house is not on fire
+    has_critical = bool(ifpp.is_red_now) or any(
+        s.action in ("protect_checking", "stop_fees") for s in steps[:3]
+    )
+    if not has_critical and ifpp.cash_spendable > _d("200"):
+        from financial_os.services.wealth_basics import build_wealth_tips
+
+        for tip in build_wealth_tips(
+            session,
+            cash_spendable=ifpp.cash_spendable,
+            is_red_now=bool(ifpp.is_red_now),
+            has_critical_fiscal=has_critical,
+        ):
+            steps.append(
+                AllocationStep(
+                    rank=rank,
+                    action=tip["action"],
+                    title=tip["title"],
+                    amount_hint=tip["amount_hint"],
+                    reason=tip["reason"]
+                    + (
+                        f" ({tip['disclaimer']})"
+                        if tip.get("disclaimer")
+                        else ""
+                    ),
+                    alternatives=tip.get("alternatives") or [],
+                    priority="wealth",
+                )
+            )
+            rank += 1
 
     if not steps:
         steps.append(
@@ -313,8 +406,12 @@ def build_capital_desk(
             )
         )
 
-    # Headline next $1
-    head = steps[0]
+    # Headline: fiscal first, then wealth, never lead with soft optional nags
+    head = next((s for s in steps if s.priority == "fiscal"), None)
+    if head is None:
+        head = next((s for s in steps if s.priority == "wealth"), None)
+    if head is None:
+        head = steps[0]
     return {
         "as_of": as_of.isoformat(),
         "headline": {
@@ -323,6 +420,7 @@ def build_capital_desk(
             "amount_hint": head.amount_hint,
             "reason": head.reason,
             "alternatives": head.alternatives,
+            "priority": head.priority,
         },
         "steps": [
             {

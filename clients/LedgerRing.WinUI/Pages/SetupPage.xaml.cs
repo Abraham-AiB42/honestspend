@@ -17,6 +17,20 @@ public sealed partial class SetupPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        // Prefer guided first-run when nothing is set up yet
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var s = await api.GetOnboardingAsync();
+            var needs = s.TryGetProperty("needs_setup", out var n) && n.GetBoolean();
+            if (needs)
+            {
+                Frame?.Navigate(typeof(FirstRunPage));
+                return;
+            }
+        }
+        catch { /* fall through to status form */ }
         await LoadStatusAsync();
     }
 
@@ -155,5 +169,10 @@ public sealed partial class SetupPage : Page
     private void Home_Click(object sender, RoutedEventArgs e)
     {
         Frame?.Navigate(typeof(HomePage));
+    }
+
+    private void FirstRun_Click(object sender, RoutedEventArgs e)
+    {
+        Frame?.Navigate(typeof(FirstRunPage));
     }
 }

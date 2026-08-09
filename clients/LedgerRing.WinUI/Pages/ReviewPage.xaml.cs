@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace LedgerRing_WinUI.Pages;
 
+/// <summary>Simple-mode review: sort a few charges — no ledger chrome or raw IDs.</summary>
 public sealed partial class ReviewPage : Page
 {
     private readonly ObservableCollection<ReviewRow> _rows = new();
@@ -30,52 +31,86 @@ public sealed partial class ReviewPage : Page
     private async Task RunBatchAsync(bool apply)
     {
         ErrorBar.IsOpen = false;
-        StatusText.Text = "Working…";
+        StatusText.Text = "Looking at uncategorized charges…";
+        EmptyTitle.Visibility = Visibility.Collapsed;
+        EmptyHint.Visibility = Visibility.Collapsed;
         try
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var res = await api.CategorizeBatchAsync(apply, GrokBox.IsChecked == true, 80);
+            var res = await api.CategorizeBatchAsync(apply, GrokBox.IsChecked == true, 40);
             _rows.Clear();
             if (!res.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
             {
-                StatusText.Text = "No results.";
+                ShowEmpty("All clear", "Nothing waiting. Safe to close.");
                 return;
             }
+
+            var pending = 0;
             var applied = 0;
             foreach (var r in results.EnumerateArray())
             {
                 var tid = r.GetProperty("transaction_id").GetInt32();
-                var title = $"{JsonUi.Str(r, "txn_date")} · {JsonUi.Str(r, "payee", "(no payee)")} · {JsonUi.Money(r, "amount")}";
+                var payee = JsonUi.Str(r, "payee", "Charge");
+                var when = JsonUi.Str(r, "txn_date", "");
+                var amt = JsonUi.Money(r, "amount");
+                var title = string.IsNullOrEmpty(when) || when == "—"
+                    ? $"{payee} · {amt}"
+                    : $"{payee} · {amt} · {when}";
+
                 var sug = r.GetProperty("suggestion");
-                var name = JsonUi.Str(sug, "category_name", "—");
+                var name = JsonUi.Str(sug, "category_name", "Uncategorized");
                 var conf = sug.TryGetProperty("confidence", out var c) ? c.GetDouble() : 0;
-                var source = JsonUi.Str(sug, "source");
-                var reason = JsonUi.Str(sug, "reason");
+                var confPct = conf > 0 ? $" · {conf * 100:0}% sure" : "";
+                var reason = JsonUi.Str(sug, "reason", "");
+                if (string.IsNullOrEmpty(reason) || reason == "—")
+                    reason = "Based on your rules and past accepts.";
                 var isApplied = r.TryGetProperty("applied", out var ap) && ap.GetBoolean();
                 if (isApplied) applied++;
+                else pending++;
+
                 int? catId = null;
                 if (sug.TryGetProperty("category_id", out var cid) && cid.ValueKind != JsonValueKind.Null)
                     catId = cid.GetInt32();
+
                 _rows.Add(new ReviewRow(
                     tid,
                     title,
-                    $"Suggest: {name} · {conf * 100:0}% · {source}",
+                    $"Category: {name}{confPct}",
                     reason,
                     catId,
-                    isApplied ? Visibility.Collapsed : Visibility.Visible,
-                    isApplied ? "applied" : ""));
+                    isApplied || catId is null ? Visibility.Collapsed : Visibility.Visible,
+                    isApplied ? "done" : ""));
             }
+
+            if (_rows.Count == 0)
+            {
+                ShowEmpty("All clear", "Nothing waiting. Come back after imports or bank sync.");
+                return;
+            }
+
             StatusText.Text = apply
-                ? $"Auto-applied {applied} of {_rows.Count}."
-                : $"{_rows.Count} suggestions. Grok: {(res.TryGetProperty("grok_enabled", out var g) && g.GetBoolean() ? "on" : "off")}.";
+                ? $"Filed {applied} of {_rows.Count} automatically. {pending} still need a glance."
+                : pending == 0
+                    ? "Queue handled — nice."
+                    : $"{pending} charge{(pending == 1 ? "" : "s")} to confirm.";
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
-            StatusText.Text = "Error";
+            StatusText.Text = "Could not load queue.";
         }
+    }
+
+    private void ShowEmpty(string title, string hint)
+    {
+        EmptyTitle.Text = title;
+        EmptyHint.Text = hint;
+        EmptyTitle.Visibility = Visibility.Visible;
+        EmptyHint.Visibility = Visibility.Visible;
+        StatusText.Text = "";
+        _rows.Clear();
     }
 
     private async void Accept_Click(object sender, RoutedEventArgs e)
@@ -86,9 +121,6 @@ public sealed partial class ReviewPage : Page
         {
             using var api = new LedgerApiClient();
             await api.PatchTransactionAsync(row.TxnId, new { category_id = row.CategoryId.Value }, learn: true);
-            row.AcceptVisible = Visibility.Collapsed;
-            row.Badge = "accepted";
-            // force refresh list item — simplest: reload
             await RunBatchAsync(false);
         }
         catch (Exception ex)

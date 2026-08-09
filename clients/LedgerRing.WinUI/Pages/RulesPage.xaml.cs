@@ -125,7 +125,7 @@ public sealed partial class RulesPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             await api.DeleteRuleAsync(id);
-            MsgText.Text = $"Deleted rule #{id}";
+            MsgText.Text = "Deleted rule.";
             await LoadAsync();
         }
         catch (Exception ex)

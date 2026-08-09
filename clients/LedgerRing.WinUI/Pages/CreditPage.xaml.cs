@@ -227,7 +227,7 @@ public sealed partial class CreditPage : Page
                 {
                     var rec = JsonUi.Str(o, "recommendation");
                     order.Add(
-                        $"#{JsonUi.Str(o, "rank")} {JsonUi.Str(o, "name")} · {JsonUi.Money(o, "balance")} · " +
+                        $"{JsonUi.Str(o, "rank")}. {JsonUi.Str(o, "name")} · {JsonUi.Money(o, "balance")} · " +
                         $"{JsonUi.Str(o, "effective_apr_pct")} · {rec.ToUpperInvariant()} · {JsonUi.Str(o, "reason")}");
                 }
             }
@@ -303,19 +303,27 @@ public sealed partial class CreditPage : Page
         {
             var ap = await api.GetAutopayAsync();
             var lines = new List<string>();
+            AutopayCardBox.Items.Clear();
             if (ap.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
             {
                 foreach (var it in arr.EnumerateArray())
                 {
                     var id = it.GetProperty("account_id").GetInt32();
+                    var name = JsonUi.Str(it, "name");
+                    var policy = UiCopy.AutopayPolicy(JsonUi.Str(it, "policy"));
                     lines.Add(
-                        $"#{id} {JsonUi.Str(it, "name")} · policy {JsonUi.Str(it, "policy")} · " +
-                        $"suggest ${JsonUi.Str(it, "suggested_amount")} · bal ${JsonUi.Str(it, "balance")}");
-                    if (double.IsNaN(AutopayAcctBox.Value))
-                        AutopayAcctBox.Value = id;
+                        $"{name} · {policy} · about ${JsonUi.Str(it, "suggested_amount")}/mo · bal ${JsonUi.Str(it, "balance")}");
+                    AutopayCardBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"{name} (due day {JsonUi.Str(it, "payment_due_day", "?")})",
+                        Tag = id,
+                    });
                 }
             }
-            AutopayList.ItemsSource = lines.Count > 0 ? lines : new List<string> { "No credit cards." };
+            if (AutopayCardBox.Items.Count > 0) AutopayCardBox.SelectedIndex = 0;
+            AutopayList.ItemsSource = lines.Count > 0
+                ? lines
+                : new List<string> { "No credit cards yet — Add → Credit card from Home." };
         }
         catch
         {
@@ -328,17 +336,17 @@ public sealed partial class CreditPage : Page
         ErrorBar.IsOpen = false;
         try
         {
-            if (double.IsNaN(AutopayAcctBox.Value))
-                throw new InvalidOperationException("Enter a credit account id.");
+            if (AutopayCardBox.SelectedItem is not ComboBoxItem { Tag: int id })
+                throw new InvalidOperationException("Pick a card by name.");
             var policy = "none";
             if (AutopayPolicyBox.SelectedItem is ComboBoxItem ci && ci.Tag is string p)
                 policy = p;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var res = await api.SetAutopayAsync((int)AutopayAcctBox.Value, policy);
+            var res = await api.SetAutopayAsync(id, policy);
             AutopayMsg.Text =
-                $"#{JsonUi.Str(res, "account_id")} → {JsonUi.Str(res, "policy")} · " +
-                $"suggest ${JsonUi.Str(res, "suggested_amount")}";
+                $"{JsonUi.Str(res, "name")} → {UiCopy.AutopayPolicy(JsonUi.Str(res, "policy"))} · " +
+                $"about ${JsonUi.Str(res, "suggested_amount")}/mo";
             await LoadAutopayAsync(api);
         }
         catch (Exception ex)

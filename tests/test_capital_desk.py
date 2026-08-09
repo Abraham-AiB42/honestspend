@@ -104,3 +104,66 @@ def test_capital_desk_flags_fees(tmp_path: Path):
     actions = [st["action"] for st in desk["steps"]]
     assert "stop_fees" in actions
     s.close()
+
+
+def test_personal_surplus_does_not_headline_tax_vault(tmp_path: Path):
+    """W-2 personal with healthy cash: tax vault is optional, not headline."""
+    s = _session(tmp_path)
+    settings = s.get(AppSettings, 1)
+    settings.safety_buffer = Decimal("1000")
+    settings.tax_vault_enabled = True
+    settings.tax_vault_balance = Decimal("0")
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Main",
+            current_balance=Decimal("8000"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    s.flush()
+    desk = build_capital_desk(s)
+    assert desk["headline"]["action"] != "fund_tax_vault"
+    actions = [st["action"] for st in desk["steps"]]
+    # Still available as optional step when vault enabled & empty
+    if "fund_tax_vault" in actions:
+        step = next(st for st in desk["steps"] if st["action"] == "fund_tax_vault")
+        assert step["priority"] == "optional"
+        assert "Optional" in step["title"] or "optional" in step["title"].lower()
+    s.close()
+
+
+def test_business_entity_can_push_tax_set_aside(tmp_path: Path):
+    s = _session(tmp_path)
+    settings = s.get(AppSettings, 1)
+    settings.safety_buffer = Decimal("0")
+    settings.tax_vault_enabled = True
+    settings.tax_vault_balance = Decimal("0")
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Profile(
+            slug="side-biz",
+            display_name="Side Biz",
+            entity_type="business",
+            tax_form_primary="1120S",
+            parent_profile_id=personal.id,
+        )
+    )
+    s.add(
+        Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Main",
+            current_balance=Decimal("8000"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    s.flush()
+    desk = build_capital_desk(s)
+    actions = [st["action"] for st in desk["steps"]]
+    assert "fund_tax_vault" in actions
+    step = next(st for st in desk["steps"] if st["action"] == "fund_tax_vault")
+    assert step["priority"] == "fiscal"
+    s.close()

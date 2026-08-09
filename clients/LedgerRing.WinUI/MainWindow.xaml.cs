@@ -13,9 +13,15 @@ public sealed partial class MainWindow : Window
     private bool _shellLoading;
     private static readonly HashSet<string> WriteNavTags = new(StringComparer.OrdinalIgnoreCase)
     {
-        "setup", "entities", "accounts", "ledger", "review", "rules", "import",
+        "setup", "add", "entities", "accounts", "ledger", "review", "rules", "import",
         "plaid", "reconcile", "data", "users", "bills", "credit", "buy",
         "taxvault", "intermix",
+    };
+
+    /// <summary>Visible in Simple mode; everything else is Full books.</summary>
+    private static readonly HashSet<string> SimpleNavTags = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "home", "add", "setup", "buy", "review", "about",
     };
 
     public MainWindow()
@@ -27,12 +33,32 @@ public sealed partial class MainWindow : Window
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
         AppWindow.SetIcon("Assets/AppIcon.ico");
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1180, 820));
+        try
+        {
+            var ls = Windows.Storage.ApplicationData.Current.LocalSettings.Values;
+            if (ls["UiMode"] is string m && m == "full")
+                AppState.SimpleMode = false;
+        }
+        catch { /* ignore */ }
         ApplyReadOnlyChrome();
+        ApplySimpleChrome();
     }
 
     private async void NavView_Loaded(object sender, RoutedEventArgs e)
     {
+        _shellLoading = true;
+        for (var j = 0; j < UiModeBox.Items.Count; j++)
+        {
+            if (UiModeBox.Items[j] is ComboBoxItem cbi && cbi.Tag as string == (AppState.SimpleMode ? "simple" : "full"))
+            {
+                UiModeBox.SelectedIndex = j;
+                break;
+            }
+        }
+        _shellLoading = false;
+
         await LoadShellEntitiesAsync();
+        ApplySimpleChrome();
 
         try
         {
@@ -43,7 +69,7 @@ public sealed partial class MainWindow : Window
             if (needs && !AppState.ReadOnlySession)
             {
                 SelectNav("setup");
-                NavFrame.Navigate(typeof(SetupPage));
+                NavFrame.Navigate(typeof(FirstRunPage));
                 return;
             }
         }
@@ -54,6 +80,42 @@ public sealed partial class MainWindow : Window
 
         SelectNav("home");
         NavFrame.Navigate(typeof(HomePage));
+    }
+
+    private void UiMode_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_shellLoading) return;
+        if (UiModeBox.SelectedItem is ComboBoxItem mi && mi.Tag is string t)
+            AppState.SimpleMode = t == "simple";
+        try
+        {
+            Windows.Storage.ApplicationData.Current.LocalSettings.Values["UiMode"] =
+                AppState.SimpleMode ? "simple" : "full";
+        }
+        catch { /* ignore */ }
+        ApplySimpleChrome();
+        AppState.NotifyModeChanged();
+        SelectNav("home");
+        NavFrame.Navigate(typeof(HomePage));
+    }
+
+    private void ApplySimpleChrome()
+    {
+        foreach (var item in NavView.MenuItems)
+        {
+            if (item is not NavigationViewItem nvi || nvi.Tag is not string tag)
+                continue;
+            if (AppState.ReadOnlySession)
+                continue; // ApplyReadOnlyChrome owns visibility
+            if (AppState.SimpleMode)
+                nvi.Visibility = SimpleNavTags.Contains(tag) ? Visibility.Visible : Visibility.Collapsed;
+            else
+                nvi.Visibility = Visibility.Visible;
+        }
+        // Always show add in simple
+        ShellModeText.Text = AppState.SimpleMode
+            ? "Simple · safe to spend first"
+            : "Full books · every tool";
     }
 
     private async Task LoadShellEntitiesAsync()
@@ -70,9 +132,13 @@ public sealed partial class MainWindow : Window
             foreach (var p in profiles.EnumerateArray())
             {
                 var id = p.GetProperty("id").GetInt32();
+                var et = UiCopy.EntityType(JsonUi.Str(p, "entity_type"));
+                var name = JsonUi.Str(p, "display_name");
                 ShellEntityBox.Items.Add(new ComboBoxItem
                 {
-                    Content = $"{JsonUi.Str(p, "display_name")} ({JsonUi.Str(p, "entity_type")})",
+                    Content = et == "Personal" || name.Equals(et, StringComparison.OrdinalIgnoreCase)
+                        ? name
+                        : $"{name} · {et}",
                     Tag = id,
                 });
                 if (AppState.SelectedProfileId == id) idx = i;
@@ -121,9 +187,12 @@ public sealed partial class MainWindow : Window
         else if (AppState.IfppScope == "group")
             AppState.SelectedProfileId = null;
         ShellEntityBox.IsEnabled = AppState.IfppScope == "entity" && !AppState.ReadOnlySession;
-        ShellModeText.Text = AppState.ReadOnlySession
-            ? "CPA / read-only session — write pages hidden"
-            : $"{AppState.IfppScope}" + (AppState.SelectedProfileId is int p ? $" · #{p}" : "");
+        if (AppState.ReadOnlySession)
+            ShellModeText.Text = "CPA view — read only";
+        else if (AppState.SimpleMode)
+            ShellModeText.Text = "Simple · safe to spend first";
+        else
+            ShellModeText.Text = $"Full books · {UiCopy.MoneyView(AppState.IfppScope)}";
     }
 
     private void CpaMode_Click(object sender, RoutedEventArgs e)
@@ -131,6 +200,8 @@ public sealed partial class MainWindow : Window
         AppState.ReadOnlySession = !AppState.ReadOnlySession;
         CpaModeBtn.Content = AppState.ReadOnlySession ? "Exit CPA mode" : "CPA mode";
         ApplyReadOnlyChrome();
+        if (!AppState.ReadOnlySession)
+            ApplySimpleChrome();
         ApplyScopeFromShell();
         if (AppState.ReadOnlySession)
         {
@@ -141,12 +212,13 @@ public sealed partial class MainWindow : Window
 
     private void ApplyReadOnlyChrome()
     {
+        if (!AppState.ReadOnlySession)
+            return;
         foreach (var item in NavView.MenuItems)
         {
             if (item is NavigationViewItem nvi && nvi.Tag is string tag)
             {
-                // Tax packet stays available for CPA export
-                var hide = AppState.ReadOnlySession && WriteNavTags.Contains(tag) && tag != "tax";
+                var hide = WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "buy" or "about");
                 nvi.Visibility = hide ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -203,7 +275,8 @@ public sealed partial class MainWindow : Window
         switch (tag)
         {
             case "home": NavFrame.Navigate(typeof(HomePage)); break;
-            case "setup": NavFrame.Navigate(typeof(SetupPage)); break;
+            case "add": NavFrame.Navigate(typeof(AddHubPage)); break;
+            case "setup": NavFrame.Navigate(typeof(FirstRunPage)); break;
             case "entities": NavFrame.Navigate(typeof(EntitiesPage)); break;
             case "accounts": NavFrame.Navigate(typeof(AccountsPage)); break;
             case "ledger": NavFrame.Navigate(typeof(LedgerPage)); break;

@@ -92,7 +92,7 @@ public sealed partial class LedgerPage : Page
             if (a.GetProperty("profile_id").GetInt32() != profileId) continue;
             AccountBox.Items.Add(new ComboBoxItem
             {
-                Content = $"{JsonUi.Str(a, "nickname")} [{JsonUi.Str(a, "kind")}]",
+                Content = $"{JsonUi.Str(a, "nickname")} · {UiCopy.AccountKind(JsonUi.Str(a, "kind"))}",
                 Tag = a.GetProperty("id").GetInt32(),
             });
         }
@@ -113,16 +113,23 @@ public sealed partial class LedgerPage : Page
             {
                 var id = t.GetProperty("id").GetInt32();
                 var payee = JsonUi.Str(t, "payee", "(no payee)");
-                var title = $"#{id} · {JsonUi.Str(t, "txn_date")} · {payee} · {JsonUi.Money(t, "amount")}";
+                var title = $"{JsonUi.Str(t, "txn_date")} · {payee} · {JsonUi.Money(t, "amount")}";
                 int? catId = null;
                 if (t.TryGetProperty("category_id", out var c) && c.ValueKind != JsonValueKind.Null)
                     catId = c.GetInt32();
                 var selected = _allCats.FirstOrDefault(x => x.Id == catId) ?? _allCats[0];
                 var cats = new ObservableCollection<CatOpt>(_allCats);
                 var st = JsonUi.Str(t, "status", "cleared");
-                _rows.Add(new TxnRow(id, title, $"profile {JsonUi.Str(t, "profile_id")} · acct {JsonUi.Str(t, "account_id")} · {st}", cats, selected));
+                var acctName = JsonUi.Str(t, "account_name", JsonUi.Str(t, "account_nickname", "Account"));
+                _rows.Add(new TxnRow(id, title, $"{acctName} · {st}", cats, selected));
             }
             MsgText.Text = $"{_rows.Count} transactions";
+            VoidTxnBox.Items.Clear();
+            foreach (var row in _rows)
+            {
+                VoidTxnBox.Items.Add(new ComboBoxItem { Content = row.Title, Tag = row.Id });
+            }
+            if (VoidTxnBox.Items.Count > 0) VoidTxnBox.SelectedIndex = 0;
         }
         finally
         {
@@ -139,7 +146,7 @@ public sealed partial class LedgerPage : Page
         {
             using var api = new LedgerApiClient();
             await api.PatchTransactionAsync(txnId, new { category_id = cat.Id }, learn: true);
-            MsgText.Text = $"Updated txn #{txnId} → {cat.Label}";
+            MsgText.Text = $"Updated → {cat.Label}";
         }
         catch (Exception ex)
         {
@@ -191,14 +198,13 @@ public sealed partial class LedgerPage : Page
         ErrorBar.IsOpen = false;
         try
         {
-            if (double.IsNaN(VoidIdBox.Value) || VoidIdBox.Value < 1)
-                throw new InvalidOperationException("Enter a transaction id to void (shown in list).");
-            var id = (int)VoidIdBox.Value;
+            if (VoidTxnBox.SelectedItem is not ComboBoxItem { Tag: int id })
+                throw new InvalidOperationException("Pick a transaction to void.");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.VoidTransactionAsync(id, "user void from Ledger");
             MsgText.Text =
-                $"Voided #{id} · status {JsonUi.Str(res, "status")} · " +
+                $"Voided · {JsonUi.Str(res, "status")} · " +
                 $"balance now {JsonUi.Str(res, "account_balance", "—")}";
             await LoadTxnsAsync();
         }

@@ -42,32 +42,44 @@
                 <Grid Padding="12,8,12,4" ColumnSpacing="10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="200" />
-                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="180" />
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" Opacity="0.75" Text="Entity" />
-                    <ComboBox x:Name="ShellEntityBox" Grid.Column="1" MinWidth="180"
-                              PlaceholderText="Entity" SelectionChanged="ShellScope_Changed" />
-                    <ComboBox x:Name="ShellScopeBox" Grid.Column="2" MinWidth="140"
+                    <TextBlock VerticalAlignment="Center" Opacity="0.75" Text="Who" />
+                    <ComboBox x:Name="ShellEntityBox" Grid.Column="1" MinWidth="160"
+                              PlaceholderText="Who" SelectionChanged="ShellScope_Changed" />
+                    <ComboBox x:Name="ShellScopeBox" Grid.Column="2" MinWidth="130"
                               SelectionChanged="ShellScope_Changed">
-                        <ComboBoxItem Content="Entity (silo)" Tag="entity" IsSelected="True" />
-                        <ComboBoxItem Content="Combined" Tag="group" />
+                        <ComboBoxItem Content="This money" Tag="entity" IsSelected="True" />
+                        <ComboBoxItem Content="All money" Tag="group" />
                     </ComboBox>
-                    <TextBlock x:Name="ShellModeText" Grid.Column="3" VerticalAlignment="Center"
+                    <ComboBox x:Name="UiModeBox" Grid.Column="3" MinWidth="120"
+                              SelectionChanged="UiMode_Changed">
+                        <ComboBoxItem Content="Simple" Tag="simple" IsSelected="True" />
+                        <ComboBoxItem Content="Full books" Tag="full" />
+                    </ComboBox>
+                    <TextBlock x:Name="ShellModeText" Grid.Column="4" VerticalAlignment="Center"
                                Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
-                    <Button x:Name="CpaModeBtn" Grid.Column="4" Content="CPA mode"
+                    <Button x:Name="CpaModeBtn" Grid.Column="5" Content="CPA mode"
                             Click="CpaMode_Click" />
                 </Grid>
             </NavigationView.Header>
             <NavigationView.MenuItems>
-                <NavigationViewItem Content="Spendable" IsSelected="True" Tag="home">
+                <NavigationViewItem Content="Home" IsSelected="True" Tag="home">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE80F;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Setup" Tag="setup">
+                <NavigationViewItem Content="Add" Tag="add">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE710;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Get started" Tag="setup">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7AD;" />
                     </NavigationViewItem.Icon>
@@ -87,7 +99,7 @@
                         <FontIcon Glyph="&#xE8A5;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Review queue" Tag="review">
+                <NavigationViewItem Content="Sort charges" Tag="review">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8FD;" />
                     </NavigationViewItem.Icon>

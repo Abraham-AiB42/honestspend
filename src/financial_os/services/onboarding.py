@@ -138,3 +138,80 @@ def apply_quick_setup(
         created["backup_error"] = str(e)
 
     return created
+
+
+def apply_first_run(
+    session: Session,
+    *,
+    profile_slug: str = "personal",
+    cash_name: str = "Primary checking",
+    cash_balance: Decimal = Decimal("0"),
+    cash_institution: str | None = None,
+    safety_buffer: Decimal = Decimal("1000"),
+    ifpp_mode: str = "conservative",
+    # optional card
+    card_name: str | None = None,
+    card_balance: Decimal = Decimal("0"),
+    card_limit: Decimal | None = None,
+    card_due_day: int | None = 15,
+    card_promo_end: str | None = None,
+    # optional first bill
+    bill_name: str | None = None,
+    bill_amount: Decimal | None = None,
+    bill_next_date: str | None = None,
+) -> dict[str, Any]:
+    """Atomic first-run: cash + optional card + optional bill + onboarding complete."""
+    from datetime import date as date_cls
+
+    result = apply_quick_setup(
+        session,
+        profile_slug=profile_slug,
+        cash_name=cash_name,
+        cash_balance=cash_balance,
+        cash_institution=cash_institution,
+        card_name=card_name,
+        card_balance=card_balance,
+        card_limit=card_limit,
+        card_due_day=card_due_day if card_name else None,
+        card_close_day=1 if card_name else None,
+        card_promo_apr=Decimal("0") if card_promo_end else None,
+        card_promo_end=card_promo_end,
+        safety_buffer=safety_buffer,
+        ifpp_mode=ifpp_mode,
+    )
+
+    if bill_name and bill_amount is not None and abs(Decimal(bill_amount)) > 0:
+        profile = session.query(Profile).filter(Profile.slug == profile_slug).one()
+        cash = (
+            session.query(Account)
+            .filter(
+                Account.profile_id == profile.id,
+                Account.kind == "checking",
+                Account.nickname == cash_name,
+            )
+            .order_by(Account.id.desc())
+            .first()
+        )
+        nxt = date_cls.today()
+        if bill_next_date:
+            nxt = date_cls.fromisoformat(str(bill_next_date)[:10])
+        amt = -abs(Decimal(bill_amount))
+        session.add(
+            ScheduledItem(
+                profile_id=profile.id,
+                account_id=cash.id if cash else None,
+                name=bill_name.strip(),
+                amount=amt,
+                next_date=nxt,
+                cadence="monthly",
+                certainty="fixed",
+                kind="expense",
+                active=True,
+                notes="Added during first-run wizard",
+            )
+        )
+        session.flush()
+        result["bill"] = bill_name
+        result["bill_amount"] = str(amt)
+
+    return result

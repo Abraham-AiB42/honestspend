@@ -74,7 +74,7 @@
             </Grid>
             <Button Content="Add transaction" Click="Add_Click" Style="{StaticResource AccentButtonStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <NumberBox x:Name="VoidIdBox" Header="Void txn #" Minimum="1" Width="140" />
+                <ComboBox x:Name="VoidTxnBox" Header="Void transaction" MinWidth="320" PlaceholderText="Pick by name" />
                 <Button Content="Void / reverse" Click="Void_Click" VerticalAlignment="Bottom" />
             </StackPanel>
             <TextBlock x:Name="MsgText" Opacity="0.8" TextWrapping="Wrap" />

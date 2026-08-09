@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ledgerring"
-version = "0.6.0"
+version = "0.7.0"
 description = "LedgerRing — open-source liquidity cockpit for small business owners (IFPP)"
 readme = "README.md"
 license = { text = "MIT" }

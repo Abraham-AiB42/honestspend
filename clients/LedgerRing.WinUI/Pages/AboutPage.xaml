@@ -15,15 +15,15 @@
                 Open-source freeware multi-entity budgeting / liquidity OS.
             </TextBlock>
             <TextBlock Opacity="0.8" TextWrapping="Wrap">
-                • Never go negative on checking&#x0a;
-                • Intentional 0% float when interest-free path exists&#x0a;
-                • No dumb fees / unnecessary interest&#x0a;
-                • Opportunity cost (don't prepay cheap debt vs yield)&#x0a;
-                • Fiscal soundness #1 · credit health #2&#x0a;
-                • Local data + backup · minimum user time
+                • Never bounce checking&#x0a;
+                • Prefer interest-free card float when it's safe&#x0a;
+                • Catch dumb fees and unnecessary interest&#x0a;
+                • Don't prepay cheap debt when cash yields more&#x0a;
+                • Stay solvent first · credit health second&#x0a;
+                • Local data + backup · open rarely
             </TextBlock>
             <TextBlock Opacity="0.7" TextWrapping="Wrap">
-                Native WinUI 3 client. Fiscal engine is the local Python API on port 7420 — not Electron/Tauri/WebView.
+                Simple mode for daily use. Full books when you want ledgers and tax. Engine stays local on port 7420.
             </TextBlock>
             <TextBlock x:Name="PathsText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
             <TextBlock x:Name="LicenseText" Opacity="0.7" Text="MIT License · freeware" />

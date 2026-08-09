@@ -102,7 +102,7 @@
 <body>
   <header>
     <div>
-      <h1>◎ LedgerRing Glance</h1>
+      <h1>◎ Safe to spend</h1>
       <div class="sub" id="meta">Connecting…</div>
     </div>
     <button type="button" id="btn-refresh" title="Refresh">↻</button>
@@ -110,11 +110,11 @@
 
   <div class="toolbar">
     <select id="scope">
-      <option value="entity">Entity (silo)</option>
-      <option value="group">Combined</option>
+      <option value="entity">This money</option>
+      <option value="group">All money</option>
     </select>
     <select id="profile" disabled>
-      <option value="">Default entity</option>
+      <option value="">Who (default)</option>
     </select>
   </div>
   <div class="toolbar">
@@ -125,21 +125,21 @@
   <p class="err" id="error" hidden></p>
 
   <div class="card">
-    <div class="label">Purchasing power</div>
+    <div class="label">Safe to spend</div>
     <div class="big" id="combined">—</div>
     <div class="row" style="margin-top:0.85rem">
       <div>
-        <div class="label">Cash spendable</div>
+        <div class="label">Cash</div>
         <div class="val" id="cash">—</div>
       </div>
       <div>
-        <div class="label">0% card float</div>
+        <div class="label">Can charge (no interest)</div>
         <div class="val" id="float">—</div>
       </div>
     </div>
     <div class="row" style="margin-top:0.75rem">
       <div>
-        <div class="label">Red day</div>
+        <div class="label">Next risk day</div>
         <div class="val" id="red">—</div>
       </div>
       <div>
@@ -150,20 +150,33 @@
   </div>
 
   <div class="card">
-    <div class="label">Capital desk</div>
+    <div class="label">Do this next</div>
     <div class="val" id="headline" style="font-size:1rem">—</div>
     <div class="muted" id="digest-msg" style="margin-top:0.4rem"></div>
+  </div>
+
+  <div class="card" id="ritual-card" hidden>
+    <div class="label">3-minute check</div>
+    <div class="muted" id="ritual-sub"></div>
+    <div class="val" id="ritual-prog" style="font-size:1rem;margin:0.35rem 0"></div>
+    <div id="ritual"></div>
+  </div>
+
+  <div class="card" id="wealth-card" hidden>
+    <div class="label">Grow wealth (basics only)</div>
+    <div class="muted" style="margin-bottom:0.35rem">After you're safe — educational, not advice.</div>
+    <div id="wealth"></div>
   </div>
 
   <div class="card">
     <div class="label">Alerts</div>
     <div id="alerts"><div class="muted">Loading…</div></div>
-    <button type="button" class="primary" id="btn-rescue">Analyze rescue options</button>
+    <button type="button" class="primary" id="btn-rescue">Rescue options</button>
     <div id="rescue" hidden></div>
   </div>
 
   <div class="card">
-    <div class="label">Fiscal brief</div>
+    <div class="label">Quick brief</div>
     <button type="button" id="btn-brief" style="width:100%">Load brief</button>
     <pre id="brief" class="muted" style="white-space:pre-wrap;margin:0.6rem 0 0;font-family:inherit"></pre>
   </div>
@@ -171,8 +184,8 @@
   <details>
     <summary>About this client</summary>
     <p class="muted">
-      Glance is the multi-platform shell (phone browser, Mac/Linux). Fiscal math stays on the Python engine.
-      Primary Windows client is WinUI. Polls <code>/api/glance</code>.
+      Glance is the multi-platform shell (phone browser, Mac/Linux). Math stays on the local Python engine.
+      Windows primary client is WinUI. Prefers <code>/api/home/simple</code>, falls back to <code>/api/glance</code>.
     </p>
   </details>
 
@@ -242,39 +255,85 @@
       $("meta").textContent = "Loading…";
       try {
         await loadProfiles();
-        const g = await api(`/api/glance?${qs()}`);
-        $("combined").textContent = money(g.combined_purchasing_power);
-        $("cash").textContent = money(g.cash_spendable);
-        $("float").textContent = money(g.card_float_interest_free);
-        if (g.is_red_now) {
+        // Prefer home/simple for plain-language do-this-next + wealth
+        let g;
+        try {
+          g = await api(`/api/home/simple?${qs()}`);
+        } catch (_) {
+          g = await api(`/api/glance?${qs()}`);
+        }
+        const safe = g.safe_to_spend ?? g.combined_purchasing_power;
+        $("combined").textContent = money(safe);
+        $("cash").textContent = money(g.safe_to_spend || g.cash_spendable);
+        $("float").textContent = money(g.can_charge_no_interest || g.card_float_interest_free);
+        if (g.is_red_now || g.status === "danger") {
           $("red").textContent = "NOW";
           $("red").className = "val danger";
         } else {
-          $("red").textContent = g.next_red_day || "None";
+          $("red").textContent = g.next_risk_day || g.next_red_day || "None";
           $("red").className = "val";
         }
         const pend = g.pending || {};
-        $("pending").textContent = pend.count
-          ? `${pend.count} · ${money(pend.outflows_abs)}`
+        const pendCount = g.pending_count ?? pend.count ?? 0;
+        const pendOut = g.pending_outflows_abs || pend.outflows_abs;
+        $("pending").textContent = pendCount
+          ? `${pendCount} · ${money(pendOut)}`
           : "0";
-        $("pending").className = pend.count ? "val warn" : "val";
-        const head = g.headline || {};
-        $("headline").textContent = head.title
-          ? `${(head.action || "").replace(/_/g, " ")} — ${head.title}`
+        $("pending").className = pendCount ? "val warn" : "val";
+        const next = g.do_this_next || g.headline || {};
+        $("headline").textContent = next.title
+          ? next.title
           : "—";
-        $("digest-msg").textContent = g.digest_message || "";
+        $("digest-msg").textContent = next.reason || g.digest_message || "";
         const alerts = g.alerts || [];
         if (!alerts.length) {
           $("alerts").innerHTML = '<div class="good">All clear</div>';
         } else {
           $("alerts").innerHTML = alerts
-            .map(
-              (a) =>
-                `<div class="alert ${a.level || ""}">[${a.level || "info"}] ${a.message || ""}</div>`
-            )
+            .map((a) => {
+              const msg = a.title || a.message || "";
+              const lvl = a.level || "info";
+              return `<div class="alert ${lvl}">[${lvl}] ${msg}</div>`;
+            })
             .join("");
         }
-        $("meta").textContent = `As of ${g.as_of || "?"} · ${g.ifpp_scope || ""} · profile ${g.profile_id ?? "default"}`;
+        // 3-minute open-rarely ritual
+        const rit = g.three_minute_check;
+        if (rit && rit.steps && rit.steps.length) {
+          $("ritual-card").hidden = false;
+          $("ritual-sub").textContent = rit.subtitle || "";
+          $("ritual-prog").textContent = rit.progress_label || "";
+          $("ritual").innerHTML = rit.steps
+            .map((s) => {
+              const mark = s.done ? "✓" : "○";
+              return `<div class="muted" style="margin:0.25rem 0">${mark} ${s.title || ""} — ${s.detail || ""}</div>`;
+            })
+            .join("");
+        } else {
+          $("ritual-card").hidden = true;
+        }
+
+        // wealth tips (dedicated card)
+        const wt = g.wealth_tips || [];
+        if (wt.length) {
+          $("wealth-card").hidden = false;
+          $("wealth").innerHTML = wt
+            .slice(0, 4)
+            .map((w) => {
+              const t = w.title || "";
+              const r = w.reason ? `<div class="muted" style="margin:0.15rem 0 0.4rem">${w.reason}</div>` : "";
+              return `<div style="margin-bottom:0.45rem"><strong>${t}</strong>${r}</div>`;
+            })
+            .join("");
+        } else {
+          $("wealth-card").hidden = true;
+          $("wealth").innerHTML = "";
+        }
+        const who = g.who_name || "default";
+        const view = (g.money_view === "all_money" || $("scope").value === "group")
+          ? "All money"
+          : "This money";
+        $("meta").textContent = `As of ${g.as_of || "?"} · ${g.status_label || g.status || ""} · ${who} · ${view}`;
         try {
           localStorage.setItem("lr_api_key", $("api-key").value);
           localStorage.setItem("lr_base", $("base-url").value);

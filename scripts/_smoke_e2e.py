@@ -96,8 +96,10 @@ must("brief", c.get("/api/digest/brief", params={"use_grok": False}))
 must("autopay", c.get("/api/autopay"))
 must("graph", c.get("/api/intermix/graph"))
 must("glance", c.get("/api/glance"))
+must("home simple", c.get("/api/home/simple"))
+# first-run on empty would conflict with quick-setup already run; just check route exists via health path
 must("payments", c.get("/api/payments/candidates"))
 r = c.get("/glance")
-assert r.status_code == 200 and b"LedgerRing Glance" in r.content
+assert r.status_code == 200 and b"Safe to spend" in r.content
 print("OK glance page")
 print("SMOKE OK", td)

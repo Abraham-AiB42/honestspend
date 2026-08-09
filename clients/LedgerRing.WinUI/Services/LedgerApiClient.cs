@@ -119,6 +119,18 @@ public sealed class LedgerApiClient : IDisposable
         return GetJsonAsync(q, ct);
     }
 
+    public Task<JsonElement> GetHomeSimpleAsync(CancellationToken ct = default)
+    {
+        var sc = AppState.IfppScope;
+        var q = $"api/home/simple?scope={Uri.EscapeDataString(sc)}";
+        if (AppState.SelectedProfileId is int pid && sc == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> FirstRunAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/onboarding/first-run", body, ct);
+
     public Task<JsonElement> GetPaymentCandidatesAsync(int days = 14, CancellationToken ct = default)
     {
         var q = $"api/payments/candidates?days={days}";

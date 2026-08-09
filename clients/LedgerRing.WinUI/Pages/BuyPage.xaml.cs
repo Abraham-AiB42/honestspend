@@ -31,17 +31,17 @@ public sealed partial class BuyPage : Page
             var verdict = res.GetProperty("verdict").GetString() ?? "";
             VerdictText.Text = verdict switch
             {
-                "safe" => "SAFE",
-                "safe_via_other_method" => "SAFE VIA OTHER METHOD",
-                _ => "DO NOT BUY",
+                "safe" => "Yes — safe",
+                "safe_via_other_method" => "Yes — use the other method",
+                _ => "No — don't buy yet",
             };
 
             var rec = res.GetProperty("recommended");
             RecText.Text =
-                $"Recommended: {JsonUi.Str(rec, "method")} · {JsonUi.Str(rec, "account_name")}";
+                $"Use: {UiCopy.PayMethod(JsonUi.Str(rec, "method"))} · {JsonUi.Str(rec, "account_name")}";
             ReasonText.Text = JsonUi.Str(rec, "reason");
             if (rec.TryGetProperty("remaining_after", out var rem) && rem.ValueKind != JsonValueKind.Null)
-                ReasonText.Text += $"\nRemaining after: {JsonUi.Money(rec, "remaining_after")}";
+                ReasonText.Text += $"\nSafe to spend after: {JsonUi.Money(rec, "remaining_after")}";
 
             var opts = new List<string>();
             if (res.TryGetProperty("options", out var arr) && arr.ValueKind == JsonValueKind.Array)
@@ -50,14 +50,13 @@ public sealed partial class BuyPage : Page
                 {
                     var safe = o.TryGetProperty("safe", out var sf) && sf.GetBoolean();
                     opts.Add(
-                        $"{(safe ? "✓" : "✗")} {JsonUi.Str(o, "method")} · {JsonUi.Str(o, "account_name")} — " +
+                        $"{(safe ? "✓" : "✗")} {UiCopy.PayMethod(JsonUi.Str(o, "method"))} · {JsonUi.Str(o, "account_name")} — " +
                         JsonUi.Str(o, "reason"));
                 }
             }
             OptionsList.ItemsSource = opts.Count > 0 ? opts : new List<string> { "No alternate options." };
             ScopeText.Text =
-                $"Scope: {AppState.IfppScope}" +
-                (AppState.SelectedProfileId is int pid ? $" · profile #{pid}" : "") +
+                $"{UiCopy.MoneyView(AppState.IfppScope)}" +
                 $" · as of {JsonUi.Str(res, "as_of")}";
         }
         catch (Exception ex)

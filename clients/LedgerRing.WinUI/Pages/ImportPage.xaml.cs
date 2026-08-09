@@ -40,7 +40,7 @@ public sealed partial class ImportPage : Page
             {
                 AccountBox.Items.Add(new ComboBoxItem
                 {
-                    Content = $"{JsonUi.Str(a, "nickname")} [{JsonUi.Str(a, "kind")}] · #{a.GetProperty("id").GetInt32()}",
+                    Content = $"{JsonUi.Str(a, "nickname")} · {UiCopy.AccountKind(JsonUi.Str(a, "kind"))}",
                     Tag = a.GetProperty("id").GetInt32(),
                 });
             }
@@ -55,7 +55,7 @@ public sealed partial class ImportPage : Page
                 var slug = JsonUi.Str(p, "slug");
                 ProfileSlugBox.Items.Add(new ComboBoxItem
                 {
-                    Content = $"{JsonUi.Str(p, "display_name")} ({slug})",
+                    Content = $"{JsonUi.Str(p, "display_name")} · {UiCopy.EntityType(JsonUi.Str(p, "entity_type"))}",
                     Tag = slug,
                 });
                 if (slug == "personal") idx = i;

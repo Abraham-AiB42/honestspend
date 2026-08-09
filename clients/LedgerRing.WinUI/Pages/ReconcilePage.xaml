@@ -58,10 +58,10 @@
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
                         Text="Cash outflows that look like card payments — confirm as transfers so books stay clean." />
                     <ItemsControl x:Name="PayList" />
+                    <ComboBox x:Name="PayMatchBox" Header="Suggested payment match" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a match" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <NumberBox x:Name="CashTxnBox" Header="Cash txn #" Minimum="1" Width="120" />
-                        <NumberBox x:Name="CardTxnBox" Header="Card txn #" Minimum="1" Width="120" />
-                        <Button Content="Confirm transfer" Click="ConfirmPay_Click" VerticalAlignment="Bottom"
+                        <Button Content="Confirm as transfer" Click="ConfirmPay_Click"
                                 Style="{StaticResource AccentButtonStyle}" />
                     </StackPanel>
                     <TextBlock x:Name="PayMsg" Opacity="0.85" TextWrapping="Wrap" />

@@ -18,7 +18,11 @@
                     <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Bills &amp; income" />
                     <TextBlock Opacity="0.7" Text="Recurring · must attach expenses to an account/card" />
                 </StackPanel>
-                <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button Content="Add bill wizard" Click="WizardBill_Click" Style="{StaticResource AccentButtonStyle}" />
+                    <Button Content="Add income" Click="WizardIncome_Click" />
+                    <Button Content="Refresh" Click="Refresh_Click" />
+                </StackPanel>
             </Grid>
 
             <ListView x:Name="BillList" SelectionMode="None">
@@ -62,7 +66,7 @@
                     <ComboBoxItem Content="Expense / bill" Tag="expense" />
                     <ComboBoxItem Content="Income" Tag="income" />
                 </ComboBox>
-                <ComboBox x:Name="ProfileBox" Header="Entity" Grid.Row="0" Grid.Column="1" SelectionChanged="Profile_Changed" />
+                <ComboBox x:Name="ProfileBox" Header="Who" Grid.Row="0" Grid.Column="1" SelectionChanged="Profile_Changed" />
 
                 <TextBox x:Name="NameBox" Header="Name" PlaceholderText="Housing, Netflix, Paycheck" Grid.Row="1" Grid.Column="0" />
                 <NumberBox x:Name="AmtBox" Header="Amount ($ positive)" Minimum="0" Value="0" Grid.Row="1" Grid.Column="1" />
@@ -70,18 +74,18 @@
                 <ComboBox x:Name="AccountBox" Header="Account / Card" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" HorizontalAlignment="Stretch" />
 
                 <CalendarDatePicker x:Name="NextDateBox" Header="Next date" Grid.Row="3" Grid.Column="0" />
-                <ComboBox x:Name="CadenceBox" Header="Cadence" SelectedIndex="3" Grid.Row="3" Grid.Column="1">
-                    <ComboBoxItem Content="weekly" Tag="weekly" />
-                    <ComboBoxItem Content="biweekly" Tag="biweekly" />
-                    <ComboBoxItem Content="semimonthly" Tag="semimonthly" />
-                    <ComboBoxItem Content="monthly" Tag="monthly" />
-                    <ComboBoxItem Content="yearly" Tag="yearly" />
+                <ComboBox x:Name="CadenceBox" Header="How often" SelectedIndex="3" Grid.Row="3" Grid.Column="1">
+                    <ComboBoxItem Content="Weekly" Tag="weekly" />
+                    <ComboBoxItem Content="Every 2 weeks" Tag="biweekly" />
+                    <ComboBoxItem Content="Twice a month" Tag="semimonthly" />
+                    <ComboBoxItem Content="Monthly" Tag="monthly" />
+                    <ComboBoxItem Content="Yearly" Tag="yearly" />
                 </ComboBox>
             </Grid>
-            <ComboBox x:Name="CertaintyBox" Header="Certainty" SelectedIndex="0" MinWidth="220">
-                <ComboBoxItem Content="fixed" Tag="fixed" />
-                <ComboBoxItem Content="expected" Tag="expected" />
-                <ComboBoxItem Content="historical_avg" Tag="historical_avg" />
+            <ComboBox x:Name="CertaintyBox" Header="How sure?" SelectedIndex="0" MinWidth="220">
+                <ComboBoxItem Content="Fixed amount" Tag="fixed" />
+                <ComboBoxItem Content="Expected (usual)" Tag="expected" />
+                <ComboBoxItem Content="Historical average" Tag="historical_avg" />
             </ComboBox>
             <Button Content="Save recurring" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
             <TextBlock x:Name="MsgText" Opacity="0.8" />

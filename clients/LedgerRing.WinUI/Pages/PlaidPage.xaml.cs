@@ -67,11 +67,11 @@ public sealed partial class PlaidPage : Page
                     var reauth = it.TryGetProperty("needs_reauth", out var nr) && nr.GetBoolean();
                     rows.Add(new ItemRow(
                         id,
-                        JsonUi.Str(it, "institution_name", JsonUi.Str(it, "institution", "Item")),
-                        $"#{id} · {JsonUi.Str(it, "status")}" +
-                        (reauth ? " · RE-AUTH" : "") +
-                        $" · profile {JsonUi.Str(it, "profile_id")} · accts {JsonUi.Str(it, "accounts")} · " +
-                        $"synced {JsonUi.Str(it, "last_synced_at", "never")} ({age}h) · {itemId}"));
+                        JsonUi.Str(it, "institution_name", JsonUi.Str(it, "institution", "Bank")),
+                        $"{JsonUi.Str(it, "status")}" +
+                        (reauth ? " · needs re-auth" : "") +
+                        $" · {JsonUi.Str(it, "accounts")} accounts · " +
+                        $"synced {JsonUi.Str(it, "last_synced_at", "never")} ({age}h)"));
                 }
             }
             ItemList.ItemsSource = rows;
@@ -124,7 +124,7 @@ public sealed partial class PlaidPage : Page
             await api.EnsureBackendAsync();
             var res = await api.PlaidSandboxLinkAsync(pid);
             MsgText.Text =
-                $"Sandbox linked · item #{JsonUi.Str(res, "plaid_item_id")} · {JsonUi.Str(res, "institution")}\n" +
+                $"Sandbox linked · {JsonUi.Str(res, "institution")}\n" +
                 (res.TryGetProperty("sync", out var s) ? s.GetRawText() : "");
             await LoadAsync();
         }
@@ -200,7 +200,7 @@ public sealed partial class PlaidPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.PlaidDisconnectAsync(id, keepAccounts: true);
-            MsgText.Text = $"Disconnected #{id} · unlinked accounts {JsonUi.Str(res, "accounts_unlinked")}";
+            MsgText.Text = $"Disconnected · unlinked accounts {JsonUi.Str(res, "accounts_unlinked")}";
             await LoadAsync();
         }
         catch (Exception ex)

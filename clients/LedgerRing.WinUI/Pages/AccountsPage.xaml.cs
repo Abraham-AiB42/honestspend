@@ -25,6 +25,7 @@ public sealed partial class AccountsPage : Page
     }
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await LoadAsync();
+    private void Wizard_Click(object sender, RoutedEventArgs e) => Frame?.Navigate(typeof(AddHubPage));
 
     private async Task LoadAsync()
     {
@@ -53,8 +54,17 @@ public sealed partial class AccountsPage : Page
                 var id = a.GetProperty("id").GetInt32();
                 var kind = JsonUi.Str(a, "kind");
                 var pid = a.GetProperty("profile_id").GetInt32();
-                var pname = _profiles.FirstOrDefault(x => x.Id == pid).Name ?? $"#{pid}";
-                var title = $"{JsonUi.Str(a, "nickname")} · {kind}";
+                var pname = _profiles.FirstOrDefault(x => x.Id == pid).Name ?? "Unknown";
+                var kindLabel = kind switch
+                {
+                    "checking" => "Checking",
+                    "savings" => "Savings",
+                    "credit" => "Credit",
+                    "cash" => "Cash",
+                    "loan" => "Loan",
+                    _ => kind,
+                };
+                var title = $"{JsonUi.Str(a, "nickname")} · {kindLabel}";
                 var bal = JsonUi.Money(a, "current_balance");
                 var sub = $"{pname} · {bal}";
                 if (kind == "credit")
@@ -68,7 +78,7 @@ public sealed partial class AccountsPage : Page
                 if (!string.IsNullOrEmpty(apy) && apy != "—")
                     meta += (meta.Length > 0 ? " · " : "") + $"APY {apy}";
                 if (a.TryGetProperty("is_cash_for_ifpp", out var ifpp) && ifpp.ValueKind == JsonValueKind.True)
-                    meta += " · IFPP cash";
+                    meta += " · Safe to spend";
                 rows.Add(new AccountRow(id, title, sub, meta, kind));
             }
             AccountList.ItemsSource = rows;
@@ -90,7 +100,7 @@ public sealed partial class AccountsPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             await api.ArchiveAccountAsync(row.Id);
-            MsgText.Text = $"Archived account #{row.Id} (hidden from IFPP).";
+            MsgText.Text = $"Archived {row.Title} (hidden from Safe to spend).";
             await LoadAsync();
         }
         catch (Exception ex)
@@ -168,7 +178,7 @@ public sealed partial class AccountsPage : Page
             promoEndBox.Date = new DateTimeOffset(peDate.Date);
         var ifppBox = new CheckBox
         {
-            Content = "Count as Spendable cash (IFPP)",
+            Content = UiCopy.SpendableCash,
             IsChecked = a0.TryGetProperty("is_cash_for_ifpp", out var ifpp) && ifpp.ValueKind == JsonValueKind.True,
         };
 
@@ -241,7 +251,7 @@ public sealed partial class AccountsPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             await api.PatchAccountAsync(row.Id, body);
-            MsgText.Text = $"Updated account #{row.Id}.";
+            MsgText.Text = $"Updated {nickBox.Text?.Trim() ?? row.Title}.";
             await LoadAsync();
         }
         catch (Exception ex)

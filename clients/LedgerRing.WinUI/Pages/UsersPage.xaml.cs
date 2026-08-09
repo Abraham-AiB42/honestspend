@@ -115,7 +115,7 @@ public sealed partial class UsersPage : Page
                 TokenText.Text =
                     $"API token (copy now — shown once):\n{tok.GetString()}\n\n{JsonUi.Str(res, "hint")}";
             }
-            MsgText.Text = $"Created user #{JsonUi.Str(res, "id")}";
+            MsgText.Text = $"Created user · {JsonUi.Str(res, "username", JsonUi.Str(res, "display_name", "ok"))}";
             UserNameBox.Text = "";
             await LoadAsync();
         }

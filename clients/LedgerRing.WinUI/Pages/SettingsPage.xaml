@@ -11,78 +11,93 @@
         <StackPanel Spacing="16" MaxWidth="640">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Settings" />
 
-            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Connection" />
-            <TextBox
-                x:Name="BaseUrlBox"
-                Header="API base URL"
-                Text="http://127.0.0.1:7420" />
-            <PasswordBox x:Name="ApiKeyBox" Header="Optional X-API-Key" />
-            <TextBox
-                x:Name="BackendRootBox"
-                Header="Backend root (folder with pyproject.toml + .venv)"
-                PlaceholderText="Auto-detect from repo or .\engine" />
-
-            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Data location" />
-            <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                Text="SQLite + backups. Use OneDrive for cloud-backed local files (not a multi-device concurrent DB)." />
-            <TextBox x:Name="DataDirBox" Header="FOS_DATA_DIR (empty = engine default ~/.financial-os)"
-                     PlaceholderText="C:\Users\…\OneDrive\LedgerRing\data" />
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Start the engine" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="LedgerRing runs a local money engine. The app usually starts it for you — tap Start if Home says offline." />
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Suggest OneDrive" Click="SuggestOneDrive_Click" />
-                <Button Content="Use default home" Click="DefaultDataDir_Click" />
-                <Button Content="Copy DB to path…" Click="CopyDataDir_Click" />
-            </StackPanel>
-            <TextBlock x:Name="PathsHintText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-            <TextBlock x:Name="EngineLogText" Opacity="0.6" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-
-            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Startup" />
-            <CheckBox x:Name="TrayAutoBox" Content="Start system tray with app" />
-            <CheckBox x:Name="MinimizedBox" Content="Start minimized" />
-            <CheckBox x:Name="LoginBox" Content="Launch at Windows logon (tray-only: engine + tray, no big window)" />
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Save connection" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
-                <Button Content="Start / ping engine" Click="StartEngine_Click" />
+                <Button Content="Start / ping engine" Click="StartEngine_Click" Style="{StaticResource AccentButtonStyle}" />
                 <Button Content="Start tray now" Click="StartTray_Click" />
                 <Button Content="Stop tray" Click="StopTray_Click" />
                 <Button Content="Show window" Click="ShowWindow_Click" />
             </StackPanel>
-            <TextBlock x:Name="StartupStatusText" Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                Text="CLI: LedgerRing.WinUI.exe --tray-only · --minimized · --tray" />
+            <TextBlock x:Name="EngineLogText" Opacity="0.6" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
 
-            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Fiscal engine" />
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Startup shortcuts" />
+            <CheckBox x:Name="TrayAutoBox" Content="Start system tray with app" />
+            <CheckBox x:Name="MinimizedBox" Content="Start minimized" />
+            <CheckBox x:Name="LoginBox" Content="Launch at Windows logon (tray only — engine quietly ready)" />
+            <TextBlock x:Name="StartupStatusText" Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                Text="Tip: tray keeps Safe to spend a click away without opening the full window." />
+
+            <Expander Header="Connection &amp; data (advanced)" IsExpanded="False"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12" Padding="0,12,0,0">
+                    <TextBox
+                        x:Name="BaseUrlBox"
+                        Header="API base URL"
+                        Text="http://127.0.0.1:7420" />
+                    <PasswordBox x:Name="ApiKeyBox" Header="Optional API key (multi-user)" />
+                    <TextBox
+                        x:Name="BackendRootBox"
+                        Header="Engine folder (auto-detect is fine)"
+                        PlaceholderText="Repo root or .\engine" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="Data stays on this PC (or your OneDrive folder). Not a multi-device live DB — use encrypted backups for another machine." />
+                    <TextBox x:Name="DataDirBox" Header="Data folder (empty = default)"
+                             PlaceholderText="C:\Users\…\OneDrive\LedgerRing\data" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Suggest OneDrive" Click="SuggestOneDrive_Click" />
+                        <Button Content="Use default home" Click="DefaultDataDir_Click" />
+                        <Button Content="Copy DB to path…" Click="CopyDataDir_Click" />
+                        <Button Content="Save connection" Click="Save_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="PathsHintText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                </StackPanel>
+            </Expander>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Everyday safety" />
             <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                Text="Safety buffer, opportunity cost, debt strategy. Fiscal soundness first." />
-            <ComboBox x:Name="ModeBox" Header="Default IFPP mode" SelectedIndex="0">
-                <ComboBoxItem Content="conservative" Tag="conservative" />
-                <ComboBoxItem Content="expected" Tag="expected" />
+                Text="Rainy-day floor stays out of Safe to spend. Protect checking on big outflows." />
+            <NumberBox x:Name="BufferBox" Header="Rainy-day floor ($)" Minimum="0" Value="1000" />
+            <ComboBox x:Name="NeverNegEnforceBox" Header="Protect checking when posting expenses" SelectedIndex="1">
+                <ComboBoxItem Content="Off (just warn later)" Tag="off" />
+                <ComboBoxItem Content="Ask me first (recommended)" Tag="warn" IsSelected="True" />
+                <ComboBoxItem Content="Always block" Tag="hard" />
             </ComboBox>
-            <NumberBox x:Name="BufferBox" Header="Safety buffer ($)" Minimum="0" Value="1000" />
-            <ComboBox x:Name="ScopeBox" Header="Never-negative scope" SelectedIndex="0">
-                <ComboBoxItem Content="checking" Tag="checking" />
-                <ComboBoxItem Content="all_cash" Tag="all_cash" />
-            </ComboBox>
-            <ComboBox x:Name="NeverNegEnforceBox" Header="Never-negative on write" SelectedIndex="1">
-                <ComboBoxItem Content="off (advisory only)" Tag="off" />
-                <ComboBoxItem Content="warn (confirm required)" Tag="warn" IsSelected="True" />
-                <ComboBoxItem Content="hard (always block)" Tag="hard" />
-            </ComboBox>
-            <NumberBox x:Name="HorizonBox" Header="Horizon days" Minimum="7" Maximum="365" Value="45" />
-            <NumberBox x:Name="OppRateBox" Header="Opportunity rate (e.g. 0.06 for HYSA)" Minimum="0" Maximum="1"
-                       PlaceholderText="cash yield vs cheap debt" />
-            <CheckBox x:Name="OppAwareBox" Content="Opportunity-cost aware debt plan" IsChecked="True" />
-            <ComboBox x:Name="DebtBox" Header="Default debt strategy" SelectedIndex="0">
-                <ComboBoxItem Content="avalanche" Tag="avalanche" />
-                <ComboBoxItem Content="snowball" Tag="snowball" />
-                <ComboBoxItem Content="opportunity" Tag="opportunity" />
-            </ComboBox>
-            <NumberBox x:Name="ExtraBox" Header="Default extra monthly toward debt ($)" Minimum="0" Value="0" />
-            <CheckBox x:Name="AutoCatBox" Content="Auto-categorize on import" IsChecked="True" />
-            <CheckBox x:Name="ClearedOnlyBox" Content="IFPP prefers cleared balances (pending flagged in digest)" IsChecked="True" />
-            <ComboBox x:Name="IfppScopeDefaultBox" Header="Default Spendable scope" SelectedIndex="0">
-                <ComboBoxItem Content="entity (silo)" Tag="entity" />
-                <ComboBoxItem Content="group (combined)" Tag="group" />
-            </ComboBox>
-            <Button Content="Save fiscal settings" Click="SaveFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
+            <Button Content="Save safety settings" Click="SaveFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
+
+            <Expander Header="Advanced (power user)" IsExpanded="False" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12" Padding="0,12,0,0">
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="These map to engine knobs. Simple mode never needs them." />
+                    <ComboBox x:Name="ModeBox" Header="Safe-to-spend carefulness" SelectedIndex="0">
+                        <ComboBoxItem Content="Careful" Tag="conservative" />
+                        <ComboBoxItem Content="Optimistic" Tag="expected" />
+                    </ComboBox>
+                    <ComboBox x:Name="ScopeBox" Header="Never-negative pool" SelectedIndex="0">
+                        <ComboBoxItem Content="checking only" Tag="checking" />
+                        <ComboBoxItem Content="all cash accounts" Tag="all_cash" />
+                    </ComboBox>
+                    <NumberBox x:Name="HorizonBox" Header="Look-ahead days" Minimum="7" Maximum="365" Value="45" />
+                    <NumberBox x:Name="OppRateBox" Header="Cash yield hurdle (e.g. 0.06)" Minimum="0" Maximum="1"
+                               PlaceholderText="vs cheap debt" />
+                    <CheckBox x:Name="OppAwareBox" Content="Opportunity-cost aware debt plan" IsChecked="True" />
+                    <ComboBox x:Name="DebtBox" Header="Debt payoff style" SelectedIndex="0">
+                        <ComboBoxItem Content="Highest APR first" Tag="avalanche" />
+                        <ComboBoxItem Content="Smallest balance first" Tag="snowball" />
+                        <ComboBoxItem Content="Opportunity-aware" Tag="opportunity" />
+                    </ComboBox>
+                    <NumberBox x:Name="ExtraBox" Header="Extra $/month toward debt" Minimum="0" Value="0" />
+                    <CheckBox x:Name="AutoCatBox" Content="Auto-categorize on import" IsChecked="True" />
+                    <CheckBox x:Name="ClearedOnlyBox" Content="Flag pending before trusting books" IsChecked="True" />
+                    <ComboBox x:Name="IfppScopeDefaultBox" Header="Default money view" SelectedIndex="0">
+                        <ComboBoxItem Content="This money (silo)" Tag="entity" />
+                        <ComboBoxItem Content="All money (combined)" Tag="group" />
+                    </ComboBox>
+                    <Button Content="Save advanced settings" Click="SaveFiscal_Click" />
+                </StackPanel>
+            </Expander>
 
             <TextBlock x:Name="StatusText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />

@@ -11,18 +11,18 @@
         <StackPanel Spacing="16" MaxWidth="640">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Can I buy this?" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                Text="Never-neg checking · intentional 0% float when safe · uses current entity scope from Home." />
+                Text="Protects checking and prefers interest-free card float when it's safe. Uses Who / money view from the top bar." />
 
             <NumberBox x:Name="AmountBox" Header="Amount ($)" Minimum="0.01"
                        SpinButtonPlacementMode="Inline" Value="100" />
             <ComboBox x:Name="PreferBox" Header="Prefer" SelectedIndex="0" MinWidth="280">
-                <ComboBoxItem Content="Auto (0% float if safe, else cash)" Tag="auto" />
+                <ComboBoxItem Content="Auto (card float if safe, else cash)" Tag="auto" />
                 <ComboBoxItem Content="Cash first" Tag="cash" />
                 <ComboBoxItem Content="Card first" Tag="card" />
             </ComboBox>
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="Check purchase" Click="Check_Click" Style="{StaticResource AccentButtonStyle}" />
-                <Button Content="What-if Spendable" Click="Simulate_Click" />
+                <Button Content="What if I buy it?" Click="Simulate_Click" />
             </StackPanel>
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"

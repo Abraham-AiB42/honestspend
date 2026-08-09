@@ -16,7 +16,8 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Credit &amp; debts" />
-                    <TextBlock Opacity="0.7" Text="Fiscal #1 · opportunity cost · educational score (not bureau official)" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="Payoff plans · autopay · educational score (not a bureau/FICO)" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
             </Grid>
@@ -115,18 +116,19 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="10">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Autopay desk" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Autopay" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Policies: none · min · statement · promo_sink. Creates/updates scheduled payments." />
+                        Text="Pick a card by name. We’ll schedule minimum, full statement, or a 0% set-aside." />
                     <ItemsControl x:Name="AutopayList" />
-                    <NumberBox x:Name="AutopayAcctBox" Header="Card account id" Minimum="1" />
-                    <ComboBox x:Name="AutopayPolicyBox" Header="Policy" SelectedIndex="0" MinWidth="240">
-                        <ComboBoxItem Content="none" Tag="none" />
-                        <ComboBoxItem Content="min" Tag="min" />
-                        <ComboBoxItem Content="statement (pay in full)" Tag="statement" />
-                        <ComboBoxItem Content="promo_sink" Tag="promo_sink" />
+                    <ComboBox x:Name="AutopayCardBox" Header="Card" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a card" />
+                    <ComboBox x:Name="AutopayPolicyBox" Header="What to pay" SelectedIndex="0" MinWidth="240">
+                        <ComboBoxItem Content="Nothing for now" Tag="none" />
+                        <ComboBoxItem Content="Minimum only" Tag="min" />
+                        <ComboBoxItem Content="Pay statement in full" Tag="statement" />
+                        <ComboBoxItem Content="0% promo monthly set-aside" Tag="promo_sink" />
                     </ComboBox>
-                    <Button Content="Apply autopay policy" Click="Autopay_Click" Style="{StaticResource AccentButtonStyle}" />
+                    <Button Content="Save autopay" Click="Autopay_Click" Style="{StaticResource AccentButtonStyle}" />
                     <TextBlock x:Name="AutopayMsg" Opacity="0.85" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>

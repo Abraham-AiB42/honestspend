@@ -9,9 +9,9 @@
 
     <ScrollViewer Padding="24">
         <StackPanel Spacing="16" MaxWidth="640">
-            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Quick setup" />
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Get started" />
             <TextBlock Opacity="0.8" TextWrapping="Wrap"
-                Text="Minimum time to first Spendable number. No spreadsheet required. You can edit everything later." />
+                Text="About 2 minutes. We'll answer: what can you safely spend? No spreadsheet. You can refine anytime under Add." />
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -24,14 +24,14 @@
             </Border>
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Starter accounts" />
-            <ComboBox x:Name="ProfileSlugBox" Header="Entity (add more under Entities)" SelectedIndex="0" HorizontalAlignment="Stretch" />
+            <ComboBox x:Name="ProfileSlugBox" Header="Who (add more under Full books → Entities)" SelectedIndex="0" HorizontalAlignment="Stretch" />
             <TextBox x:Name="CashNameBox" Header="Checking nickname" Text="Primary checking" />
             <TextBox x:Name="InstBox" Header="Institution (optional)" PlaceholderText="Chase, Amex…" />
             <NumberBox x:Name="CashBalBox" Header="Checking balance ($)" Value="0" Minimum="0" />
-            <NumberBox x:Name="BufferBox" Header="Safety buffer ($)" Value="1000" Minimum="0" />
-            <ComboBox x:Name="ModeBox" Header="IFPP mode" SelectedIndex="0">
-                <ComboBoxItem Content="conservative" Tag="conservative" />
-                <ComboBoxItem Content="expected" Tag="expected" />
+            <NumberBox x:Name="BufferBox" Header="Rainy-day floor kept out of Safe to spend ($)" Value="1000" Minimum="0" />
+            <ComboBox x:Name="ModeBox" Header="How careful should Safe to spend be?" SelectedIndex="0">
+                <ComboBoxItem Content="Careful (recommended)" Tag="conservative" />
+                <ComboBoxItem Content="Optimistic (counts expected income)" Tag="expected" />
             </ComboBox>
 
             <CheckBox x:Name="AddCardBox" Content="Also add a credit card" IsChecked="False"
@@ -46,9 +46,10 @@
             </StackPanel>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Run quick setup" Click="Setup_Click" Style="{StaticResource AccentButtonStyle}" />
-                <Button Content="Skip — mark complete" Click="Skip_Click" />
-                <Button Content="Go to Spendable" Click="Home_Click" />
+                <Button Content="Guided first-run (recommended)" Click="FirstRun_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="Quick setup (classic)" Click="Setup_Click" />
+                <Button Content="Skip" Click="Skip_Click" />
+                <Button Content="Go to Home" Click="Home_Click" />
             </StackPanel>
 
             <TextBlock x:Name="MsgText" Opacity="0.85" TextWrapping="Wrap" />

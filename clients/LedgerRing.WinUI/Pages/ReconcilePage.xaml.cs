@@ -54,21 +54,27 @@ public sealed partial class ReconcilePage : Page
             {
                 var pays = await api.GetPaymentCandidatesAsync(14);
                 var plines = new List<string>();
+                PayMatchBox.Items.Clear();
                 if (pays.TryGetProperty("candidates", out var pc) && pc.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var c in pc.EnumerateArray())
                     {
-                        plines.Add(
-                            $"{JsonUi.Str(c, "kind")} · ${JsonUi.Str(c, "amount")} · " +
-                            $"cash #{JsonUi.Str(c, "cash_txn_id")} ({JsonUi.Str(c, "cash_account")}) → " +
-                            $"card #{JsonUi.Str(c, "card_txn_id", "—")} · {JsonUi.Str(c, "suggestion")}");
-                        if (double.IsNaN(CashTxnBox.Value) && c.TryGetProperty("cash_txn_id", out var ct))
-                            CashTxnBox.Value = ct.GetInt32();
-                        if (double.IsNaN(CardTxnBox.Value) && c.TryGetProperty("card_txn_id", out var kt)
+                        var label =
+                            $"${JsonUi.Str(c, "amount")} · {JsonUi.Str(c, "cash_account")} → " +
+                            $"{JsonUi.Str(c, "card_account", "card")} · {JsonUi.Str(c, "cash_date")}";
+                        plines.Add(label + " — " + JsonUi.Str(c, "suggestion"));
+                        if (c.TryGetProperty("cash_txn_id", out var ct) && c.TryGetProperty("card_txn_id", out var kt)
                             && kt.ValueKind == JsonValueKind.Number)
-                            CardTxnBox.Value = kt.GetInt32();
+                        {
+                            PayMatchBox.Items.Add(new ComboBoxItem
+                            {
+                                Content = label,
+                                Tag = new PayPair(ct.GetInt32(), kt.GetInt32()),
+                            });
+                        }
                     }
                 }
+                if (PayMatchBox.Items.Count > 0) PayMatchBox.SelectedIndex = 0;
                 PayList.ItemsSource = plines.Count > 0 ? plines : new List<string> { "No payment matches." };
                 PayMsg.Text = JsonUi.Str(pays, "principle");
             }
@@ -89,11 +95,11 @@ public sealed partial class ReconcilePage : Page
         ErrorBar.IsOpen = false;
         try
         {
-            if (double.IsNaN(CashTxnBox.Value) || double.IsNaN(CardTxnBox.Value))
-                throw new InvalidOperationException("Enter cash and card transaction ids.");
+            if (PayMatchBox.SelectedItem is not ComboBoxItem { Tag: PayPair pair })
+                throw new InvalidOperationException("Pick a suggested payment match.");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var res = await api.ConfirmPaymentAsync((int)CashTxnBox.Value, (int)CardTxnBox.Value);
+            var res = await api.ConfirmPaymentAsync(pair.CashId, pair.CardId);
             PayMsg.Text = $"Confirmed transfer · ${JsonUi.Str(res, "amount")}";
             await LoadAsync();
         }
@@ -124,7 +130,7 @@ public sealed partial class ReconcilePage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.ReconcileTrustAsync(id, trust);
-            MsgText.Text = $"Trusted {trust} for #{id} · books {JsonUi.Money(res, "books_balance")}";
+            MsgText.Text = $"Trusted {trust} · books {JsonUi.Money(res, "books_balance")}";
             await LoadAsync();
         }
         catch (Exception ex)
@@ -154,7 +160,7 @@ public sealed partial class ReconcilePage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             await api.SetInstitutionBalanceAsync(row.Id, bal, markReconciled: false);
-            MsgText.Text = $"Set institution balance for #{row.Id}.";
+            MsgText.Text = $"Set bank balance for {row.Title}.";
             await LoadAsync();
         }
         catch (Exception ex)
@@ -165,4 +171,5 @@ public sealed partial class ReconcilePage : Page
     }
 
     private sealed record Row(int Id, string Title, string Subtitle);
+    private sealed record PayPair(int CashId, int CardId);
 }
