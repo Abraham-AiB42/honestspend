@@ -20,8 +20,10 @@ if (-not (Test-Path (Join-Path $Root "src\financial_os"))) {
 
 $BackupScript = Join-Path $Root "scripts\task-auto-backup.ps1"
 $DigestScript = Join-Path $Root "scripts\task-digest.ps1"
+$InboxScript = Join-Path $Root "scripts\task-import-inbox.ps1"
 $TaskBackup = "Floatpile-AutoBackup"
 $TaskDigest = "Floatpile-Digest"
+$TaskInbox = "Floatpile-ImportInbox"
 
 function Remove-LrTask([string]$Name) {
   $existing = Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
@@ -34,6 +36,7 @@ function Remove-LrTask([string]$Name) {
 if ($Uninstall) {
   Remove-LrTask $TaskBackup
   Remove-LrTask $TaskDigest
+  Remove-LrTask $TaskInbox
   # legacy names (pre-Floatpile / LedgerRing era)
   Remove-LrTask "LedgerRing-AutoBackup"
   Remove-LrTask "LedgerRing-Digest"
@@ -43,6 +46,7 @@ if ($Uninstall) {
 
 if (-not (Test-Path $BackupScript)) { throw "Missing $BackupScript" }
 if (-not (Test-Path $DigestScript)) { throw "Missing $DigestScript" }
+if (-not (Test-Path $InboxScript)) { throw "Missing $InboxScript" }
 
 $ps = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
 
@@ -66,9 +70,20 @@ Register-ScheduledTask -TaskName $TaskDigest -Action $actionD -Trigger $triggerD
   -Description "Floatpile daily digest (exit 2 if critical); may start engine if offline" | Out-Null
 Write-Host "Registered: $TaskDigest (daily ${DigestHour}:00)"
 
+# --- Daily inbox import (bank CSV drop folder) ---
+Remove-LrTask $TaskInbox
+$actionI = New-ScheduledTaskAction -Execute $ps -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$InboxScript`""
+$triggerI = New-ScheduledTaskTrigger -Daily -At ([datetime]::Today.AddHours(9))
+$settingsI = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+$principalI = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName $TaskInbox -Action $actionI -Trigger $triggerI -Settings $settingsI -Principal $principalI `
+  -Description "Floatpile import bank CSVs from data_dir/inbox (freeware drop folder)" | Out-Null
+Write-Host "Registered: $TaskInbox (daily 09:00)"
+
 Write-Host ""
 Write-Host "Manual run:"
 Write-Host "  schtasks /Run /TN $TaskBackup"
 Write-Host "  schtasks /Run /TN $TaskDigest"
+Write-Host "  schtasks /Run /TN $TaskInbox"
 Write-Host "Uninstall: .\scripts\register-tasks.ps1 -Uninstall"
 Write-Host "Logon tray-only: enable in WinUI Settings (HKCU Run --tray-only)"

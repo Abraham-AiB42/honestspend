@@ -136,7 +136,7 @@ public sealed partial class SettingsPage : Page
         {
             // One-shot PowerShell: State + LastRunTime + NextRunTime for known task names
             const string ps =
-                "$names=@('Floatpile-AutoBackup','Floatpile-Digest');" +
+                "$names=@('Floatpile-AutoBackup','Floatpile-Digest','Floatpile-ImportInbox');" +
                 "foreach($n in $names){" +
                 "  $t=Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue;" +
                 "  if(-not $t){ Write-Output ($n + '|missing|—|—'); continue }" +
@@ -175,6 +175,7 @@ public sealed partial class SettingsPage : Page
                 {
                     "Floatpile-AutoBackup" => "Auto-backup",
                     "Floatpile-Digest" => "Daily digest",
+                    "Floatpile-ImportInbox" => "Import inbox",
                     _ => parts[0],
                 };
                 var state = parts[1];

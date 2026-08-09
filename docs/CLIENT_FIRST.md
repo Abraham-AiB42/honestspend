@@ -23,7 +23,9 @@
 
 | Path | Role |
 |------|------|
-| **Import CSV/OFX** | Default free path |
+| **Import CSV** | Default free path |
+| **Bank guides** | Login links + download steps (no passwords) |
+| **Inbox folder** | Drop CSVs → `floatpile import-inbox` / daily task |
 | **Import reminders** | User-chosen cadence: off · daily · weekly · monthly |
 | **BYOK Plaid** | Optional live link with *user’s* keys |
 | **BYOK Grok** | Optional AI categorize with *user’s* xAI key |

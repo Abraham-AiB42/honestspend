@@ -244,6 +244,40 @@ def cmd_version(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_inbox(args: argparse.Namespace) -> int:
+    """Process data_dir/inbox CSV drops into accounts."""
+    from financial_os.services.import_inbox import ensure_inbox_layout, process_inbox
+
+    engine = make_engine()
+    init_db(engine)
+    session = make_session_factory(engine)()
+    try:
+        layout = ensure_inbox_layout()
+        if args.show_path:
+            print(layout["inbox"])
+            return 0
+        result = process_inbox(
+            session,
+            default_account_id=args.account_id,
+            auto_categorize=not args.no_categorize,
+            amount_sign=args.sign,
+            dry_run=args.dry_run,
+        )
+        session.commit()
+        import json
+
+        print(json.dumps(result, indent=2, default=str))
+        if result.get("files_seen", 0) == 0:
+            return 0
+        # exit 1 if any hard failure with no creates
+        bad = [r for r in result.get("results") or [] if not r.get("ok")]
+        if bad and result.get("transactions_created", 0) == 0 and not args.dry_run:
+            return 1
+        return 0
+    finally:
+        session.close()
+
+
 def cmd_glance(args: argparse.Namespace) -> int:
     """Print glance JSON or open the multi-platform glance UI in a browser."""
     import json
@@ -339,6 +373,17 @@ def main(argv: list[str] | None = None) -> int:
     p_imp.add_argument("--since", type=lambda s: __import__("datetime").date.fromisoformat(s), default=None)
     p_imp.add_argument("--dry-run", action="store_true")
     p_imp.set_defaults(func=cmd_import_xlsx)
+
+    p_inbox = sub.add_parser(
+        "import-inbox",
+        help="Import bank CSVs from data_dir/inbox (freeware drop folder)",
+    )
+    p_inbox.add_argument("--account-id", type=int, default=None, help="Fallback account if name match fails")
+    p_inbox.add_argument("--sign", default="bank", choices=["bank", "invert"])
+    p_inbox.add_argument("--no-categorize", action="store_true")
+    p_inbox.add_argument("--dry-run", action="store_true")
+    p_inbox.add_argument("--show-path", action="store_true", help="Print inbox folder path and exit")
+    p_inbox.set_defaults(func=cmd_import_inbox)
 
     p_tax = sub.add_parser("tax-packet", help="Write tax packet to disk")
     p_tax.add_argument("--profile", default="personal")

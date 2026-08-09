@@ -2303,6 +2303,55 @@ async def import_bank_csv_preview(file: UploadFile = File(...)):
     return preview_bank_csv(BytesIO(content))
 
 
+@app.get("/api/import/bank-guides")
+def import_bank_guides():
+    """How to download CSV from major banks (no credentials)."""
+    from financial_os.services.bank_guides import list_bank_guides
+
+    return list_bank_guides()
+
+
+@app.get("/api/import/bank-guides/{guide_id}")
+def import_bank_guide_one(guide_id: str):
+    from financial_os.services.bank_guides import get_bank_guide
+
+    g = get_bank_guide(guide_id)
+    if not g:
+        raise HTTPException(404, "Guide not found")
+    return g
+
+
+@app.get("/api/import/inbox")
+def import_inbox_status():
+    from financial_os.services.import_inbox import ensure_inbox_layout, list_inbox_files
+
+    layout = ensure_inbox_layout()
+    return {
+        **layout,
+        "files": list_inbox_files(),
+    }
+
+
+class InboxProcessIn(BaseModel):
+    default_account_id: int | None = None
+    auto_categorize: bool = True
+    amount_sign: str = "bank"
+    dry_run: bool = False
+
+
+@app.post("/api/import/inbox/process")
+def import_inbox_process(body: InboxProcessIn, db: Session = Depends(get_db)):
+    from financial_os.services.import_inbox import process_inbox
+
+    return process_inbox(
+        db,
+        default_account_id=body.default_account_id,
+        auto_categorize=body.auto_categorize,
+        amount_sign=body.amount_sign,
+        dry_run=body.dry_run,
+    )
+
+
 @app.get("/api/reconcile")
 def reconcile_get(
     profile_id: Optional[int] = None,

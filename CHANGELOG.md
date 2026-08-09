@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.7 — Bank download guides + inbox import
+
+- **Bank guides** on Import: Chase, Amex, Capital One, etc. — login link + steps (no passwords)
+- **Inbox drop folder** (`data_dir/inbox`) · `floatpile import-inbox` · `POST /api/import/inbox/process`
+- Scheduled task **Floatpile-ImportInbox** (daily 09:00) via register-tasks
+- Filename → account nickname matching; processed CSVs archived
+
 ## 1.0.6 — Rename: LedgerRing → Floatpile (working alpha)
 
 - **Product name:** **Floatpile** (working alpha; branding may change later)

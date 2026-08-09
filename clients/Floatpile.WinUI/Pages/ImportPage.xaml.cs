@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Floatpile_WinUI.Helpers;
 using Floatpile_WinUI.Services;
@@ -14,6 +15,7 @@ public sealed partial class ImportPage : Page
 {
     private StorageFile? _csvFile;
     private StorageFile? _xlsxFile;
+    private string? _inboxPath;
 
     public ImportPage()
     {
@@ -64,7 +66,158 @@ public sealed partial class ImportPage : Page
             if (ProfileSlugBox.Items.Count > 0)
                 ProfileSlugBox.SelectedIndex = idx;
 
+            await LoadBankGuidesAsync(api);
+            await RefreshInboxAsync(api);
             await RefreshPlaidAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async Task LoadBankGuidesAsync(LedgerApiClient api)
+    {
+        var guides = await api.GetBankGuidesAsync();
+        BankGuideBox.Items.Clear();
+        if (guides.TryGetProperty("guides", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var g in arr.EnumerateArray())
+            {
+                BankGuideBox.Items.Add(new ComboBoxItem
+                {
+                    Content = JsonUi.Str(g, "name"),
+                    Tag = g.Clone(),
+                });
+            }
+        }
+        if (BankGuideBox.Items.Count > 0)
+            BankGuideBox.SelectedIndex = 0;
+    }
+
+    private void BankGuide_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (BankGuideBox.SelectedItem is not ComboBoxItem { Tag: JsonElement g })
+        {
+            BankStepsText.Text = "";
+            BankNotesText.Text = "";
+            BankLoginLink.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var steps = new List<string>();
+        if (g.TryGetProperty("steps", out var st) && st.ValueKind == JsonValueKind.Array)
+        {
+            var n = 1;
+            foreach (var s in st.EnumerateArray())
+            {
+                steps.Add($"{n}. {s.GetString()}");
+                n++;
+            }
+        }
+        BankStepsText.Text = string.Join("\n", steps);
+        BankNotesText.Text = JsonUi.Str(g, "notes", "");
+        var url = JsonUi.Str(g, "login_url", "");
+        if (!string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            BankLoginLink.NavigateUri = uri;
+            BankLoginLink.Content = "Open " + JsonUi.Str(g, "name") + " login";
+            BankLoginLink.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            BankLoginLink.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async Task RefreshInboxAsync(LedgerApiClient api)
+    {
+        var inbox = await api.GetImportInboxAsync();
+        _inboxPath = JsonUi.Str(inbox, "inbox", "");
+        InboxPathText.Text = string.IsNullOrEmpty(_inboxPath)
+            ? "Inbox path unavailable"
+            : "Folder: " + _inboxPath;
+        var count = 0;
+        var names = new List<string>();
+        if (inbox.TryGetProperty("files", out var files) && files.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in files.EnumerateArray())
+            {
+                count++;
+                names.Add(JsonUi.Str(f, "name"));
+            }
+        }
+        InboxFilesText.Text = count == 0
+            ? "No CSV files waiting."
+            : $"{count} file(s): " + string.Join(", ", names.Take(8));
+    }
+
+    private async void RefreshInbox_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await RefreshInboxAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void OpenInbox_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var path = _inboxPath;
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                throw new InvalidOperationException("Inbox folder not ready — start the engine and Refresh.");
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"\"{path}\"",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void ImportInbox_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        ResultText.Text = "";
+        try
+        {
+            int? defaultAcct = null;
+            if (AccountBox.SelectedItem is ComboBoxItem { Tag: int id })
+                defaultAcct = id;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.ProcessImportInboxAsync(
+                defaultAccountId: defaultAcct,
+                autoCategorize: AutoCatBox.IsChecked == true);
+            var created = JsonUi.Str(res, "transactions_created", "0");
+            var seen = JsonUi.Str(res, "files_seen", "0");
+            ResultText.Text = $"Inbox · {seen} file(s) · {created} transactions created.";
+            if (res.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var r in results.EnumerateArray().Take(12))
+                {
+                    var line =
+                        $"{JsonUi.Str(r, "file")} → {JsonUi.Str(r, "account_nickname", "?")} · " +
+                        $"+{JsonUi.Str(r, "transactions_created", "0")}";
+                    if (r.TryGetProperty("error", out var er) && er.ValueKind == JsonValueKind.String)
+                        line += " · " + er.GetString();
+                    ResultText.Text += "\n" + line;
+                }
+            }
+            await RefreshInboxAsync(api);
         }
         catch (Exception ex)
         {

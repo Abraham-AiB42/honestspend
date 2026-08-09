@@ -391,6 +391,26 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> AckImportReminderAsync(CancellationToken ct = default)
         => PostJsonAsync("api/import/reminder/ack", new { }, ct);
 
+    public Task<JsonElement> GetBankGuidesAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/import/bank-guides", ct);
+
+    public Task<JsonElement> GetImportInboxAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/import/inbox", ct);
+
+    public Task<JsonElement> ProcessImportInboxAsync(
+        int? defaultAccountId = null,
+        bool autoCategorize = true,
+        string amountSign = "bank",
+        bool dryRun = false,
+        CancellationToken ct = default)
+        => PostJsonAsync("api/import/inbox/process", new
+        {
+            default_account_id = defaultAccountId,
+            auto_categorize = autoCategorize,
+            amount_sign = amountSign,
+            dry_run = dryRun,
+        }, ct);
+
     public Task<JsonElement> GetPlaidStatusAsync(CancellationToken ct = default)
         => GetJsonAsync("api/plaid/status", ct);
 
