@@ -12,8 +12,10 @@ Do these in order. Product type must be **MSIX** (not EXE/MSI).
   - **Publisher** (CN=…)  
 - [ ] Paste into `clients/HonestSpend.WinUI/Package.appxmanifest`  
   - `Identity Name=`  
-  - `Identity Publisher=`  
-- [ ] Bump `Identity Version=` for every submission (e.g. `1.0.31.0` → `1.0.32.0`)
+  - `Identity Publisher=` (must match Partner Center CN exactly)  
+  - `PublisherDisplayName=` must match **publisher display name** exactly  
+    (this account: **Agency in Box 42** — not the app name HonestSpend)  
+- [ ] Bump `Identity Version=` for every submission (e.g. `1.0.32.0` → `1.0.33.0`)
 
 ## B. Build package (repo)
 

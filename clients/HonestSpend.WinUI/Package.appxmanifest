@@ -3,12 +3,13 @@
   HonestSpend MSIX package identity (Desktop Bridge / full-trust WinUI).
 
   Before Store or permanent sideload:
-    1. Partner Center → Product identity → copy Package/Identity Name + Publisher
-    2. Replace Name + Publisher below (Publisher must match your signing cert CN)
-    3. Bump Version with each submission (Windows versioning: Major.Minor.Build.Revision)
+    1. Partner Center → Product identity → copy Package/Identity Name + Publisher (CN=…)
+    2. PublisherDisplayName MUST match Partner Center publisher display name exactly
+       (this account: "Agency in Box 42")
+    3. Identity@Publisher must match Partner Center publisher CN (Store re-sign uses that)
+    4. Bump Version with each submission (Major.Minor.Build.Revision)
 
-  Scaffold defaults are for local sideload with a self-signed cert
-  (see scripts/package-msix.ps1 -CreateSelfSignedCert).
+  Local sideload: scripts/package-msix.ps1 -CreateSelfSignedCert (CN can differ for sideload only).
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -21,11 +22,11 @@
   <Identity
     Name="HonestSpend.HonestSpend"
     Publisher="CN=HonestSpend Dev"
-    Version="1.0.31.0" />
+    Version="1.0.32.0" />
 
   <Properties>
     <DisplayName>HonestSpend</DisplayName>
-    <PublisherDisplayName>HonestSpend</PublisherDisplayName>
+    <PublisherDisplayName>Agency in Box 42</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>Local-first liquidity OS — Safe to spend, import bank files, open rarely.</Description>
   </Properties>

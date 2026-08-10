@@ -88,8 +88,11 @@ Edit `Package.appxmanifest` before Store:
 | Attribute | Scaffold default | Replace with |
 |-----------|------------------|--------------|
 | `Identity@Name` | `HonestSpend.HonestSpend` | Partner Center package family name prefix |
-| `Identity@Publisher` | `CN=HonestSpend Dev` | Partner Center publisher ID / cert CN |
-| `Identity@Version` | `1.0.31.0` | Each submission (must increase) |
+| `Identity@Publisher` | Partner Center **Publisher** CN | Must match Product identity (not display name) |
+| `Identity@Version` | e.g. `1.0.32.0` | Each submission (must increase) |
+| `PublisherDisplayName` | **Agency in Box 42** | Must match Partner Center **publisher display name** exactly |
+
+Common rejection: `PublisherDisplayName` set to the app name (`HonestSpend`) instead of the account publisher name.
 
 ## Unpackaged vs packaged debug
 
