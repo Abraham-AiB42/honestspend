@@ -11,7 +11,7 @@ Use this when filling Partner Center **Store listings**. Keep tone open-rarely, 
 
 ## Short description (≤200 chars recommended)
 
-Local-first money app: Safe to spend you can trust. Import bank CSV/OFX, match books to bank, sort charges, close the month. No bank passwords. Free freeware path.
+Local-first money app: Safe to spend you can trust. Import bank CSV/OFX, match books to bank, sort charges, close the month. No bank passwords. One-time purchase.
 
 ## Description (long)
 
