@@ -1,0 +1,5 @@
+# Local sideload certs — never commit
+*.pfx
+*.p12
+*.cer
+*.p7b

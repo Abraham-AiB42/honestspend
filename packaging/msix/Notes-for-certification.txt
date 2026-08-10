@@ -1,0 +1,27 @@
+HonestSpend — notes for Microsoft Store certification (MSIX)
+
+RESTRICTED CAPABILITY: runFullTrust
+------------------------------------
+HonestSpend is a local-first personal finance desktop app (WinUI 3) that:
+  • Spawns a local Python fiscal engine (localhost API on 127.0.0.1 only)
+  • Stores all ledger data on the user's machine (default %USERPROFILE%\.financial-os)
+  • Optionally registers tray / logon helpers and scheduled backup tasks
+
+No bank website passwords are collected. Money-in is CSV/OFX/PDF import and optional
+BYOK Plaid (user's own API keys). Full trust is required to run the bundled engine
+process and write user-chosen data directories outside the package install folder.
+
+INTERNET
+--------
+internetClient: optional BYOK Plaid and optional Grok categorize (user keys only).
+Default freeware path works fully offline after install.
+
+TEST ACCOUNT
+------------
+No account required for first-run. Launch app → Get started (~2 min) → import a sample
+CSV or enter cash balance manually.
+
+VERSION
+-------
+Keep Package.appxmanifest Identity Version in sync with pyproject / financial_os version
+(e.g. 1.0.31.0 for feature tag 1.0.31).

@@ -47,7 +47,7 @@ pip install -e ".[dev]"
 
 ---
 
-## Option B — One-folder Windows package (recommended ship)
+## Option B — One-folder Windows package (GitHub / sideload)
 
 **Requires (builder only):** .NET 10 SDK, Python 3.11+  
 **End user:** just unzip + double-click — no Python required.
@@ -76,6 +76,22 @@ What it does:
 5. Optional: **Add → Link bank** or Import CSV  
 
 Engine is auto-detected from `.\engine\`. If offline: Settings → **Start engine**.
+
+---
+
+## Option C — MSIX (Microsoft Store track)
+
+**Store product type: MSIX** (not EXE/MSI). Scaffold + Partner Center steps:
+
+```powershell
+.\scripts\package-msix.ps1 -CreateSelfSignedCert   # once, local sideload only
+.\scripts\package-msix.ps1
+# → dist\msix\*.msix
+```
+
+See **[docs/MSIX.md](./MSIX.md)** for identity, `runFullTrust` certification notes, and engine packaging strategy.
+
+GitHub zip/Inno (Option B) remains the power-user / freeware sideload path.
 
 ---
 

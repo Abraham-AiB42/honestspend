@@ -49,9 +49,8 @@ Write-Host "Or keep using a full repo clone and set Backend root in Settings."
 
 if ($Msix) {
     Write-Host ""
-    Write-Host "MSIX: open clients\HonestSpend.WinUI in Visual Studio → Package and Publish → Create App Packages."
-    Write-Host "Or: msbuild with WindowsAppSDK packaging targets once signing cert is configured."
-    Write-Host "Identity in Package.appxmanifest — update Publisher CN for your cert before store/sideload."
+    Write-Host "MSIX scaffold: .\scripts\package-msix.ps1  (see docs\MSIX.md)"
+    Write-Host "Or VS: Package and Publish — set Package.appxmanifest Publisher CN first."
 }
 
 Write-Host "Done."

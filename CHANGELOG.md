@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.31.1 — MSIX packaging scaffold (Store track)
+
+- `Package.appxmanifest` full-trust Desktop Bridge identity + certification notes
+- `scripts/package-msix.ps1` builds `.msix` to `dist/msix/` (optional self-signed cert)
+- `docs/MSIX.md` Partner Center checklist; INSTALL/clients README link Store vs GitHub paths
+- Default `WindowsPackageType=None` for daily dev; MSIX only when packaging
+
 ## 1.0.31 — Plaid create honesty · unified trust · multi set_books
 
 - **Plaid create**: missing `balances.current` → not IFPP cash (no phantom $0 Safe to spend)

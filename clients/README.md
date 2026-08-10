@@ -56,7 +56,17 @@ Releases: push a `v*` tag → GitHub Actions builds WinUI zip + Python wheels (`
 
 See [docs/AUTOMATION.md](../docs/AUTOMATION.md).
 
-MSIX: Visual Studio → **Package and Publish** (update `Package.appxmanifest` Publisher CN + signing cert).
+**MSIX (Store):**
+
+```powershell
+# From repo root
+.\scripts\package-msix.ps1 -CreateSelfSignedCert   # once
+.\scripts\package-msix.ps1
+# → dist\msix\
+```
+
+Or Visual Studio → **Package and Publish** (set `Package.appxmanifest` Publisher CN).  
+Full guide: [docs/MSIX.md](../docs/MSIX.md).
 
 ### Native pages (summary)
 
