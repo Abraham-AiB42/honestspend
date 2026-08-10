@@ -407,6 +407,7 @@ def import_ofx(
         account_id=account_id,
         created=result.transactions_created,
         categorized=result.categorized,
+        skipped_existing=result.skipped_existing,
         drift=drift,
         books_balance=result.books_balance,
         institution_balance=result.ledger_balance if result.institution_balance_set else None,

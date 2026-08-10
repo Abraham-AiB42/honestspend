@@ -343,14 +343,22 @@ def process_inbox(
                     entry["ledger_balance"] = res.ending_balance
                     entry["drift"] = res.drift
 
-            entry["ok"] = not res.errors or res.transactions_created > 0
+            inst_set = bool(getattr(res, "institution_balance_set", False))
+            entry["ok"] = (
+                not res.errors
+                or res.transactions_created > 0
+                or res.skipped_existing > 0
+                or inst_set
+            )
             entry["transactions_created"] = res.transactions_created
             entry["skipped_existing"] = res.skipped_existing
             entry["skipped_bad"] = res.skipped_bad
             entry["categorized"] = res.categorized
+            entry["institution_balance_set"] = inst_set
             entry["errors"] = res.errors[:5]
             entry["next_steps"] = list(getattr(res, "next_steps", None) or [])
-            if res.transactions_created or res.skipped_existing:
+            # Money-in success: new/skipped txns OR bank bal set (bal-only PDF/OFX)
+            if res.transactions_created or res.skipped_existing or inst_set:
                 any_ok = True
                 total_created += res.transactions_created
                 total_categorized += int(res.categorized or 0)
@@ -405,12 +413,14 @@ def process_inbox(
             # Worst absolute drift first
             account_id, pack = max(drift_by_acct.items(), key=lambda kv: kv[1][0])
             _, drift, books_bal, inst_bal = pack
+        total_skipped = sum(int(r.get("skipped_existing") or 0) for r in results)
         next_steps = build_post_import_next_steps(
             session,
             profile_id=pid,
             account_id=account_id,
             created=total_created,
             categorized=total_categorized,
+            skipped_existing=total_skipped,
             drift=drift,
             books_balance=books_bal,
             institution_balance=inst_bal,

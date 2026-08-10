@@ -55,6 +55,15 @@ def test_parse_statement_ending_balance_prefers_new():
     assert bal2 is None
 
 
+def test_parse_statement_ending_balance_keeps_negative_sign():
+    """Overdraft / credit overpayment must not be abs()'d into positive bank truth."""
+    bal, src = parse_statement_ending_balance("New Balance -$50.00\n")
+    assert bal == Decimal("-50.00")
+    assert src == "new_balance"
+    bal2, _ = parse_statement_ending_balance("New Balance ($25.00)\n")
+    assert bal2 == Decimal("-25.00")
+
+
 def test_parse_bare_payment_line():
     """Bare PAYMENT payee must not be dropped as a pure total."""
     text = """

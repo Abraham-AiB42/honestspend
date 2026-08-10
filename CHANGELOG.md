@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.25 — Signed PDF bal · date-aware CSV ending · inbox bal-only
+
+- **PDF** ending bal keeps sign (overdraft/overpayment); parentheses amounts
+- **CSV** ending bal = balance on **max txn date** (newest-first exports correct)
+- **Inbox** archives + aggregates set_books when `institution_balance_set` (bal-only OFX/PDF)
+- **Refunds**: fee-shaped returns (`RETURN FEE`) stay charges
+- **enter_ending_bal** on skip-only bal-less reimport
+- Home Do this next awaits set_books trust
+
 ## 1.0.24 — PDF New Balance → bank bal · fee id polish
 
 - **PDF**: parse **New Balance / Ending / Closing** into `institution_balance` (CSV/OFX parity)

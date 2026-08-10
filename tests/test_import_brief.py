@@ -231,6 +231,20 @@ def test_post_import_enter_ending_bal_when_no_institution(tmp_path: Path):
         assert steps[0]["action"] == "enter_ending_bal"
         assert steps[0]["account_id"] == str(acct.id)
         assert "ending" in steps[0]["label"].lower() or "balance" in steps[0]["label"].lower()
+
+        # Skip-only reimport (all duplicates) still prompts when no institution bal
+        steps2 = build_post_import_next_steps(
+            s,
+            profile_id=personal.id,
+            account_id=acct.id,
+            created=0,
+            skipped_existing=3,
+            categorized=0,
+            institution_balance=None,
+            source="CSV",
+        )
+        assert steps2
+        assert steps2[0]["action"] == "enter_ending_bal"
     finally:
         s.close()
         eng.dispose()

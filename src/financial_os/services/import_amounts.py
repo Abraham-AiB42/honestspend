@@ -66,6 +66,9 @@ def looks_like_credit_refund(payee: str | None) -> bool:
     p = (payee or "").strip()
     if not p:
         return False
+    # Fee-shaped "returns" are charges (mirror payment exclusion)
+    if _NOT_PAYMENT.search(p):
+        return False
     # Payments win over refund if both match (e.g. "payment return")
     if looks_like_credit_payment(p):
         return False

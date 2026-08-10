@@ -30,6 +30,13 @@ def test_refund_keywords():
     assert looks_like_credit_refund("STATEMENT CREDIT")
     assert not looks_like_credit_refund("AMAZON.COM")
     assert not looks_like_credit_refund("PAYMENT THANK YOU")  # payment wins
+    assert not looks_like_credit_refund("RETURN FEE")
+    assert not looks_like_credit_refund("REVERSAL FEE")
+
+
+def test_return_fee_is_charge_not_refund():
+    assert normalize_credit_import_amount(Decimal("15.00"), "RETURN FEE") == Decimal("-15.00")
+    assert normalize_credit_import_amount(Decimal("12.00"), "REVERSAL FEE") == Decimal("-12.00")
 
 
 def test_normalize_charges_positive_payments_negative():

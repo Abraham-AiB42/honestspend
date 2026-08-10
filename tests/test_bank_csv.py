@@ -113,7 +113,6 @@ def test_csv_ending_balance_column(tmp_path: Path):
 2026-08-02,PAY,-20.00,975.50
 """
     from financial_os.services.bank_csv import preview_bank_csv
-    from financial_os.services.reconcile import trust_balance
 
     prev = preview_bank_csv(StringIO(csv_text))
     assert prev.get("ending_balance") == "975.50"
@@ -137,6 +136,40 @@ def test_csv_ending_balance_column(tmp_path: Path):
     # next_steps prefer honest path
     actions = {st.get("action") for st in result.next_steps}
     assert "hold" in actions or "set_books_from_bank" in actions or "review" in actions
+    s.close()
+
+
+def test_csv_ending_balance_newest_first(tmp_path: Path):
+    """Retail banks often export newest-first — ending bal is max date, not last row."""
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Chase",
+        current_balance=Decimal("1000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    # Newest first: last file row is oldest running bal (would wrongly be 1000)
+    csv_text = """Date,Description,Amount,Balance
+2026-08-05,PAY,-20.00,980.00
+2026-08-01,COFFEE,-4.50,1000.00
+"""
+    from financial_os.services.bank_csv import preview_bank_csv
+
+    prev = preview_bank_csv(StringIO(csv_text))
+    assert prev.get("ending_balance") == "980.00"
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+    )
+    assert result.ending_balance == "980.00"
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("980.00")
     s.close()
 
 

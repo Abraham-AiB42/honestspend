@@ -745,7 +745,7 @@ public sealed partial class HomePage : Page
         }
     }
 
-    private void DoNext_Click(object sender, RoutedEventArgs e)
+    private async void DoNext_Click(object sender, RoutedEventArgs e)
     {
         switch (_nextAction)
         {
@@ -769,7 +769,7 @@ public sealed partial class HomePage : Page
                 Frame?.Navigate(typeof(ImportPage));
                 break;
             case "set_books_from_bank":
-                _ = TrustBooksFromBankAsync();
+                await TrustBooksFromBankAsync();
                 break;
             case "promo_sink":
             case "promo_balloon":

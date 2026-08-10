@@ -26,7 +26,8 @@ _DATE_RE = re.compile(
 )
 _AMOUNT_RE = re.compile(
     r"(?<![\w.])"  # not mid-word
-    r"(-?\$?\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})|-?\$?\s*\d+\.\d{2})"
+    # optional surrounding parens for credit/overdraft style ($50.00)
+    r"(\(?-?\$?\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?|\(?-?\$?\s*\d+\.\d{2}\)?)"
     r"(?!\d)"
 )
 _YEAR_HINT = re.compile(r"\b(20\d{2})\b")
@@ -234,7 +235,8 @@ def parse_statement_ending_balance(text: str) -> tuple[Decimal | None, str | Non
             continue
         if rank < best_rank:
             best_rank = rank
-            best = abs(amt)  # summary bals are usually absolute; credit may show positive owed
+            # Keep sign: overdraft / credit overpayment must not become positive bank truth
+            best = amt
             best_src = src
     return best, best_src
 
@@ -402,6 +404,7 @@ def import_statement_pdf(
         account_id=account_id,
         created=result.transactions_created,
         categorized=result.categorized,
+        skipped_existing=result.skipped_existing,
         drift=drift,
         books_balance=result.books_balance,
         institution_balance=result.ending_balance if result.institution_balance_set else None,

@@ -210,6 +210,7 @@ def build_post_import_next_steps(
     account_id: int | None = None,
     created: int = 0,
     categorized: int = 0,
+    skipped_existing: int = 0,
     drift: Decimal | None = None,
     books_balance: str | None = None,
     institution_balance: str | None = None,
@@ -218,7 +219,7 @@ def build_post_import_next_steps(
     """Structured CTAs after CSV / OFX / PDF import (open-rarely habit).
 
     Each step: {action, label, detail, account_id?} where action includes
-    review | set_books_from_bank | reconcile | home | hold | bills.
+    review | set_books_from_bank | reconcile | home | hold | bills | enter_ending_bal.
     """
     steps: list[dict[str, str]] = []
     uncat = (
@@ -262,17 +263,22 @@ def build_post_import_next_steps(
                 "account_id": str(account_id) if account_id else "",
             }
         )
-    elif created > 0 and institution_balance is None and account_id is not None:
-        steps.append(
-            {
-                "action": "enter_ending_bal",
-                "label": "Enter bank ending balance",
-                "detail": (
-                    "No Balance/LEDGERBAL in file — type statement ending bal so Safe to spend stays honest."
-                ),
-                "account_id": str(account_id),
-            }
-        )
+    elif institution_balance is None and account_id is not None and (
+        created > 0 or skipped_existing > 0
+    ):
+        # New rows or skip-only reimport — still need bank bal when account has none
+        acct_row = session.get(Account, account_id)
+        if acct_row is not None and acct_row.institution_balance is None:
+            steps.append(
+                {
+                    "action": "enter_ending_bal",
+                    "label": "Enter bank ending balance",
+                    "detail": (
+                        "No Balance/LEDGERBAL in file — type statement ending bal so Safe to spend stays honest."
+                    ),
+                    "account_id": str(account_id),
+                }
+            )
 
     if uncat > 0:
         steps.append(

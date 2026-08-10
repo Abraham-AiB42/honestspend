@@ -90,6 +90,26 @@ def _norm(h: str) -> str:
     return re.sub(r"\s+", " ", (h or "").strip().lower())
 
 
+def ending_balance_from_pairs(
+    pairs: list[tuple[date, Decimal]],
+) -> Decimal | None:
+    """Pick institution ending bal from (txn_date, balance) samples.
+
+    Uses balance on max(txn_date). Tie-break by file order: if the file looks
+    newest-first (first date > last date), take the first bal on that date;
+    otherwise take the last (chronological / mixed).
+    """
+    if not pairs:
+        return None
+    max_d = max(d for d, _ in pairs)
+    same = [b for d, b in pairs if d == max_d]
+    if not same:
+        return None
+    if pairs[0][0] > pairs[-1][0]:
+        return same[0]
+    return same[-1]
+
+
 def _find_col(headers: list[str], keys: tuple[str, ...]) -> int | None:
     norms = [_norm(h) for h in headers]
     for k in keys:
@@ -229,7 +249,7 @@ def preview_bank_csv(
 
     sample: list[dict[str, Any]] = []
     scanned = 0
-    last_balance: Decimal | None = None
+    bal_pairs: list[tuple[date, Decimal]] = []
     for row in reader:
         if not row or all(not (c or "").strip() for c in row):
             continue
@@ -249,28 +269,30 @@ def preview_bank_csv(
         bal: Decimal | None = None
         if bal_i is not None and bal_i < len(row):
             bal = _parse_amount(row[bal_i])
-            if bal is not None:
-                last_balance = bal
-        sample.append(
-            {
-                "date": d.isoformat() if d else None,
-                "payee": payee.strip()[:80],
-                "amount": str(amount) if amount is not None else None,
-                "balance": str(bal) if bal is not None else None,
-                "raw": [c[:40] for c in row[:8]],
-            }
-        )
-        if len(sample) >= max_rows:
-            break
+            if bal is not None and d is not None:
+                bal_pairs.append((d, bal))
+        if len(sample) < max_rows:
+            sample.append(
+                {
+                    "date": d.isoformat() if d else None,
+                    "payee": payee.strip()[:80],
+                    "amount": str(amount) if amount is not None else None,
+                    "balance": str(bal) if bal is not None else None,
+                    "raw": [c[:40] for c in row[:8]],
+                }
+            )
 
-    # scan rest of file for last balance when balance column present
+    # Continue scan for balance pairs beyond preview sample
     if bal_i is not None:
         for row in reader:
             if not row or bal_i >= len(row):
                 continue
+            d = _parse_date(row[date_i] if date_i is not None and date_i < len(row) else "")
             bal = _parse_amount(row[bal_i])
-            if bal is not None:
-                last_balance = bal
+            if bal is not None and d is not None:
+                bal_pairs.append((d, bal))
+
+    ending = ending_balance_from_pairs(bal_pairs)
 
     return {
         "ok": len(errors) == 0,
@@ -279,12 +301,12 @@ def preview_bank_csv(
         "mapping": mapping,
         "sample": sample,
         "rows_previewed": scanned,
-        "ending_balance": str(last_balance) if last_balance is not None else None,
+        "ending_balance": str(ending) if ending is not None else None,
         "hint": (
             "Confirm mapping looks right, then import. "
             + (
-                "Balance column found — last value will set institution balance for Reconcile. "
-                if last_balance is not None
+                "Balance column found — ending bal is the balance on the latest txn date. "
+                if ending is not None
                 else "No balance column — you can enter bank ending balance on Import. "
             )
             + "Use amount_sign=invert if signs are flipped."
@@ -374,7 +396,7 @@ def import_bank_csv(
         if e
     }
 
-    last_balance: Decimal | None = None
+    bal_pairs: list[tuple[date, Decimal]] = []
     for row in reader:
         result.rows_scanned += 1
         if not row or all(not (c or "").strip() for c in row):
@@ -387,6 +409,12 @@ def import_bank_csv(
             payee = ""
             if desc_i is not None and desc_i < len(row):
                 payee = (row[desc_i] or "").strip()
+
+            # Balance column: sample on every dated row (even if amount is bad)
+            if bal_i is not None and bal_i < len(row):
+                bal = _parse_amount(row[bal_i])
+                if bal is not None:
+                    bal_pairs.append((d, bal))
 
             amount: Decimal | None = None
             if amt_i is not None and amt_i < len(row):
@@ -417,11 +445,6 @@ def import_bank_csv(
                 from financial_os.services.import_amounts import normalize_credit_import_amount
 
                 amount = normalize_credit_import_amount(amount, payee)
-
-            if bal_i is not None and bal_i < len(row):
-                bal = _parse_amount(row[bal_i])
-                if bal is not None:
-                    last_balance = bal
 
             bank_txn_id = ""
             if id_i is not None and id_i < len(row):
@@ -458,14 +481,15 @@ def import_bank_csv(
 
     session.flush()
 
-    # Ending balance → institution_balance for Reconcile (OFX LEDGERBAL parity)
+    # Ending balance → institution_balance (max txn date, not raw file order)
+    column_ending = ending_balance_from_pairs(bal_pairs)
     bal_to_apply: Decimal | None = None
     bal_source: str | None = None
     if institution_balance is not None:
         bal_to_apply = institution_balance
         bal_source = "override"
-    elif apply_ending_balance and last_balance is not None:
-        bal_to_apply = last_balance
+    elif apply_ending_balance and column_ending is not None:
+        bal_to_apply = column_ending
         bal_source = "column"
 
     drift: Decimal | None = None
@@ -483,8 +507,8 @@ def import_bank_csv(
         result.drift = str(drift)
     else:
         result.books_balance = str(acct.current_balance or 0)
-        if last_balance is not None:
-            result.ending_balance = str(last_balance)
+        if column_ending is not None:
+            result.ending_balance = str(column_ending)
             result.balance_source = "column"
         else:
             result.balance_source = "none"
@@ -521,6 +545,7 @@ def import_bank_csv(
         account_id=account_id,
         created=result.transactions_created,
         categorized=result.categorized,
+        skipped_existing=result.skipped_existing,
         drift=drift,
         books_balance=result.books_balance,
         institution_balance=result.ending_balance if result.institution_balance_set else None,

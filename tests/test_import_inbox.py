@@ -170,3 +170,51 @@ def test_inbox_set_books_next_steps(tmp_path: Path, monkeypatch):
     actions = {st.get("action") for st in result.get("next_steps") or []}
     assert "set_books_from_bank" in actions
     s.close()
+
+
+def test_inbox_archives_bal_only_ofx(tmp_path: Path, monkeypatch):
+    """LEDGERBAL-only OFX (no STMTTRN) still archives and can surface set_books."""
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("100"))
+    s.commit()
+    layout = ensure_inbox_layout()
+    ofx = """OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<BANKMSGSRSV1>
+<STMTTRNRS>
+<STMTRS>
+<BANKACCTFROM>
+<BANKID>121000248
+<ACCTID>primarychecking001
+<ACCTTYPE>CHECKING
+</BANKACCTFROM>
+<BANKTRANLIST>
+</BANKTRANLIST>
+<LEDGERBAL>
+<BALAMT>2500.00
+<DTASOF>20260805
+</LEDGERBAL>
+</STMTRS>
+</STMTTRNRS>
+</BANKMSGSRSV1>
+</OFX>
+"""
+    path = Path(layout["inbox"]) / "Primary-checking.ofx"
+    path.write_text(ofx, encoding="utf-8")
+    result = process_inbox(s)
+    entry = result["results"][0]
+    assert entry.get("ok") is True
+    assert entry.get("institution_balance_set") is True or entry.get("ledger_balance")
+    assert not path.exists()  # archived on bal-only success
+    actions = {st.get("action") for st in result.get("next_steps") or []}
+    assert "set_books_from_bank" in actions
+    s.close()
