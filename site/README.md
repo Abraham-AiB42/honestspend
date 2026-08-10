@@ -25,24 +25,21 @@ npx --yes serve -l 5173
 
 ## Deploy to Cloudflare Pages
 
-### Option A — Wrangler (CLI)
+### Automatic (preferred)
+
+Push to `main` with changes under `site/**` runs  
+`.github/workflows/deploy-site.yml` → project **honestspend** → **https://honestspend.net/**
+
+GitHub secrets required: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`  
+(See [docs/CI_CD.md](../docs/CI_CD.md).)
+
+### Manual CLI
 
 ```powershell
-# one-time: npx wrangler login
-# or set CLOUDFLARE_API_TOKEN with Pages:Edit
-
-cd <repo-root>
+$env:CLOUDFLARE_API_TOKEN = "…"
+$env:CLOUDFLARE_ACCOUNT_ID = "…"
 npx wrangler pages deploy site --project-name=honestspend --branch=main
 ```
-
-Then in Cloudflare Dashboard → Pages → honestspend → Custom domains → add `honestspend.net` (and `www` if desired). Point DNS as Cloudflare instructs.
-
-### Option B — Dashboard
-
-1. Cloudflare Dashboard → Workers & Pages → Create → Pages → Upload assets (or connect Git).
-2. Project name: `honestspend`
-3. Upload the contents of `site/` (or set build output directory to `site` with no build command if using Git).
-4. Custom domain: `honestspend.net`
 
 ### Privacy URL for Partner Center
 

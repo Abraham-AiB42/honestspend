@@ -1,0 +1,174 @@
+# Build MSIX and optionally submit to Microsoft Partner Center.
+#
+# Prerequisites (one-time, see docs/CI_CD.md):
+#   1. App already created + first version published (or at least product reserved)
+#   2. Entra app linked in Partner Center with Manager role
+#   3. Package.appxmanifest Identity Name + Publisher match Partner Center
+#   4. GitHub secrets/vars configured (below)
+#
+# Secrets:
+#   AZURE_AD_TENANT_ID
+#   AZURE_AD_APPLICATION_CLIENT_ID
+#   AZURE_AD_APPLICATION_SECRET
+#   SELLER_ID
+# Variables (optional but recommended):
+#   STORE_PRODUCT_ID   — Partner Center product id for HonestSpend
+#
+# Triggers:
+#   - Push tag v* (e.g. v1.0.32) → build + submit if credentials present
+#   - workflow_dispatch → build always; submit if "submit" is true
+
+name: Store MSIX (build / submit)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: "Submit MSIX to Partner Center (requires Store secrets)"
+        type: boolean
+        default: false
+      configuration:
+        description: "Build configuration"
+        type: choice
+        options: [Release, Debug]
+        default: Release
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    name: Build MSIX
+    outputs:
+      msix_path: ${{ steps.find.outputs.path }}
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install engine package (for portable zip)
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Read package version
+        id: ver
+        shell: pwsh
+        run: |
+          [xml]$m = Get-Content clients/HonestSpend.WinUI/Package.appxmanifest
+          $v = $m.Package.Identity.Version
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Package version: $v"
+
+      - name: Package MSIX (+ engine-portable.zip)
+        shell: pwsh
+        run: |
+          $cfg = "${{ github.event.inputs.configuration }}"
+          if ([string]::IsNullOrWhiteSpace($cfg)) { $cfg = "Release" }
+          # Unsigned layout is fine for Store (Microsoft re-signs). No dev PFX in CI.
+          .\scripts\package-msix.ps1 -Configuration $cfg
+
+      - name: Locate MSIX
+        id: find
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem -Path dist/msix -Recurse -Filter *.msix |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $msix) {
+            Write-Error "No .msix produced under dist/msix"
+            exit 1
+          }
+          Write-Host "Found: $($msix.FullName) ($([math]::Round($msix.Length/1MB,1)) MB)"
+          "path=$($msix.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          # Copy to stable path for artifact + submit job
+          New-Item -ItemType Directory -Force -Path dist/store | Out-Null
+          Copy-Item $msix.FullName dist/store/HonestSpend.msix -Force
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HonestSpend-MSIX-${{ steps.ver.outputs.version }}
+          path: dist/store/HonestSpend.msix
+          if-no-files-found: error
+          retention-days: 30
+
+  submit:
+    name: Submit to Microsoft Store
+    needs: package
+    runs-on: windows-latest
+    # Auto on version tags when product id is set; manual when submit=true
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.STORE_PRODUCT_ID != '')
+      || (github.event_name == 'workflow_dispatch' && inputs.submit == true)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require Store secrets
+        shell: pwsh
+        run: |
+          $missing = @()
+          foreach ($n in @(
+            "AZURE_AD_TENANT_ID",
+            "AZURE_AD_APPLICATION_CLIENT_ID",
+            "AZURE_AD_APPLICATION_SECRET",
+            "SELLER_ID"
+          )) {
+            # secrets are not enumerable; check via env after map
+          }
+          if ("${{ secrets.AZURE_AD_TENANT_ID }}" -eq "") { $missing += "AZURE_AD_TENANT_ID" }
+          if ("${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}" -eq "") { $missing += "AZURE_AD_APPLICATION_CLIENT_ID" }
+          if ("${{ secrets.AZURE_AD_APPLICATION_SECRET }}" -eq "") { $missing += "AZURE_AD_APPLICATION_SECRET" }
+          if ("${{ secrets.SELLER_ID }}" -eq "") { $missing += "SELLER_ID" }
+          $pid = "${{ vars.STORE_PRODUCT_ID }}"
+          if ([string]::IsNullOrWhiteSpace($pid)) { $missing += "vars.STORE_PRODUCT_ID" }
+          if ($missing.Count -gt 0) {
+            Write-Error ("Missing Store configuration: " + ($missing -join ", ") + ". See docs/CI_CD.md")
+            exit 1
+          }
+          Write-Host "Store product id: $pid"
+
+      - name: Download MSIX
+        uses: actions/download-artifact@v4
+        with:
+          name: HonestSpend-MSIX-${{ needs.package.outputs.version }}
+          path: dist/store
+
+      - name: Setup Microsoft Store CLI
+        uses: microsoft/microsoft-store-apppublisher@v1.1
+
+      - name: Configure Partner Center credentials
+        shell: pwsh
+        run: |
+          msstore reconfigure `
+            --tenantId "${{ secrets.AZURE_AD_TENANT_ID }}" `
+            --sellerId "${{ secrets.SELLER_ID }}" `
+            --clientId "${{ secrets.AZURE_AD_APPLICATION_CLIENT_ID }}" `
+            --clientSecret "${{ secrets.AZURE_AD_APPLICATION_SECRET }}"
+
+      - name: Publish MSIX to Store
+        shell: pwsh
+        run: |
+          $msix = Join-Path $env:GITHUB_WORKSPACE "dist/store/HonestSpend.msix"
+          if (-not (Test-Path $msix)) {
+            Write-Error "MSIX missing at $msix"
+            exit 1
+          }
+          $productId = "${{ vars.STORE_PRODUCT_ID }}"
+          Write-Host "msstore publish $msix -id $productId"
+          # Publishes package update for free apps (per MS docs). Certification still runs in Partner Center.
+          msstore publish $msix -id $productId

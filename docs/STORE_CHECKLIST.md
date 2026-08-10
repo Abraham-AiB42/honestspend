@@ -55,8 +55,16 @@ Do these in order. Product type must be **MSIX** (not EXE/MSI).
 - [ ] Confirm set books / Sort / month-close  
 - [ ] File any Store review feedback as GitHub issues  
 
+## F. CI/CD (after first live product)
+
+Automated MSIX build + Partner Center submit is wired in  
+`.github/workflows/store-submit.yml`. Setup secrets/vars and limits: **[CI_CD.md](./CI_CD.md)**.
+
+Marketing site (privacy URL host) auto-deploys via `deploy-site.yml` → Cloudflare Pages.
+
 ## Related
 
+- [CI_CD.md](./CI_CD.md) — GitHub Actions: site + Store  
 - [MSIX.md](./MSIX.md) — packaging architecture  
 - [PRIVACY.md](./PRIVACY.md)  
 - [STORE_LISTING.md](./STORE_LISTING.md)  
