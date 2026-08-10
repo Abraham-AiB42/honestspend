@@ -11,11 +11,11 @@ Do these in order. Product type must be **MSIX** (not EXE/MSI).
   - Package/Identity **Name**  
   - **Publisher** (CN=…)  
 - [ ] Paste into `clients/HonestSpend.WinUI/Package.appxmanifest`  
-  - `Identity Name=`  
-  - `Identity Publisher=` (must match Partner Center CN exactly)  
-  - `PublisherDisplayName=` must match **publisher display name** exactly  
-    (this account: **Agency in Box 42** — not the app name HonestSpend)  
-- [ ] Bump `Identity Version=` for every submission (e.g. `1.0.32.0` → `1.0.33.0`)
+  - `Identity Name=` → `AgencyinBox42.HonestSpend`  
+  - `Identity Publisher=` → `CN=AA975026-9A8A-4BD4-9A1E-623BC6D70EE3`  
+  - `PublisherDisplayName=` → **Agency in Box 42**  
+- [ ] Bump `Identity Version=` only after a package was accepted (don’t thrash versions on rejected uploads)  
+- [ ] **Device family:** package is Desktop x64 only — uncheck Xbox / other families in the submission
 
 ## B. Build package (repo)
 

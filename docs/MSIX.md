@@ -87,12 +87,17 @@ Edit `Package.appxmanifest` before Store:
 
 | Attribute | Scaffold default | Replace with |
 |-----------|------------------|--------------|
-| `Identity@Name` | `HonestSpend.HonestSpend` | Partner Center package family name prefix |
-| `Identity@Publisher` | Partner Center **Publisher** CN | Must match Product identity (not display name) |
-| `Identity@Version` | e.g. `1.0.32.0` | Each submission (must increase) |
-| `PublisherDisplayName` | **Agency in Box 42** | Must match Partner Center **publisher display name** exactly |
+| `Identity@Name` | `AgencyinBox42.HonestSpend` | Partner Center package/identity name |
+| `Identity@Publisher` | `CN=AA975026-9A8A-4BD4-9A1E-623BC6D70EE3` | Partner Center publisher CN |
+| `Identity@Version` | e.g. `1.0.32.0` | Bump only after a package is accepted / live |
+| `PublisherDisplayName` | **Agency in Box 42** | Partner Center publisher display name |
 
-Common rejection: `PublisherDisplayName` set to the app name (`HonestSpend`) instead of the account publisher name.
+Common rejections:
+
+- `PublisherDisplayName` = app name instead of publisher display name  
+- `Identity@Name` / `Publisher` still set to local sideload placeholders  
+
+**Device families:** this package is **Windows.Desktop** only (x64). In Partner Center submission, uncheck Xbox / HoloLens / Surface Hub / etc. unless you ship packages for those families.
 
 ## Unpackaged vs packaged debug
 
