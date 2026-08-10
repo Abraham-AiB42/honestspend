@@ -9,3 +9,9 @@ build/
 .env
 *.db
 .DS_Store
+
+# .NET / WinUI build outputs
+**/bin/
+**/obj/
+*.user
+*.suo
