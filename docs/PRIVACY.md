@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-08-10  
 **Product:** HonestSpend (local-first personal finance app)  
-**Publisher:** HonestSpend contributors
+**Publisher:** Agency in Box 42
 
 This policy describes how HonestSpend handles information when you use the desktop app (including Microsoft Store and sideload builds).
 
