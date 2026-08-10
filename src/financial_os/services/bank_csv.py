@@ -90,14 +90,43 @@ def _norm(h: str) -> str:
     return re.sub(r"\s+", " ", (h or "").strip().lower())
 
 
+def _csv_looks_newest_first(pairs: list[tuple[date, Decimal]]) -> bool:
+    """Heuristic: majority of consecutive date steps decrease → newest-first export."""
+    if len(pairs) < 2:
+        return False
+    if pairs[0][0] > pairs[-1][0]:
+        return True
+    if pairs[0][0] < pairs[-1][0]:
+        return False
+    # Same first/last date (same-day export): count consecutive non-increasing steps
+    down = up = 0
+    for i in range(1, len(pairs)):
+        if pairs[i][0] < pairs[i - 1][0]:
+            down += 1
+        elif pairs[i][0] > pairs[i - 1][0]:
+            up += 1
+    if down > up:
+        return True
+    if up > down:
+        return False
+    # All same date: prefer first bal as ending when multi-row same day is
+    # typically newest-first in retail exports (first row = latest running bal).
+    # Chronological same-day is less common for multi-row; first-row wins when
+    # we cannot tell — but running bals: newest-first first row is most recent.
+    # Use first for same-day multi-row (retail default); single-row is trivial.
+    unique_dates = {d for d, _ in pairs}
+    return len(unique_dates) == 1 and len(pairs) > 1
+
+
 def ending_balance_from_pairs(
     pairs: list[tuple[date, Decimal]],
 ) -> Decimal | None:
     """Pick institution ending bal from (txn_date, balance) samples.
 
-    Uses balance on max(txn_date). Tie-break by file order: if the file looks
-    newest-first (first date > last date), take the first bal on that date;
-    otherwise take the last (chronological / mixed).
+    Uses balance on max(txn_date). Tie-break by file orientation: newest-first
+    takes the first bal on that date; chronological takes the last.
+    Same-day newest-first (common short bank downloads) is detected via
+    consecutive date steps / all-same-date multi-row heuristic.
     """
     if not pairs:
         return None
@@ -105,7 +134,7 @@ def ending_balance_from_pairs(
     same = [b for d, b in pairs if d == max_d]
     if not same:
         return None
-    if pairs[0][0] > pairs[-1][0]:
+    if _csv_looks_newest_first(pairs):
         return same[0]
     return same[-1]
 

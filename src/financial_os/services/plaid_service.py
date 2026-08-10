@@ -277,14 +277,10 @@ def _upsert_plaid_txn(
     if not acct:
         return False
 
-    # Plaid: positive amount = money leaving the account (outflow) for depository
+    # Plaid: positive amount = money leaving the account (outflow). Ledger: expenses negative.
+    # Snapshot balances come from /accounts/get — do not re-normalize credit signs here.
     raw_amt = Decimal(str(t.get("amount") or 0))
-    if acct.kind == "credit":
-        # charges increase balance owed → store as negative spend in our ledger convention for expenses
-        # Our IFPP cash uses signed: outflow negative. Credit charges as negative is consistent for spending.
-        amount = -raw_amt
-    else:
-        amount = -raw_amt
+    amount = -raw_amt
 
     external_id = f"plaid:{tid}"
     existing = (

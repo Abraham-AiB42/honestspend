@@ -482,14 +482,9 @@ public sealed partial class ImportPage : Page
             await api.EnsureBackendAsync();
             // Bal-less import: require ending bal before trust (no failed API round-trip)
             decimal? typedBal = null;
-            if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
-            {
-                var balText = EndingBalanceBox.Text.Trim().Replace("$", "").Replace(",", "");
-                if (decimal.TryParse(balText, System.Globalization.NumberStyles.Number,
-                        System.Globalization.CultureInfo.InvariantCulture, out var parsed)
-                    || decimal.TryParse(balText, out parsed))
-                    typedBal = parsed;
-            }
+            if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text)
+                && TryParseBankAmount(EndingBalanceBox.Text, out var parsedBal))
+                typedBal = parsedBal;
             if (_requireEndingBal && typedBal is null)
             {
                 EndingBalanceBox.Focus(FocusState.Programmatic);
@@ -511,6 +506,33 @@ public sealed partial class ImportPage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    /// <summary>Parse bank-style amounts: $1,234.56, (50.00), 50.00- → decimal.</summary>
+    private static bool TryParseBankAmount(string raw, out decimal value)
+    {
+        value = 0m;
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+        var s = raw.Trim().Replace("$", "").Replace(",", "").Replace(" ", "");
+        var neg = false;
+        if (s.StartsWith('(') && s.EndsWith(')'))
+        {
+            neg = true;
+            s = s[1..^1].Trim();
+        }
+        else if (s.EndsWith('-') && s.Length > 1)
+        {
+            neg = true;
+            s = s[..^1].Trim();
+        }
+        if (!(decimal.TryParse(s, System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture, out value)
+            || decimal.TryParse(s, out value)))
+            return false;
+        if (neg)
+            value = -Math.Abs(value);
+        return true;
     }
 
     private void GoSort_Click(object sender, RoutedEventArgs e)

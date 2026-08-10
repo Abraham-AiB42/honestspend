@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.26 — Inbox enter_ending_bal · same-day CSV · PDF interest lines
+
+- **Inbox**: bal-less success passes `account_id` → aggregate `enter_ending_bal` CTA
+- **CSV**: same-day newest-first ending bal (first row on max date)
+- **PDF**: keep dated INTEREST CHARGED / fee activity (headers only without date)
+- **WinUI**: ending-bal accepts parentheses / trailing minus
+- **Inbox `ok`**: only true on real money-in (created / skip / institution bal)
+
 ## 1.0.25 — Signed PDF bal · date-aware CSV ending · inbox bal-only
 
 - **PDF** ending bal keeps sign (overdraft/overpayment); parentheses amounts

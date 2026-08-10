@@ -123,9 +123,10 @@ def parse_statement_lines(
         line = " ".join(line.split())
         if len(line) < 8:
             continue
-        # skip obvious headers
+        # Skip summary headers only when there is no date (keep dated INTEREST CHARGED / fees)
         low = line.lower()
-        if any(
+        dm = _DATE_RE.search(line)
+        if dm is None and any(
             h in low
             for h in (
                 "previous balance",
@@ -140,8 +141,6 @@ def parse_statement_lines(
             )
         ):
             continue
-
-        dm = _DATE_RE.search(line)
         if not dm:
             continue
         amounts = list(_AMOUNT_RE.finditer(line))

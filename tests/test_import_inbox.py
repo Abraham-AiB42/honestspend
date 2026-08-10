@@ -172,6 +172,27 @@ def test_inbox_set_books_next_steps(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_inbox_enter_ending_bal_bal_less_csv(tmp_path: Path, monkeypatch):
+    """Bal-less CSV success must surface enter_ending_bal on top-level next_steps."""
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("1000"))
+    s.commit()
+    layout = ensure_inbox_layout()
+    path = Path(layout["inbox"]) / "Primary-checking.csv"
+    path.write_text(
+        "Date,Description,Amount\n2026-08-01,COFFEE,-4.50\n",
+        encoding="utf-8",
+    )
+    result = process_inbox(s)
+    assert result["transactions_created"] >= 1
+    assert not path.exists()
+    actions = {st.get("action") for st in result.get("next_steps") or []}
+    assert "enter_ending_bal" in actions
+    step = next(st for st in result["next_steps"] if st.get("action") == "enter_ending_bal")
+    assert step.get("account_id")
+    s.close()
+
+
 def test_inbox_archives_bal_only_ofx(tmp_path: Path, monkeypatch):
     """LEDGERBAL-only OFX (no STMTTRN) still archives and can surface set_books."""
     s = _session(tmp_path, monkeypatch)

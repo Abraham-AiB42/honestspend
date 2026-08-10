@@ -77,6 +77,22 @@ def test_parse_bare_payment_line():
     assert any(p.strip() == "PAYMENT" or p.startswith("PAYMENT") for p in payees)
 
 
+def test_parse_keeps_dated_interest_charged():
+    """Dated INTEREST CHARGED rows must import (not dropped as header)."""
+    text = """
+    Account Activity 2026
+    08/01/2026 AMAZON                        $45.99
+    08/15/2026 INTEREST CHARGED              $12.50
+    Interest Charged $99.00
+    """
+    rows = parse_statement_lines(text)
+    payees = " ".join(r["payee"].upper() for r in rows)
+    assert "INTEREST" in payees
+    assert any(
+        abs(float(r["amount"])) == 12.5 and "INTEREST" in r["payee"].upper() for r in rows
+    )
+
+
 def test_credit_pdf_import_payment_reduces_owed(tmp_path: Path, monkeypatch):
     """End-to-end PDF credit import: charge + bare PAYMENT → owed falls."""
     from financial_os.db import Profile
