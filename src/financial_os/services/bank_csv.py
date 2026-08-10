@@ -50,6 +50,24 @@ BALANCE_KEYS = (
     "current balance",
     "bal",
 )
+# Bank-supplied unique ids (stronger dedupe than date+amount+payee)
+TXN_ID_KEYS = (
+    "transaction id",
+    "trans id",
+    "txn id",
+    "fit id",
+    "fitid",
+    "reference",
+    "reference number",
+    "ref number",
+    "ref #",
+    "check number",
+    "check #",
+    "serial",
+    "bank reference",
+    "confirmation",
+    "confirmation number",
+)
 
 
 @dataclass
@@ -179,6 +197,13 @@ def preview_bank_csv(
     debit_i = _find_col(headers, DEBIT_KEYS)
     credit_i = _find_col(headers, CREDIT_KEYS)
     bal_i = _find_col(headers, BALANCE_KEYS)
+    id_i = _find_col(headers, TXN_ID_KEYS)
+    # Avoid treating a lone "id" column as date-adjacent noise when it's the only id-like header
+    if id_i is None:
+        for i, h in enumerate(headers):
+            if _norm(h) in ("id", "transactionid", "transid"):
+                id_i = i
+                break
 
     mapping = {
         "date_col": headers[date_i] if date_i is not None else None,
@@ -193,6 +218,8 @@ def preview_bank_csv(
         "credit_index": credit_i,
         "balance_col": headers[bal_i] if bal_i is not None else None,
         "balance_index": bal_i,
+        "txn_id_col": headers[id_i] if id_i is not None else None,
+        "txn_id_index": id_i,
     }
     errors: list[str] = []
     if date_i is None:
@@ -316,6 +343,12 @@ def import_bank_csv(
     debit_i = _find_col(headers, DEBIT_KEYS)
     credit_i = _find_col(headers, CREDIT_KEYS)
     bal_i = _find_col(headers, BALANCE_KEYS)
+    id_i = _find_col(headers, TXN_ID_KEYS)
+    if id_i is None:
+        for i, h in enumerate(headers):
+            if _norm(h) in ("id", "transactionid", "transid"):
+                id_i = i
+                break
 
     if date_i is None:
         result.errors.append(f"Could not find date column in {headers}")
@@ -387,7 +420,13 @@ def import_bank_csv(
                 if bal is not None:
                     last_balance = bal
 
-            external_id = f"csv:{account_id}:{d.isoformat()}:{amount}:{payee[:80]}"
+            bank_txn_id = ""
+            if id_i is not None and id_i < len(row):
+                bank_txn_id = (row[id_i] or "").strip()
+            if bank_txn_id:
+                external_id = f"csv:{account_id}:id:{bank_txn_id}"[:200]
+            else:
+                external_id = f"csv:{account_id}:{d.isoformat()}:{amount}:{payee[:80]}"
             if external_id in existing:
                 result.skipped_existing += 1
                 continue

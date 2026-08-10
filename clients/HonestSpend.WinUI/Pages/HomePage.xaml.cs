@@ -252,11 +252,14 @@ public sealed partial class HomePage : Page
                 var canMark = mc.TryGetProperty("can_mark_closed", out var cm) && cm.ValueKind == JsonValueKind.True;
                 if (closed)
                 {
+                    // Quiet open-rarely: one status line, hide step list + buttons
+                    MonthCloseList.Visibility = Visibility.Collapsed;
                     MonthCloseBtn.Visibility = Visibility.Collapsed;
                     MarkMonthClosedBtn.Visibility = Visibility.Collapsed;
                 }
                 else if (canMark || allDone)
                 {
+                    MonthCloseList.Visibility = Visibility.Visible;
                     MonthCloseBtn.Visibility = Visibility.Collapsed;
                     MarkMonthClosedBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
                         ? "Mark month closed"
@@ -265,6 +268,7 @@ public sealed partial class HomePage : Page
                 }
                 else
                 {
+                    MonthCloseList.Visibility = Visibility.Visible;
                     MonthCloseBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
                         ? "Do next close step"
                         : JsonUi.Str(mc, "button_label");
@@ -564,7 +568,11 @@ public sealed partial class HomePage : Page
                 Frame?.Navigate(typeof(TaxVaultPage));
                 break;
             case "reconcile":
-                Frame?.Navigate(typeof(ReconcilePage));
+                // Prefer Simple Import for bank bal / set books — not Full Reconcile eject
+                Frame?.Navigate(typeof(ImportPage));
+                break;
+            case "import":
+                Frame?.Navigate(typeof(ImportPage));
                 break;
             case "backup":
                 Frame?.Navigate(typeof(DataPage));

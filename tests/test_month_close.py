@@ -65,6 +65,9 @@ def test_mark_month_closed(client: TestClient):
     body = r.json()
     assert "closed_this_period" in body
     assert body.get("closed_this_period") is False
+    recon = next(s for s in body["steps"] if s["id"] == "reconcile")
+    # No bank bal yet — does not block (money-in habit not started)
+    assert recon.get("done") is True
 
     # Force mark even if optional steps remain (test path)
     r2 = client.post("/api/home/month-close/complete", json={"force": True})

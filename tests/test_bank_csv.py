@@ -175,6 +175,38 @@ def test_csv_import_updates_safe_to_spend_via_trust(tmp_path: Path):
     s.close()
 
 
+def test_csv_txn_id_dedupe(tmp_path: Path):
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Chase",
+        current_balance=Decimal("1000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Date,Description,Amount,Transaction ID
+2026-08-01,COFFEE,-4.50,TXN-100
+2026-08-02,MARKET,-10.00,TXN-101
+"""
+    r1 = import_bank_csv(s, account_id=acct.id, file_obj=StringIO(csv_text), auto_categorize=False)
+    assert r1.transactions_created == 2
+    # Same IDs, different payee text — still dedupe
+    csv_text2 = """Date,Description,Amount,Transaction ID
+2026-08-01,COFFEE SHOP #9,-4.50,TXN-100
+2026-08-02,MARKET 42,-10.00,TXN-101
+"""
+    r2 = import_bank_csv(s, account_id=acct.id, file_obj=StringIO(csv_text2), auto_categorize=False)
+    assert r2.transactions_created == 0
+    assert r2.skipped_existing == 2
+    from financial_os.db import Transaction
+
+    assert s.query(Transaction).count() == 2
+    s.close()
+
+
 def test_csv_institution_balance_override(tmp_path: Path):
     s = _session(tmp_path)
     personal = s.query(Profile).filter(Profile.slug == "personal").one()

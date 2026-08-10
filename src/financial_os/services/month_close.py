@@ -133,8 +133,49 @@ def build_month_close(
     try:
         rep = reconcile_report(session, profile_id=profile_id)
         drifted = int(rep.get("drifted") or 0)
+        # Cash IFPP accounts without a bank balance can't prove Safe to spend honesty
+        from financial_os.db import Account
+
+        aq = session.query(Account).filter(Account.archived_at.is_(None))
+        if profile_id is not None:
+            aq = aq.filter(Account.profile_id == profile_id)
+        cash_ifpp = [
+            a
+            for a in aq.all()
+            if a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp
+        ]
+        missing_bank_bal = sum(1 for a in cash_ifpp if a.institution_balance is None)
     except Exception:
         drifted = 0
+        missing_bank_bal = 0
+        cash_ifpp = []
+
+    # Reconcile: no drift. Once money-in habit started (any bank bal), require
+    # every cash IFPP account to have an institution_balance (honesty gate).
+    any_inst = any(a.institution_balance is not None for a in cash_ifpp) if cash_ifpp else False
+    if drifted:
+        reconcile_done = False
+        recon_title = f"{drifted} account(s) with drift"
+        recon_detail = "Books vs bank differ — Import → Set Safe to spend from bank."
+    elif any_inst and missing_bank_bal:
+        reconcile_done = False
+        recon_title = f"{missing_bank_bal} cash account(s) need bank bal"
+        recon_detail = (
+            f"{missing_bank_bal} cash account(s) have no bank ending balance — "
+            "import CSV/OFX or enter ending bal."
+        )
+    else:
+        reconcile_done = True
+        recon_title = "Reconcile clean"
+        recon_detail = (
+            "Cash accounts match bank ending balances."
+            if any_inst
+            else (
+                "No bank ending balances yet — import when ready (does not block close yet)."
+                if cash_ifpp
+                else "No cash accounts."
+            )
+        )
 
     steps = [
         {
@@ -184,15 +225,17 @@ def build_month_close(
         },
         {
             "id": "reconcile",
-            "title": f"{drifted} account(s) with drift" if drifted else "Reconcile clean",
-            "done": drifted == 0,
-            "action": "reconcile" if drifted else "hold",
-            "detail": (
-                "Books vs bank differ — resolve so Safe to spend is real."
-                if drifted
-                else "No institution drift flagged."
+            "title": recon_title,
+            "done": reconcile_done,
+            "action": "import" if (missing_bank_bal and not drifted) else ("reconcile" if not reconcile_done else "hold"),
+            "detail": recon_detail,
+            "button_label": (
+                "Import bank bal"
+                if missing_bank_bal and not drifted
+                else ("Match bank" if not reconcile_done else "Reconcile")
             ),
-            "button_label": "Reconcile",
+            "drifted": drifted,
+            "missing_bank_balance": missing_bank_bal,
         },
         {
             "id": "backup",

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.17 — Month-close honesty gate · CSV txn-id dedupe · quieter Home
+
+- Month-close reconcile: after first bank bal, all cash IFPP accounts need ending bal; drift blocks close
+- Month-close “Match bank / Import bank bal” routes to **Import** (Simple), not Full Reconcile
+- CSV detects **Transaction ID / FITID / Reference** for stable dedupe across re-exports
+- Home: when month is closed, hide step list (open-rarely quiet)
+
 ## 1.0.16 — Import honesty + inbox safety + path jails
 
 - **CSV/OFX/PDF import updates `current_balance`** (same rules as manual posts) so Safe to spend moves
