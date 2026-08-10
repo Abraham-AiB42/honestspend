@@ -168,8 +168,8 @@ def ending_balance_from_pairs(
     if len(same_bals) == 1:
         return same_bals[0]
 
-    # Same-day multi-row: prefer amount-consistency when every row has an amount
-    if amounts is not None and all(d == max_d for d, _ in pairs):
+    # Max-day multi-row: prefer amount-consistency on that day's slice (multi-day OK)
+    if amounts is not None and len(same_idx) >= 2:
         amts = [amounts[i] for i in same_idx]
         if all(a is not None for a in amts):
             orient = _same_day_orientation_from_amounts(

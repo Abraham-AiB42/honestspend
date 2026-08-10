@@ -255,6 +255,30 @@ def test_csv_ending_balance_same_day_chronological(tmp_path: Path):
     s.close()
 
 
+def test_csv_ending_balance_max_day_slice_amount_orientation():
+    """Multi-day file: amount orientation on max-day rows only (not whole-file same-day)."""
+    from financial_os.services.bank_csv import ending_balance_from_pairs
+    from datetime import date as date_cls
+
+    # Newest-first multi-day; max day (08-05) has two rows: pay then older coffee same day
+    pairs = [
+        (date_cls(2026, 8, 5), Decimal("980.00")),
+        (date_cls(2026, 8, 5), Decimal("1000.00")),
+        (date_cls(2026, 8, 1), Decimal("1004.50")),
+    ]
+    amts = [Decimal("-20.00"), Decimal("-4.50"), Decimal("-10.00")]
+    assert ending_balance_from_pairs(pairs, amts) == Decimal("980.00")
+
+    # Chronological multi-day: max day last row is true ending
+    pairs2 = [
+        (date_cls(2026, 8, 1), Decimal("1000.00")),
+        (date_cls(2026, 8, 5), Decimal("995.50")),
+        (date_cls(2026, 8, 5), Decimal("975.50")),
+    ]
+    amts2 = [Decimal("-5.00"), Decimal("-4.50"), Decimal("-20.00")]
+    assert ending_balance_from_pairs(pairs2, amts2) == Decimal("975.50")
+
+
 def test_csv_import_updates_safe_to_spend_via_trust(tmp_path: Path):
     """Opening books wrong vs bank ending → trust institution fixes IFPP input."""
     s = _session(tmp_path)

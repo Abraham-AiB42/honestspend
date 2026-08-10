@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.29 — set_books wins CTA · enter queue · typed trust keeps Sort
+
+- **ShowNextSteps**: `set_books_from_bank` never overwritten by `enter_ending_bal`
+- Queue extra bal-less accounts; advance after each Save+set trust
+- Typed OFX/PDF/CSV override → trust then ShowNextSteps (keep Sort; skip enter/set_books)
+- set_books-only path trusts file bank bal (does not re-apply typed box)
+- CSV max-day amount orientation on max-date slice (multi-day files)
+
 ## 1.0.28 — OFX/PDF typed bal trusts books · multi enter CTA UX
 
 - **OFX/PDF**: typed ending bal sets bank bal **and** trusts → Safe to spend (parity with Save+set CTA)
