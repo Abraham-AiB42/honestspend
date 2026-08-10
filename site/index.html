@@ -4,13 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>HonestSpend — Honest books. Safe to spend.</title>
-  <meta name="description" content="Local-first money app for Windows. Safe to spend you can trust. Import bank CSV/OFX, match books to bank, sort charges, close the month. No bank passwords. Freeware." />
+  <meta name="description" content="HonestSpend by Agency in Box 42 — local-first money app for Windows. Safe to spend you can trust. Import bank CSV/OFX, match books to bank, sort charges, close the month. One-time purchase on Microsoft Store." />
   <meta name="theme-color" content="#0c1118" />
+  <meta name="author" content="Agency in Box 42" />
   <link rel="canonical" href="https://honestspend.net/" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://honestspend.net/" />
   <meta property="og:title" content="HonestSpend — Honest books. Safe to spend." />
-  <meta property="og:description" content="Local-first Windows money app. Safe to spend you can trust. CSV/OFX import, books ≠ bank honesty, month close. No bank passwords." />
+  <meta property="og:description" content="Local-first Windows money app by Agency in Box 42. Safe to spend you can trust. Available on Microsoft Store." />
   <meta property="og:site_name" content="HonestSpend" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="HonestSpend — Honest books. Safe to spend." />
@@ -24,10 +25,17 @@
     "name": "HonestSpend",
     "applicationCategory": "FinanceApplication",
     "operatingSystem": "Windows 10, Windows 11",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "offers": {
+      "@type": "Offer",
+      "price": "49.99",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock",
+      "url": "https://apps.microsoft.com/search?query=HonestSpend"
+    },
     "description": "Local-first personal finance app with Safe to spend, bank CSV/OFX import, and month close.",
     "url": "https://honestspend.net/",
-    "author": { "@type": "Organization", "name": "HonestSpend" }
+    "author": { "@type": "Organization", "name": "Agency in Box 42" },
+    "publisher": { "@type": "Organization", "name": "Agency in Box 42" }
   }
   </script>
 </head>
@@ -47,7 +55,7 @@
           <li class="hide-sm"><a href="#how">How it works</a></li>
           <li class="hide-sm"><a href="#faq">FAQ</a></li>
           <li><a href="/privacy/">Privacy</a></li>
-          <li><a class="nav-cta" href="#download">Download</a></li>
+          <li><a class="nav-cta" href="#get">Get on Microsoft Store</a></li>
         </ul>
       </nav>
     </div>
@@ -58,7 +66,7 @@
     <section class="hero">
       <div class="container hero-grid">
         <div>
-          <span class="eyebrow">Windows · local-first · freeware</span>
+          <span class="eyebrow">Windows · local-first · Microsoft Store</span>
           <h1>Honest books.<br />Safe to spend.</h1>
           <p class="lede">
             A money app that tells you the truth when books don’t match the bank—
@@ -66,7 +74,7 @@
             <strong>Safe to spend</strong>, sort a few charges, close the month.
           </p>
           <div class="btn-row">
-            <a class="btn btn-primary" href="#download">Get HonestSpend</a>
+            <a class="btn btn-primary" id="store-link-hero" href="https://apps.microsoft.com/search?query=HonestSpend" rel="noopener">Get on Microsoft Store</a>
             <a class="btn btn-secondary" href="#screenshots">See the app</a>
           </div>
           <div class="trust-pills">
@@ -150,7 +158,7 @@
           <article class="feature">
             <div class="icon" aria-hidden="true">↓</div>
             <h3>Freeware money-in</h3>
-            <p>Download CSV, OFX/QFX, or PDF from your bank site. We never store bank logins. Optional BYOK Plaid with <em>your</em> keys.</p>
+            <p>Import CSV, OFX/QFX, or PDF from your bank site. We never store bank logins. Optional BYOK Plaid with <em>your</em> keys.</p>
           </article>
           <article class="feature">
             <div class="icon" aria-hidden="true">✓</div>
@@ -415,7 +423,7 @@
         <div class="steps">
           <div class="step">
             <h3>Import</h3>
-            <p>Download CSV/OFX from your bank site (or drop into the inbox). Optional: your own Plaid keys.</p>
+            <p>Import CSV/OFX from your bank site (or drop into the inbox). Optional: your own Plaid keys.</p>
           </div>
           <div class="step">
             <h3>Match bank</h3>
@@ -463,7 +471,7 @@
               </tr>
               <tr>
                 <td>Money-in default</td>
-                <td>CSV / OFX / PDF freeware path</td>
+                <td>CSV / OFX / PDF import (no bank passwords)</td>
               </tr>
               <tr>
                 <td>Cloud ledger</td>
@@ -471,7 +479,11 @@
               </tr>
               <tr>
                 <td>Price</td>
-                <td>Freeware / open source</td>
+                <td>One-time purchase on Microsoft Store</td>
+              </tr>
+              <tr>
+                <td>Publisher</td>
+                <td>Agency in Box 42</td>
               </tr>
             </tbody>
           </table>
@@ -479,28 +491,27 @@
       </div>
     </section>
 
-    <!-- Download -->
-    <section class="alt" id="download">
+    <!-- Get app (Microsoft Store only) -->
+    <section class="alt" id="get">
       <div class="container">
         <div class="download-box">
           <h2>Get HonestSpend for Windows</h2>
           <p>
-            Microsoft Store build (MSIX) is the recommended path when available.
-            GitHub releases include a portable zip for sideload / power users.
+            Official builds are available on the <strong>Microsoft Store</strong>
+            from publisher <strong>Agency in Box 42</strong>.
+            One-time purchase · Windows 10/11 · x64.
           </p>
           <div class="btn-row" style="justify-content:center;">
-            <a class="btn btn-primary" href="https://github.com/Abraham-AiB42/honestspend/releases/latest" rel="noopener">
-              Download from GitHub
-            </a>
-            <a class="btn btn-secondary" href="https://github.com/Abraham-AiB42/honestspend" rel="noopener">
-              Source on GitHub
+            <a class="btn btn-primary" id="store-link-get"
+               href="https://apps.microsoft.com/search?query=HonestSpend"
+               rel="noopener">
+              Get it on Microsoft Store
             </a>
           </div>
           <p class="dl-meta">
-            Windows 10/11 · x64 · Requires local engine (bundled in release zip; Store first-run extract)<br />
-            Docs: <a href="https://github.com/Abraham-AiB42/honestspend/blob/main/docs/INSTALL.md" rel="noopener">Install</a>
-            · <a href="/privacy/">Privacy</a>
-            · <a href="https://github.com/Abraham-AiB42/honestspend/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+            List price $49.99 USD · Pre-launch 50% off through October 21, 2026 (where the promo is active)<br />
+            <a href="/privacy/">Privacy Policy</a>
+            · Publisher: Agency in Box 42
           </p>
         </div>
       </div>
@@ -516,7 +527,7 @@
         <div class="faq">
           <details>
             <summary>Do you store my bank password?</summary>
-            <p>No. The freeware path uses files you download from your bank. Optional bank link uses Plaid keys <em>you</em> provide (BYOK)—not our vault.</p>
+            <p>No. Import files you get from your bank (CSV / OFX / PDF). Optional bank link uses Plaid keys <em>you</em> provide (BYOK)—not our vault.</p>
           </details>
           <details>
             <summary>Where does my data live?</summary>
@@ -524,7 +535,7 @@
           </details>
           <details>
             <summary>Is there a subscription? What’s the price?</summary>
-            <p>No subscription. Source stays open. Official store builds are a <strong>one-time $49.99</strong> purchase (lifetime personal) that will unlock Windows, Mac, and mobile clients. <strong>Pre-launch:</strong> 50% off through <strong>October 21, 2026</strong> (~$24.99) via Microsoft Store promo. Optional third-party services (Plaid, xAI) are only if you bring your own keys.</p>
+            <p>No subscription. HonestSpend is a <strong>one-time $49.99</strong> purchase on the Microsoft Store (lifetime personal). <strong>Pre-launch:</strong> 50% off through <strong>October 21, 2026</strong> (~$24.99) where the promo is active. Optional third-party services (Plaid, xAI) are only if you bring your own keys.</p>
           </details>
           <details>
             <summary>What is Safe to spend?</summary>
@@ -532,11 +543,15 @@
           </details>
           <details>
             <summary>Windows only?</summary>
-            <p>Yes for the polished WinUI client today. The engine is local Python/API-first so other clients can follow; Mac/Linux/mobile are roadmap, not vapor promises on this page.</p>
+            <p>Yes for the polished Windows app today (Microsoft Store). Mac and mobile are planned for later; one purchase is intended to unlock official clients as they ship.</p>
           </details>
           <details>
             <summary>Who is it not for?</summary>
             <p>Not payroll, not e-file tax filing, not a replacement for your bank’s website. Households and freelancers who want honest cash control are the sweet spot.</p>
+          </details>
+          <details>
+            <summary>Who publishes HonestSpend?</summary>
+            <p><strong>Agency in Box 42</strong> — the Microsoft Store publisher for HonestSpend.</p>
           </details>
         </div>
       </div>
@@ -552,14 +567,12 @@
         </a>
         <ul class="footer-links">
           <li><a href="#features">Features</a></li>
-          <li><a href="#download">Download</a></li>
+          <li><a href="#get">Microsoft Store</a></li>
           <li><a href="/privacy/">Privacy</a></li>
-          <li><a href="https://github.com/Abraham-AiB42/honestspend" rel="noopener">GitHub</a></li>
-          <li><a href="https://github.com/Abraham-AiB42/honestspend/issues" rel="noopener">Support</a></li>
         </ul>
       </div>
       <p class="footer-bottom">
-        © <span id="y"></span> HonestSpend · Honest books. Safe to spend. ·
+        © <span id="y"></span> <strong>Agency in Box 42</strong> · HonestSpend · Honest books. Safe to spend. ·
         <a href="/privacy/">Privacy Policy</a>
       </p>
     </div>
