@@ -131,9 +131,7 @@ def build_month_close(
         tax_detail = "Business / unwithheld income — fund tax set-aside so Safe to spend stays honest."
 
     try:
-        rep = reconcile_report(session, profile_id=profile_id)
-        drifted = int(rep.get("drifted") or 0)
-        # Cash IFPP accounts without a bank balance can't prove Safe to spend honesty
+        # Cash IFPP only — card/loan drift does not block Safe-to-spend month-close
         from financial_os.db import Account
 
         aq = session.query(Account).filter(Account.archived_at.is_(None))
@@ -145,24 +143,33 @@ def build_month_close(
             if a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp
         ]
         missing_bank_bal = sum(1 for a in cash_ifpp if a.institution_balance is None)
+        cash_drifted = 0
+        for a in cash_ifpp:
+            if a.institution_balance is None:
+                continue
+            books_bal = Decimal(str(a.current_balance or 0))
+            inst_bal = Decimal(str(a.institution_balance))
+            if abs(books_bal - inst_bal) >= Decimal("0.01"):
+                cash_drifted += 1
+        drifted = cash_drifted
     except Exception:
         drifted = 0
         missing_bank_bal = 0
         cash_ifpp = []
 
-    # Reconcile: no drift. Once money-in habit started (any bank bal), require
+    # Reconcile: no cash drift. Once money-in habit started (any bank bal), require
     # every cash IFPP account to have an institution_balance (honesty gate).
     any_inst = any(a.institution_balance is not None for a in cash_ifpp) if cash_ifpp else False
     if drifted:
         reconcile_done = False
-        recon_title = f"{drifted} account(s) with drift"
+        recon_title = f"{drifted} cash account(s) with drift"
         recon_detail = "Books vs bank differ — Import → Set Safe to spend from bank."
     elif any_inst and missing_bank_bal:
         reconcile_done = False
         recon_title = f"{missing_bank_bal} cash account(s) need bank bal"
         recon_detail = (
             f"{missing_bank_bal} cash account(s) have no bank ending balance — "
-            "import CSV/OFX or enter ending bal."
+            "import each cash account once (CSV/OFX) or enter ending bal."
         )
     else:
         reconcile_done = True

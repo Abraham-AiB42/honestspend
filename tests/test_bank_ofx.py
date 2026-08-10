@@ -110,6 +110,53 @@ def test_import_ofx_and_dedupe(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_ofx_last4_unique_only(tmp_path: Path, monkeypatch):
+    from financial_os.services.import_inbox import resolve_account_for_file
+    from financial_os.services.bank_ofx import ofx_external_account_key
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    init_db(engine)
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    seed_all(s)
+    apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("100"))
+    s.flush()
+    acct = s.query(Account).filter(Account.kind == "checking").one()
+    # Two accounts with same last-4 in nickname — last4 must not match
+    acct.nickname = "Checking 6789"
+    from financial_os.db import Profile
+
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=personal.id,
+            kind="savings",
+            nickname="Save 6789",
+            current_balance=Decimal("50"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    s.flush()
+    ofx_path = tmp_path / "x.ofx"
+    # ACCTID ends in 6789
+    ofx_path.write_text(
+        SAMPLE_OFX.replace("123456789", "111116789"),
+        encoding="utf-8",
+    )
+    matched, score, mode = resolve_account_for_file(s, ofx_path)
+    assert mode != "ofx_last4"  # ambiguous last-4
+    # Unique external_id still wins
+    acct.external_id = ofx_external_account_key("111116789")
+    s.flush()
+    matched2, _, mode2 = resolve_account_for_file(s, ofx_path)
+    assert mode2 == "ofx_acctid"
+    assert matched2 is not None and matched2.id == acct.id
+    s.close()
+
+
 def test_inbox_ofx(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()

@@ -105,11 +105,15 @@ def trust_balance(
     """
     trust=institution: set books (current_balance) from institution_balance.
     trust=books: set institution_balance from books and mark reconciled.
+
+    Recalculates credit available_credit. Logs a lightweight audit event.
     """
     a = session.get(Account, account_id)
     if not a:
         raise ValueError("Account not found")
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+    before_books = _d(a.current_balance)
+    before_inst = _d(a.institution_balance) if a.institution_balance is not None else None
     if trust == "institution":
         if a.institution_balance is None:
             raise ValueError("No institution balance to trust")
@@ -120,6 +124,25 @@ def trust_balance(
         a.last_reconciled_at = now
     else:
         raise ValueError("trust must be books or institution")
+    if a.kind == "credit" and a.credit_limit is not None:
+        bal = _d(a.current_balance)
+        a.available_credit = _d(a.credit_limit) - bal
+    try:
+        from financial_os.services.audit import log_event
+
+        log_event(
+            session,
+            username="local",
+            role="owner",
+            action=f"trust_{trust}",
+            path=f"/api/reconcile/{account_id}/trust",
+            detail=(
+                f"{a.nickname}: books {before_books}→{_d(a.current_balance)}; "
+                f"inst {before_inst}→{_d(a.institution_balance) if a.institution_balance is not None else None}"
+            ),
+        )
+    except Exception:
+        pass
     session.flush()
     return {
         "ok": True,
@@ -127,5 +150,7 @@ def trust_balance(
         "trusted": trust,
         "books_balance": str(a.current_balance),
         "institution_balance": str(a.institution_balance) if a.institution_balance is not None else None,
+        "available_credit": str(a.available_credit) if a.available_credit is not None else None,
         "last_reconciled_at": a.last_reconciled_at.isoformat() if a.last_reconciled_at else None,
+        "books_before": str(before_books),
     }

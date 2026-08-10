@@ -80,3 +80,80 @@ def test_mark_month_closed(client: TestClient):
     r3 = client.get("/api/home/month-close")
     assert r3.json().get("closed_this_period") is True
     assert r3.json().get("can_mark_closed") is False
+
+
+def test_month_close_gate_partial_bank_bal(tmp_path, monkeypatch):
+    """After first bank bal, every cash IFPP account needs one."""
+    from financial_os.db import Account, Profile
+    from financial_os.services.month_close import build_month_close
+    from financial_os.services.onboarding import apply_first_run
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    eng = create_engine(f"sqlite:///{(data / 't.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    try:
+        seed_all(s)
+        apply_first_run(
+            s,
+            cash_name="Primary checking",
+            cash_balance=Decimal("1000"),
+        )
+        s.flush()
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        # Second cash without bank bal
+        s.add(
+            Account(
+                profile_id=personal.id,
+                kind="savings",
+                nickname="Emergency",
+                current_balance=Decimal("200"),
+                is_cash_for_ifpp=True,
+            )
+        )
+        primary = s.query(Account).filter(Account.nickname == "Primary checking").one()
+        primary.institution_balance = Decimal("1000")
+        s.flush()
+        close = build_month_close(s, profile_id=personal.id)
+        recon = next(x for x in close["steps"] if x["id"] == "reconcile")
+        assert recon["done"] is False
+        assert recon.get("missing_bank_balance", 1) >= 1 or "need bank" in recon["title"].lower()
+    finally:
+        s.close()
+        eng.dispose()
+
+
+def test_month_close_gate_cash_drift(tmp_path, monkeypatch):
+    from financial_os.db import Account, Profile
+    from financial_os.services.month_close import build_month_close
+    from financial_os.services.onboarding import apply_first_run
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    eng = create_engine(f"sqlite:///{(data / 't.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    try:
+        seed_all(s)
+        apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("100"))
+        s.flush()
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        primary = s.query(Account).filter(Account.nickname == "Primary checking").one()
+        primary.institution_balance = Decimal("500")
+        s.flush()
+        close = build_month_close(s, profile_id=personal.id)
+        recon = next(x for x in close["steps"] if x["id"] == "reconcile")
+        assert recon["done"] is False
+        assert "drift" in recon["title"].lower()
+    finally:
+        s.close()
+        eng.dispose()

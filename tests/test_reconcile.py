@@ -44,3 +44,29 @@ def test_reconcile_drift_and_trust(tmp_path: Path):
     row2 = next(x for x in rep2["accounts"] if x["account_id"] == a.id)
     assert row2["status"] == "matched"
     s.close()
+
+
+def test_trust_institution_updates_credit_available(tmp_path: Path):
+    eng = create_engine(f"sqlite:///{(tmp_path / 't.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    seed_all(s)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Card",
+        current_balance=Decimal("200"),
+        institution_balance=Decimal("150"),
+        credit_limit=Decimal("1000"),
+        available_credit=Decimal("800"),
+    )
+    s.add(card)
+    s.flush()
+    out = trust_balance(s, card.id, trust="institution")
+    s.refresh(card)
+    assert card.current_balance == Decimal("150")
+    assert card.available_credit == Decimal("850")
+    assert Decimal(str(out.get("books_before"))) == Decimal("200")
+    s.close()

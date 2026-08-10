@@ -112,20 +112,16 @@ def build_import_brief(
     drift_count = len(drift_rows)
     top_drift = drift_rows[0] if drift_rows else None
 
-    # Attention: honesty before optional tips
+    # Attention: Safe-to-spend honesty before Sort charges (PRODUCT fiscal #1)
     set_books_account_id: int | None = None
+    secondary_action: str | None = None
+    secondary_label: str | None = None
     if needs_reauth:
         attention = "action"
         title = "Bank needs re-connect"
         reason = "A linked bank login expired — re-auth so books stay live."
         primary_action = "plaid"
         button = "Fix bank link"
-    elif uncat > 0:
-        attention = "action"
-        title = f"{uncat} charge{'s' if uncat != 1 else ''} to sort"
-        reason = "Uncategorized charges make tax and reports fuzzy. Accept categories in Sort charges."
-        primary_action = "review"
-        button = "Sort charges"
     elif drift_count > 0 and top_drift is not None:
         attention = "action"
         title = (
@@ -140,6 +136,16 @@ def build_import_brief(
         primary_action = "set_books_from_bank"
         button = "Set Safe to spend from bank"
         set_books_account_id = int(top_drift["account_id"])
+        if uncat > 0:
+            secondary_action = "review"
+            secondary_label = f"Sort {uncat} charge{'s' if uncat != 1 else ''}"
+            reason += f" Then sort {uncat} uncategorized charge{'s' if uncat != 1 else ''}."
+    elif uncat > 0:
+        attention = "action"
+        title = f"{uncat} charge{'s' if uncat != 1 else ''} to sort"
+        reason = "Uncategorized charges make tax and reports fuzzy. Accept categories in Sort charges."
+        primary_action = "review"
+        button = "Sort charges"
     elif pending_count > 0 and pending_out >= Decimal("100"):
         attention = "watch"
         title = f"{pending_count} pending · ${pending_out.quantize(Decimal('0.01'))} out"
@@ -177,6 +183,8 @@ def build_import_brief(
         "reason": reason,
         "primary_action": primary_action,
         "button_label": button,
+        "secondary_action": secondary_action,
+        "secondary_label": secondary_label,
         "account_id": set_books_account_id,
         "uncategorized_count": uncat,
         "pending_count": pending_count,

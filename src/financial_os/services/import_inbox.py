@@ -111,6 +111,12 @@ def _score_account(acct: Account, stem: str) -> int:
     return score
 
 
+# Filename match must clear a floor and beat the runner-up (avoid "card" → first credit).
+# Nickname-in-stem is +50; weak kind+token alone is ~23.
+MIN_FILENAME_SCORE = 25
+MIN_SCORE_MARGIN = 10
+
+
 def match_account_by_ofx_acctid(session: Session, acctid: str | None) -> Account | None:
     """Exact match on learned Account.external_id = ofx:{ACCTID}."""
     from financial_os.services.bank_ofx import ofx_external_account_key
@@ -180,8 +186,19 @@ def resolve_account_for_file(
         key=lambda t: (-t[0], t[1]),
     )
     best_score, _, best = ranked[0]
-    if best_score > 0:
+    second_score = ranked[1][0] if len(ranked) > 1 else 0
+    if best_score >= MIN_FILENAME_SCORE:
+        # Require clear win unless nickname-tier score (≥50)
+        if second_score > 0 and best_score < 50 and (best_score - second_score) < MIN_SCORE_MARGIN:
+            return None, best_score, "ambiguous"
         return best, best_score, "filename"
+    if best_score > 0:
+        # Weak kind-only match — refuse unless explicit default
+        if default_account_id is not None:
+            for a in accounts:
+                if a.id == default_account_id:
+                    return a, best_score, "default"
+        return None, best_score, "weak"
     if default_account_id is not None:
         for a in accounts:
             if a.id == default_account_id:
@@ -246,8 +263,18 @@ def process_inbox(
                     "error": (
                         "No accounts in books — run first-run setup first."
                         if not session.query(Account).filter(Account.archived_at.is_(None)).count()
-                        else "Could not match account — name file with nickname "
-                        "(e.g. Primary-checking.csv) or pick a default account on Import."
+                        else (
+                            "Ambiguous account match — name file more specifically "
+                            "(e.g. Primary-checking.csv) or opt in to Target account."
+                            if match_mode == "ambiguous"
+                            else (
+                                "Weak filename match — name file with nickname "
+                                "or opt in to Target account for unmatched files."
+                                if match_mode == "weak"
+                                else "Could not match account — name file with nickname "
+                                "(e.g. Primary-checking.csv) or opt in to Target account."
+                            )
+                        )
                     ),
                 }
             )

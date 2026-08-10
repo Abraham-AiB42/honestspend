@@ -107,6 +107,51 @@ def test_import_brief_books_vs_bank_drift(tmp_path: Path):
         eng.dispose()
 
 
+def test_import_brief_honesty_beats_uncategorized(tmp_path: Path):
+    """Safe-to-spend honesty ranks above Sort charges when both apply."""
+    from datetime import date
+    from financial_os.db import Profile, Transaction
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 'd2.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    try:
+        seed_all(s)
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        acct = Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Primary",
+            current_balance=Decimal("100"),
+            institution_balance=Decimal("500"),
+            is_cash_for_ifpp=True,
+        )
+        s.add(acct)
+        s.flush()
+        s.add(
+            Transaction(
+                profile_id=personal.id,
+                account_id=acct.id,
+                txn_date=date.today(),
+                amount=Decimal("-9.99"),
+                payee="UNCATEGORIZED",
+                category_id=None,
+                status="cleared",
+            )
+        )
+        s.flush()
+        brief = build_import_brief(s, profile_id=personal.id)
+        assert brief["primary_action"] == "set_books_from_bank"
+        assert brief["secondary_action"] == "review"
+        assert brief["uncategorized_count"] == 1
+    finally:
+        s.close()
+        eng.dispose()
+
+
 def test_post_import_next_steps_uncategorized(tmp_path: Path):
     from financial_os.db import Profile
     from sqlalchemy.orm import sessionmaker

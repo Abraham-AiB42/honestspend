@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.20 — Honesty first · inbox confidence · trust hygiene
+
+- Home: **books≠bank ranks above Sort charges** (secondary: sort still listed)
+- Inbox: min score + unique-margin refuse weak/ambiguous filename matches
+- `trust institution`: refresh credit **available_credit** + audit log before/after
+- Month-close drift gate is **cash IFPP only** (not card/loan noise)
+- Tests: Home set_books, honesty>uncat, weak inbox, multi-cash gate, OFX last-4, credit trust
+
 ## 1.0.19 — Inbox honesty closeout · Home books≠bank
 
 - Inbox: aggregate **set_books_from_bank** next_steps (worst drift account)

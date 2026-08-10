@@ -59,6 +59,26 @@ def test_home_simple_shape(client: TestClient):
     assert "recurring_suggestions" in body
 
 
+def test_home_do_this_next_books_vs_bank(client: TestClient):
+    # Large cash so IFPP is not red-now; still drift vs institution bal
+    client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
+    accts = client.get("/api/accounts").json()
+    cash = next(a for a in accts if a.get("is_cash_for_ifpp") or a.get("kind") == "checking")
+    r = client.post(
+        f"/api/reconcile/{cash['id']}/institution-balance",
+        json={"balance": "7500.00", "mark_reconciled": False},
+    )
+    assert r.status_code == 200, r.text
+    home = client.get("/api/home/simple").json()
+    books = home.get("books_brief") or {}
+    assert books.get("primary_action") == "set_books_from_bank"
+    next_a = home.get("do_this_next") or {}
+    assert next_a.get("action") == "set_books_from_bank"
+    trust = client.post(f"/api/reconcile/{cash['id']}/trust", json={"trust": "institution"})
+    assert trust.status_code == 200
+    assert Decimal(str(trust.json().get("books_balance"))) == Decimal("7500.00")
+
+
 def test_wealth_tips_when_safe_surplus(client: TestClient):
     client.post("/api/onboarding/quick-setup", json={"cash_balance": 10000})
     # add child for 529 tip

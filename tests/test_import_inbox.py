@@ -128,6 +128,32 @@ def test_inbox_default_only_when_passed(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_inbox_weak_filename_refused(tmp_path: Path, monkeypatch):
+    """Kind-only matches (e.g. 'card') must not auto-route."""
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(
+        s,
+        cash_name="Primary checking",
+        cash_balance=Decimal("1000"),
+        card_name="Everyday card",
+        card_balance=Decimal("100"),
+        card_limit=Decimal("5000"),
+    )
+    s.commit()
+    layout = ensure_inbox_layout()
+    path = Path(layout["inbox"]) / "export-card.csv"
+    path.write_text(
+        "Date,Description,Amount\n2026-08-01,X,-1.00\n",
+        encoding="utf-8",
+    )
+    result = process_inbox(s)
+    assert result["transactions_created"] == 0
+    assert result["results"][0]["ok"] is False
+    assert result["results"][0].get("match_mode") in ("weak", "ambiguous", "none")
+    assert path.exists()
+    s.close()
+
+
 def test_inbox_set_books_next_steps(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("500"))

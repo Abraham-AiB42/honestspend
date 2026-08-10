@@ -12,7 +12,7 @@
 | **Can I buy?** | Pre-purchase check |
 | **Sort charges** | Plain review queue (accept categories) |
 | **3-minute check** | On Home — open-rarely ritual (safe · charges · fees · promo · bills) |
-| **After import / bank** | `books_brief` — uncategorized · pending · stale Plaid → Sort charges / re-link |
+| **After import / bank** | `books_brief` — **books≠bank** · uncategorized · pending · stale Plaid |
 | **Fee check** | `fee_brief` — fee-like charges last 45d |
 | **Possible bills** | `recurring_suggestions` — repeat charges not yet scheduled |
 | **0% promo** | `promo_brief` — one-tap monthly set-aside |
@@ -47,9 +47,11 @@ Only after safety. Educational only: employer match → IRA habit → 529 (if ki
 ## Do this next priority (Simple)
 
 1. Protect checking / red day / rescue  
-2. Fees · promo balloon · high-APR debt  
-3. Tax set-aside **only** if business entity or tax rate set (self-employed)  
-4. Wealth basics (when safe)  
-5. Otherwise: **You're clear — open rarely**  
+2. **Books ≠ bank** — Set Safe to spend from bank ending bal (honesty)  
+3. Fees · promo balloon · high-APR debt  
+4. Sort charges (also secondary when honesty is primary)  
+5. Tax set-aside **only** if business entity or tax rate set (self-employed)  
+6. Wealth basics (when safe)  
+7. Otherwise: **You're clear — open rarely**  
 
 Empty tax vault for a plain personal / W-2 setup is **optional**, never the day-one nag.
