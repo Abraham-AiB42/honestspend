@@ -154,6 +154,9 @@ def test_month_close_gate_cash_drift(tmp_path, monkeypatch):
         recon = next(x for x in close["steps"] if x["id"] == "reconcile")
         assert recon["done"] is False
         assert "drift" in recon["title"].lower()
+        assert recon["action"] == "set_books_from_bank"
+        assert recon.get("account_id") == primary.id
+        assert "Safe to spend" in (recon.get("button_label") or "")
     finally:
         s.close()
         eng.dispose()

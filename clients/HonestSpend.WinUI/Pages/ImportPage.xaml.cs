@@ -443,6 +443,15 @@ public sealed partial class ImportPage : Page
                 GoSortBtn.Visibility = Visibility.Visible;
                 show = true;
             }
+            else if (action == "enter_ending_bal")
+            {
+                if (int.TryParse(JsonUi.Str(st, "account_id"), out var eaid))
+                    _setBooksAccountId = eaid;
+                EndingBalanceBox.Focus(FocusState.Programmatic);
+                SetBooksFromBankBtn.Content = "Save ending bal + set Safe to spend";
+                SetBooksFromBankBtn.Visibility = Visibility.Visible;
+                show = true;
+            }
             else if (action is "home" or "hold" or "bills" or "reconcile")
             {
                 GoHomeBtn.Visibility = Visibility.Visible;
@@ -468,6 +477,17 @@ public sealed partial class ImportPage : Page
                 throw new InvalidOperationException("Pick the account that received the import.");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
+            // Optional: user typed ending bal first (bal-less CSV/PDF path)
+            if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
+            {
+                var balText = EndingBalanceBox.Text.Trim().Replace("$", "").Replace(",", "");
+                if (decimal.TryParse(balText, System.Globalization.NumberStyles.Number,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                    || decimal.TryParse(balText, out parsed))
+                {
+                    await api.SetInstitutionBalanceAsync(accountId.Value, parsed, markReconciled: false);
+                }
+            }
             var res = await api.ReconcileTrustAsync(accountId.Value, "institution");
             ResultText.Text =
                 (ResultText.Text ?? "") +

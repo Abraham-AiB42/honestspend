@@ -235,3 +235,33 @@ def test_csv_institution_balance_override(tmp_path: Path):
     s.refresh(acct)
     assert acct.institution_balance == Decimal("480.00")
     s.close()
+
+
+def test_credit_csv_positive_charges_as_spend(tmp_path: Path):
+    """Credit card CSVs often list charges as positive — store as negative spend (PDF parity)."""
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Visa",
+        current_balance=Decimal("200"),
+        is_cash_for_ifpp=False,
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Date,Description,Amount
+2026-08-01,AMAZON,45.99
+2026-08-02,TARGET,12.00
+"""
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+        amount_sign="bank",
+    )
+    assert result.transactions_created == 2
+    amts = sorted(float(t.amount) for t in s.query(Transaction).all())
+    assert amts == [-45.99, -12.0]
+    s.close()

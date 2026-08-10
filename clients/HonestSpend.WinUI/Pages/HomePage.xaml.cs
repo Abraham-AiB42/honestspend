@@ -16,6 +16,7 @@ public sealed partial class HomePage : Page
     private string _nextAction = "hold";
     private string _ritualNextAction = "hold";
     private string _booksAction = "hold";
+    private string _booksSecondaryAction = "";
     private int? _booksAccountId;
     private int? _promoAccountId;
     private string _monthCloseAction = "hold";
@@ -134,7 +135,9 @@ public sealed partial class HomePage : Page
 
             // Live books / import brief (dream H1-A1) — includes books≠bank honesty
             _booksAction = "hold";
+            _booksSecondaryAction = "";
             _booksAccountId = null;
+            BooksSecondaryBtn.Visibility = Visibility.Collapsed;
             if (_home.TryGetProperty("books_brief", out var books) && books.ValueKind == JsonValueKind.Object)
             {
                 var attn = JsonUi.Str(books, "attention", "clear");
@@ -149,6 +152,14 @@ public sealed partial class HomePage : Page
                     BooksBtn.Content = JsonUi.Str(books, "button_label", "Continue");
                     if (books.TryGetProperty("account_id", out var baid) && baid.ValueKind == JsonValueKind.Number)
                         _booksAccountId = baid.GetInt32();
+                    var sec = JsonUi.Str(books, "secondary_action");
+                    var secLabel = JsonUi.Str(books, "secondary_label");
+                    if (!string.IsNullOrEmpty(sec) && sec != "—" && !string.IsNullOrEmpty(secLabel) && secLabel != "—")
+                    {
+                        _booksSecondaryAction = sec;
+                        BooksSecondaryBtn.Content = secLabel;
+                        BooksSecondaryBtn.Visibility = Visibility.Visible;
+                    }
                     var samples = new List<string>();
                     if (books.TryGetProperty("sample_uncategorized", out var sa) && sa.ValueKind == JsonValueKind.Array)
                     {
@@ -259,8 +270,14 @@ public sealed partial class HomePage : Page
                             if (!done && _monthCloseAction == "hold" && !opt)
                             {
                                 _monthCloseAction = JsonUi.Str(st, "action", "hold");
-                                if (st.TryGetProperty("account_id", out var maid) && maid.ValueKind == JsonValueKind.Number)
-                                    _monthCloseAccountId = maid.GetInt32();
+                                if (st.TryGetProperty("account_id", out var maid))
+                                {
+                                    if (maid.ValueKind == JsonValueKind.Number)
+                                        _monthCloseAccountId = maid.GetInt32();
+                                    else if (maid.ValueKind == JsonValueKind.String
+                                        && int.TryParse(maid.GetString(), out var maidInt))
+                                        _monthCloseAccountId = maidInt;
+                                }
                             }
                         }
                     }
@@ -629,10 +646,12 @@ public sealed partial class HomePage : Page
             case "fund_tax_vault":
                 Frame?.Navigate(typeof(TaxVaultPage));
                 break;
-            case "reconcile":
-                // Prefer Simple Import for bank bal / set books — not Full Reconcile eject
-                Frame?.Navigate(typeof(ImportPage));
+            case "set_books_from_bank":
+                if (_monthCloseAccountId is int mca)
+                    _booksAccountId = mca;
+                await TrustBooksFromBankAsync();
                 break;
+            case "reconcile":
             case "import":
                 Frame?.Navigate(typeof(ImportPage));
                 break;
@@ -646,6 +665,16 @@ public sealed partial class HomePage : Page
                 Done_Click(sender, e);
                 break;
         }
+    }
+
+    private void BooksSecondary_Click(object sender, RoutedEventArgs e)
+    {
+        if (_booksSecondaryAction is "review")
+            Frame?.Navigate(typeof(ReviewPage));
+        else if (_booksSecondaryAction is "import")
+            Frame?.Navigate(typeof(ImportPage));
+        else
+            Frame?.Navigate(typeof(ReviewPage));
     }
 
     private async void MarkMonthClosed_Click(object sender, RoutedEventArgs e)

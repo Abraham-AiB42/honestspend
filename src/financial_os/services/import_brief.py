@@ -262,6 +262,17 @@ def build_post_import_next_steps(
                 "account_id": str(account_id) if account_id else "",
             }
         )
+    elif created > 0 and institution_balance is None and account_id is not None:
+        steps.append(
+            {
+                "action": "enter_ending_bal",
+                "label": "Enter bank ending balance",
+                "detail": (
+                    "No Balance/LEDGERBAL in file — type statement ending bal so Safe to spend stays honest."
+                ),
+                "account_id": str(account_id),
+            }
+        )
 
     if uncat > 0:
         steps.append(

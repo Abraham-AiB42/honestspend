@@ -144,26 +144,36 @@ def build_month_close(
         ]
         missing_bank_bal = sum(1 for a in cash_ifpp if a.institution_balance is None)
         cash_drifted = 0
+        worst_drift_id: int | None = None
+        worst_abs = Decimal("0")
         for a in cash_ifpp:
             if a.institution_balance is None:
                 continue
             books_bal = Decimal(str(a.current_balance or 0))
             inst_bal = Decimal(str(a.institution_balance))
-            if abs(books_bal - inst_bal) >= Decimal("0.01"):
+            gap = abs(books_bal - inst_bal)
+            if gap >= Decimal("0.01"):
                 cash_drifted += 1
+                if gap > worst_abs:
+                    worst_abs = gap
+                    worst_drift_id = a.id
         drifted = cash_drifted
     except Exception:
         drifted = 0
         missing_bank_bal = 0
         cash_ifpp = []
+        worst_drift_id = None
 
     # Reconcile: no cash drift. Once money-in habit started (any bank bal), require
     # every cash IFPP account to have an institution_balance (honesty gate).
     any_inst = any(a.institution_balance is not None for a in cash_ifpp) if cash_ifpp else False
+    recon_account_id: int | None = worst_drift_id if drifted else None
     if drifted:
         reconcile_done = False
         recon_title = f"{drifted} cash account(s) with drift"
-        recon_detail = "Books vs bank differ — Import → Set Safe to spend from bank."
+        recon_detail = "Books vs bank differ — one tap sets Safe to spend from bank."
+        recon_action = "set_books_from_bank"
+        recon_button = "Set Safe to spend from bank"
     elif any_inst and missing_bank_bal:
         reconcile_done = False
         recon_title = f"{missing_bank_bal} cash account(s) need bank bal"
@@ -171,6 +181,8 @@ def build_month_close(
             f"{missing_bank_bal} cash account(s) have no bank ending balance — "
             "import each cash account once (CSV/OFX) or enter ending bal."
         )
+        recon_action = "import"
+        recon_button = "Import bank bal"
     else:
         reconcile_done = True
         recon_title = "Reconcile clean"
@@ -183,6 +195,8 @@ def build_month_close(
                 else "No cash accounts."
             )
         )
+        recon_action = "hold"
+        recon_button = "Reconcile"
 
     steps = [
         {
@@ -234,13 +248,10 @@ def build_month_close(
             "id": "reconcile",
             "title": recon_title,
             "done": reconcile_done,
-            "action": "import" if (missing_bank_bal and not drifted) else ("reconcile" if not reconcile_done else "hold"),
+            "action": recon_action,
             "detail": recon_detail,
-            "button_label": (
-                "Import bank bal"
-                if missing_bank_bal and not drifted
-                else ("Match bank" if not reconcile_done else "Reconcile")
-            ),
+            "button_label": recon_button,
+            "account_id": recon_account_id,
             "drifted": drifted,
             "missing_bank_balance": missing_bank_bal,
         },

@@ -71,8 +71,12 @@
                         <TextBlock x:Name="BooksTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock x:Name="BooksReason" Opacity="0.85" TextWrapping="Wrap" />
                         <ItemsControl x:Name="BooksSamples" />
-                        <Button x:Name="BooksBtn" Content="Continue" HorizontalAlignment="Left"
-                                Click="Books_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="BooksBtn" Content="Continue" HorizontalAlignment="Left"
+                                    Click="Books_Click" Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:Name="BooksSecondaryBtn" Content="Sort charges" HorizontalAlignment="Left"
+                                    Click="BooksSecondary_Click" Visibility="Collapsed" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 

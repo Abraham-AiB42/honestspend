@@ -133,12 +133,19 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
 
         if existing:
             if current is not None:
-                existing.current_balance = Decimal(str(current))
+                bal = Decimal(str(current))
+                # Plaid balances are bank truth for linked accounts (snapshot, not txn deltas)
+                existing.current_balance = bal
+                existing.institution_balance = bal
             if kind == "credit":
                 if limit is not None:
                     existing.credit_limit = Decimal(str(limit))
                 if available is not None:
                     existing.available_credit = Decimal(str(available))
+                elif existing.credit_limit is not None and current is not None:
+                    existing.available_credit = Decimal(str(existing.credit_limit)) - Decimal(
+                        str(current)
+                    )
                 existing.is_cash_for_ifpp = False
             else:
                 existing.is_cash_for_ifpp = kind in ("checking", "savings", "cash")
@@ -146,12 +153,14 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
             out.append(existing)
             continue
 
+        bal0 = Decimal(str(current or 0))
         row = Account(
             profile_id=item.profile_id,
             kind=kind,
             nickname=f"{inst} {name}"[:120],
             institution=inst,
-            current_balance=Decimal(str(current or 0)),
+            current_balance=bal0,
+            institution_balance=bal0 if current is not None else None,
             credit_limit=Decimal(str(limit)) if limit is not None else None,
             available_credit=Decimal(str(available)) if available is not None and kind == "credit" else None,
             is_cash_for_ifpp=kind in ("checking", "savings"),
@@ -170,16 +179,18 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
     added = modified = removed = 0
     cursor = item.transactions_cursor or ""
     has_more = True
-    acct_map = {
-        a.plaid_account_id: a
-        for a in session.query(Account).filter(Account.plaid_item_pk == item.id).all()
-        if a.plaid_account_id
-    }
-    # refresh accounts if empty
+    # Always refresh balances from bank (Safe to spend honesty for BYOK path)
+    acct_map: dict[str, Account] = {}
+    for a in _sync_accounts(session, item):
+        if a.plaid_account_id:
+            acct_map[a.plaid_account_id] = a
     if not acct_map:
-        for a in _sync_accounts(session, item):
-            if a.plaid_account_id:
-                acct_map[a.plaid_account_id] = a
+        # Fallback if accounts/get returned nothing
+        acct_map = {
+            a.plaid_account_id: a
+            for a in session.query(Account).filter(Account.plaid_item_pk == item.id).all()
+            if a.plaid_account_id
+        }
 
     while has_more:
         data = _post(
@@ -289,6 +300,7 @@ def _upsert_plaid_txn(
         existing.payee = payee
         existing.txn_date = d
         existing.status = status
+        # Balance comes from /accounts/get snapshot — do not double-apply deltas
         return True
 
     session.add(
@@ -303,6 +315,7 @@ def _upsert_plaid_txn(
             external_id=external_id,
         )
     )
+    # Ledger history only; Safe to spend uses institution snapshot from _sync_accounts
     return True
 
 

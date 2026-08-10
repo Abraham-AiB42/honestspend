@@ -412,8 +412,9 @@ def import_bank_csv(
 
             if amount_sign == "invert":
                 amount = -amount
-            # Credit cards often list charges as positive — if account is credit and amount > 0 for spend-like, keep bank convention:
-            # We assume CSV already uses signed convention; user can flip with amount_sign.
+            elif amount_sign == "bank" and acct.kind == "credit" and amount > 0:
+                # Match PDF: many credit CSVs list charges as positive → store as spend (negative)
+                amount = -amount
 
             if bal_i is not None and bal_i < len(row):
                 bal = _parse_amount(row[bal_i])

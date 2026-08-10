@@ -196,6 +196,46 @@ def test_post_import_next_steps_uncategorized(tmp_path: Path):
         eng.dispose()
 
 
+def test_post_import_enter_ending_bal_when_no_institution(tmp_path: Path):
+    """Bal-less CSV/PDF: prompt to type ending bal so Safe to spend stays honest."""
+    from financial_os.db import Profile
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 'bal.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    try:
+        seed_all(s)
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        acct = Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Ops",
+            current_balance=Decimal("1000"),
+            is_cash_for_ifpp=True,
+        )
+        s.add(acct)
+        s.flush()
+        steps = build_post_import_next_steps(
+            s,
+            profile_id=personal.id,
+            account_id=acct.id,
+            created=3,
+            categorized=0,
+            institution_balance=None,
+            source="PDF",
+        )
+        assert steps
+        assert steps[0]["action"] == "enter_ending_bal"
+        assert steps[0]["account_id"] == str(acct.id)
+        assert "ending" in steps[0]["label"].lower() or "balance" in steps[0]["label"].lower()
+    finally:
+        s.close()
+        eng.dispose()
+
+
 def test_home_simple_includes_books_brief(client: TestClient):
     client.post("/api/onboarding/quick-setup", json={"cash_balance": 5000})
     r = client.get("/api/home/simple")

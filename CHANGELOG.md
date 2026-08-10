@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.21 — Plaid parity · secondary Sort · ending bal · credit CSV
+
+- **Plaid**: always `/accounts/get` on sync; set `institution_balance` + books from snapshot (no double txn deltas)
+- **Month-close**: drift step is one-tap **set_books_from_bank** with worst-drift `account_id`
+- **Home WinUI**: secondary **Sort charges** when books_brief lists it; month-close trusts bank
+- **Import**: bal-less CSV/PDF → `enter_ending_bal` next step; Save ending bal then trust
+- **Credit CSV**: positive charges flip to spend (PDF parity)
+- Tests: enter_ending_bal, credit positive charges, month-close set_books action
+
 ## 1.0.20 — Honesty first · inbox confidence · trust hygiene
 
 - Home: **books≠bank ranks above Sort charges** (secondary: sort still listed)
