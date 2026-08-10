@@ -113,9 +113,15 @@ def _map_account_type(acct: dict[str, Any]) -> str:
     return "other"
 
 
-def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
+def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], int]:
+    """Refresh linked accounts from /accounts/get.
+
+    Returns (accounts, balances_missing_current) where missing count is how many
+    Plaid accounts omitted balances.current (books/institution left unchanged).
+    """
     data = _post("/accounts/get", _body({"access_token": item.access_token}))
     out: list[Account] = []
+    missing_current = 0
     for a in data.get("accounts") or []:
         plaid_aid = a["account_id"]
         existing = (
@@ -137,6 +143,8 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
                 # Plaid balances are bank truth for linked accounts (snapshot, not txn deltas)
                 existing.current_balance = bal
                 existing.institution_balance = bal
+            else:
+                missing_current += 1
             if kind == "credit":
                 if limit is not None:
                     existing.credit_limit = Decimal(str(limit))
@@ -153,6 +161,8 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
             out.append(existing)
             continue
 
+        if current is None:
+            missing_current += 1
         bal0 = Decimal(str(current or 0))
         avail0: Decimal | None = None
         if kind == "credit":
@@ -178,7 +188,7 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
         session.add(row)
         out.append(row)
     session.flush()
-    return out
+    return out, missing_current
 
 
 def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: bool = True) -> dict[str, Any]:
@@ -188,7 +198,8 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
     has_more = True
     # Always refresh balances from bank (Safe to spend honesty for BYOK path)
     acct_map: dict[str, Account] = {}
-    for a in _sync_accounts(session, item):
+    synced, balances_missing_current = _sync_accounts(session, item)
+    for a in synced:
         if a.plaid_account_id:
             acct_map[a.plaid_account_id] = a
     if not acct_map:
@@ -260,6 +271,8 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
         "categorized": categorized,
         "institution": item.institution_name,
         "last_synced_at": item.last_synced_at.isoformat() if item.last_synced_at else None,
+        # Honesty: bank omitted balances.current — books left unchanged (not zeroed)
+        "balances_missing_current": balances_missing_current,
     }
 
 

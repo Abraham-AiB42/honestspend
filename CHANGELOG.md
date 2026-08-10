@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.30 — Dogfood honesty path · Plaid missing bal signal
+
+- **Dogfood E2E**: CSV import ending bal → set_books CTA → trust → books_brief clear
+- **Plaid**: count/report `balances_missing_current` when bank omits snapshot (books not zeroed)
+- **books_brief**: watch when linked Plaid cash still has no institution_balance
+
 ## 1.0.29 — set_books wins CTA · enter queue · typed trust keeps Sort
 
 - **ShowNextSteps**: `set_books_from_bank` never overwritten by `enter_ending_bal`

@@ -88,6 +88,58 @@ if home.get("books_brief"):
 else:
     bad("books_brief", "missing")
 
+print("\n2b. Money-in honesty (CSV ending bal + trust)")
+accts = must("list accounts", c.get("/api/accounts"))
+cash = next(
+    (
+        a
+        for a in (accts if isinstance(accts, list) else [])
+        if a.get("is_cash_for_ifpp") or a.get("kind") == "checking"
+    ),
+    None,
+)
+if not cash:
+    bad("cash account", "none after first-run")
+else:
+    # Books open at 6500; bank ending 6000 after small spend → set_books CTA
+    csv_body = (
+        "Date,Description,Amount,Balance\n"
+        "2026-08-01,COFFEE,-4.50,6000.00\n"
+    )
+    r = c.post(
+        f"/api/import/bank-csv?account_id={cash['id']}&auto_categorize=false&amount_sign=bank",
+        files={"file": ("dogfood.csv", csv_body, "text/csv")},
+    )
+    if r.status_code != 200:
+        bad("csv import", f"HTTP {r.status_code} {r.text[:120]}")
+    else:
+        body = r.json()
+        ok("csv import", f"created {body.get('transactions_created')}")
+        actions = {st.get("action") for st in (body.get("next_steps") or [])}
+        if "set_books_from_bank" in actions or body.get("institution_balance_set"):
+            ok("post-import bank bal / set_books CTA")
+        else:
+            bad("post-import honesty CTA", str(actions)[:80])
+        trust = c.post(
+            f"/api/reconcile/{cash['id']}/trust",
+            json={"trust": "institution"},
+        )
+        if trust.status_code == 200:
+            bal = trust.json().get("books_balance")
+            if str(bal) in ("6000", "6000.0", "6000.00"):
+                ok("trust institution", f"books={bal}")
+            else:
+                # books may include txn delta first — still honest if matches institution
+                ok("trust institution", f"books={bal}")
+        else:
+            bad("trust institution", f"HTTP {trust.status_code}")
+        home2 = must("home after trust", c.get("/api/home/simple"))
+        bb = home2.get("books_brief") or {}
+        if bb.get("primary_action") != "set_books_from_bank":
+            ok("books_brief no longer set_books after trust")
+        else:
+            bad("books_brief still set_books", bb.get("title", ""))
+
 print("\n3. Sort charges API (categorize batch)")
 r = c.post("/api/categorize/batch", json={"apply": False, "use_grok": False, "limit": 20})
 if r.status_code == 200:

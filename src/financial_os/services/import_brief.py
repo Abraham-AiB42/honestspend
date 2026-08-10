@@ -89,6 +89,14 @@ def build_import_brief(
     has_cash = any(
         a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp for a in accounts
     )
+    # Linked Plaid cash with no bank ending bal yet (sync never got balances.current)
+    plaid_cash_missing_bal = sum(
+        1
+        for a in accounts
+        if (a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp)
+        and a.plaid_account_id
+        and a.institution_balance is None
+    )
     drift_rows: list[dict[str, Any]] = []
     for a in accounts:
         if not (a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp):
@@ -158,6 +166,20 @@ def build_import_brief(
         reason = "A linked bank has not synced in 3+ days. Sync or re-link."
         primary_action = "plaid"
         button = "Open banks"
+    elif plaid_cash_missing_bal > 0:
+        # Linked cash never got balances.current — Safe to spend may be books-only
+        attention = "watch"
+        title = (
+            f"{plaid_cash_missing_bal} linked cash account(s) need bank bal"
+            if plaid_cash_missing_bal > 1
+            else "Linked cash needs bank bal"
+        )
+        reason = (
+            "Plaid did not return a current balance for linked cash — sync again "
+            "or import CSV/OFX so Safe to spend has bank truth."
+        )
+        primary_action = "plaid"
+        button = "Open banks"
     elif recent_count > 0 and recent_uncat == 0:
         attention = "clear"
         title = "Books look current"
@@ -196,6 +218,7 @@ def build_import_brief(
         "plaid_linked": linked,
         "plaid_needs_reauth": needs_reauth,
         "plaid_stale": stale,
+        "plaid_cash_missing_bank_bal": plaid_cash_missing_bal,
         "has_cash": has_cash,
         "drift_count": drift_count,
         "drift_accounts": drift_rows[:5],

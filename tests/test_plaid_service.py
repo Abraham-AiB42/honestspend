@@ -56,8 +56,9 @@ def test_sync_accounts_sets_institution_and_books(tmp_path: Path, monkeypatch):
     }
 
     with patch.object(plaid_service, "_post", return_value=accounts_payload):
-        out = plaid_service._sync_accounts(s, item)
+        out, missing = plaid_service._sync_accounts(s, item)
 
+    assert missing == 0
     assert len(out) == 1
     acct = out[0]
     assert acct.plaid_account_id == "plaid-chk-1"
@@ -89,14 +90,57 @@ def test_sync_accounts_credit_available_fallback_on_create(tmp_path: Path, monke
     }
 
     with patch.object(plaid_service, "_post", return_value=accounts_payload):
-        out = plaid_service._sync_accounts(s, item)
+        out, missing = plaid_service._sync_accounts(s, item)
 
+    assert missing == 0
     acct = out[0]
     assert acct.kind == "credit"
     assert acct.current_balance == Decimal("200.0")
     assert acct.institution_balance == Decimal("200.0")
     assert acct.credit_limit == Decimal("1000.0")
     assert acct.available_credit == Decimal("800.0")
+    s.close()
+
+
+def test_sync_accounts_missing_current_counted(tmp_path: Path, monkeypatch):
+    """Existing linked account with no balances.current leaves books unchanged."""
+    from financial_os.config import settings
+
+    monkeypatch.setattr(settings, "plaid_client_id", "cid")
+    monkeypatch.setattr(settings, "plaid_secret", "sec")
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    item = _item(s, personal.id)
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Linked",
+        current_balance=Decimal("900"),
+        institution_balance=Decimal("900"),
+        is_cash_for_ifpp=True,
+        plaid_item_pk=item.id,
+        plaid_account_id="plaid-chk-miss",
+    )
+    s.add(acct)
+    s.flush()
+
+    accounts_payload = {
+        "accounts": [
+            {
+                "account_id": "plaid-chk-miss",
+                "name": "Checking",
+                "type": "depository",
+                "subtype": "checking",
+                "balances": {},  # no current
+            }
+        ]
+    }
+    with patch.object(plaid_service, "_post", return_value=accounts_payload):
+        out, missing = plaid_service._sync_accounts(s, item)
+    assert missing == 1
+    s.refresh(acct)
+    assert acct.current_balance == Decimal("900")
+    assert acct.institution_balance == Decimal("900")
     s.close()
 
 
