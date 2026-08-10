@@ -41,6 +41,16 @@ Payroll, e-file tax filing, or replacing a bank’s own website.
 - Optional BYOK bank link (your Plaid keys)  
 - Open-rarely Home: do this next, then close  
 
+## Pricing (Partner Center)
+
+| | |
+|--|--|
+| **List** | $49.99 USD one-time |
+| **Pre-launch promo** | 50% off through **2026-10-21** (~$24.99) |
+| **After** | Full list price |
+
+No subscription. Optional BYOK services (Plaid / AI) billed by those vendors, not us.
+
 ## What’s new
 
 Point at CHANGELOG for the version you submit (e.g. 1.0.32).

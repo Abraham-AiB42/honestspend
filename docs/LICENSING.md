@@ -1,7 +1,8 @@
 # HonestSpend licensing (buy once, all clients)
 
 **Status:** design + local client stub (v1.0.32).  
-**Price intent:** **$49.99 USD one-time** (lifetime personal / household).  
+**List price:** **$49.99 USD one-time** (lifetime personal / household).  
+**Pre-launch promo (Partner Center):** **50% off** list until **2026-10-21** (ends end of day in store markets as configured).  
 **Product model:** source stays open; **official store builds** are the paid commercial product.
 
 ---
@@ -141,8 +142,15 @@ Thin Cloudflare Worker + KV/D1:
 
 ## Pricing note
 
-**$49.99 one-time** is the intended list price for lifetime personal.  
-Promo / regional / family SKUs can adjust without changing the license plan id (`lifetime_personal`).
+**$49.99 one-time** is the list price for lifetime personal (`price_usd` / plan `lifetime_personal`).  
+
+| Window | Customer pays (USD, approximate) |
+|--------|----------------------------------|
+| Through **2026-10-21** | **~$24.99** (50% pre-launch promo in Partner Center) |
+| After promo ends | **$49.99** list |
+
+Promo is configured in **Microsoft Store pricing**, not in the license key format.  
+Regional / family SKUs can adjust later without changing plan id `lifetime_personal`.
 
 ---
 
