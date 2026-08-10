@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.28 — OFX/PDF typed bal trusts books · multi enter CTA UX
+
+- **OFX/PDF**: typed ending bal sets bank bal **and** trusts → Safe to spend (parity with Save+set CTA)
+- Skip stale `enter_ending_bal` after typed trust; Home CTA instead
+- **ShowNextSteps**: select account for set_books / enter_ending_bal; multi-account lists remaining bals
+- Set books path uses shared parse (fail loud on bad typed bal)
+
 ## 1.0.27 — WinUI ending-bal hygiene · chrono same-day CSV · multi enter_bal
 
 - **WinUI**: `TryParseBankAmount` on CSV import; fail loud if box non-empty but bad

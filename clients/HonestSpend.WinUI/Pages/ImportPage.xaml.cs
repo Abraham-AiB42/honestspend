@@ -324,14 +324,16 @@ public sealed partial class ImportPage : Page
     }
 
     /// <summary>
-    /// After OFX/PDF import: apply typed ending bal when the file did not set bank bal.
+    /// After OFX/PDF import: apply typed ending bal when the file did not set bank bal,
+    /// then trust bank → Safe to spend (same as “Save ending bal + set Safe to spend”).
+    /// Returns true when bank was trusted from typed bal (skip stale enter_ending_bal CTA).
     /// </summary>
-    private async Task ApplyTypedEndingBalIfNeededAsync(
+    private async Task<bool> ApplyTypedEndingBalIfNeededAsync(
         LedgerApiClient api, int accountId, JsonElement res, List<string> lines)
     {
         var typed = ParseOptionalEndingBalanceOrThrow();
         if (typed is null)
-            return;
+            return false;
         var fileSetInst =
             (res.TryGetProperty("institution_balance_set", out var ibs)
              && ibs.ValueKind == JsonValueKind.True)
@@ -341,10 +343,26 @@ public sealed partial class ImportPage : Page
         if (fileSetInst)
         {
             lines.Add("Typed ending bal ignored — file already set bank ending balance.");
-            return;
+            return false;
         }
         await api.SetInstitutionBalanceAsync(accountId, typed.Value, markReconciled: false);
-        lines.Add($"Bank ending bal ${typed.Value:0.00} (typed) · set for Reconcile");
+        var trust = await api.ReconcileTrustAsync(accountId, "institution");
+        lines.Add(
+            $"Bank ending bal ${typed.Value:0.00} (typed) · Safe to spend updated · books " +
+            $"${JsonUi.Str(trust, "books_balance")} (trusted bank).");
+        return true;
+    }
+
+    private void SelectAccountById(int accountId)
+    {
+        for (var i = 0; i < AccountBox.Items.Count; i++)
+        {
+            if (AccountBox.Items[i] is ComboBoxItem { Tag: int id } && id == accountId)
+            {
+                AccountBox.SelectedIndex = i;
+                return;
+            }
+        }
     }
 
     private async void PickXlsx_Click(object sender, RoutedEventArgs e)
@@ -487,19 +505,24 @@ public sealed partial class ImportPage : Page
         _requireEndingBal = false;
     }
 
-    private void ShowNextSteps(JsonElement res)
+    private void ShowNextSteps(JsonElement res, bool skipEnterEndingBal = false)
     {
         HideNextSteps();
         if (!res.TryGetProperty("next_steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
             return;
         var show = false;
+        var enterLabels = new List<string>();
+        var enterFirst = true;
         foreach (var st in steps.EnumerateArray())
         {
             var action = JsonUi.Str(st, "action");
             if (action == "set_books_from_bank")
             {
                 if (int.TryParse(JsonUi.Str(st, "account_id"), out var aid))
+                {
                     _setBooksAccountId = aid;
+                    SelectAccountById(aid);
+                }
                 else if (AccountBox.SelectedItem is ComboBoxItem { Tag: int selected })
                     _setBooksAccountId = selected;
                 SetBooksFromBankBtn.Content = string.IsNullOrEmpty(JsonUi.Str(st, "label"))
@@ -513,15 +536,23 @@ public sealed partial class ImportPage : Page
                 GoSortBtn.Visibility = Visibility.Visible;
                 show = true;
             }
-            else if (action == "enter_ending_bal")
+            else if (action == "enter_ending_bal" && !skipEnterEndingBal)
             {
-                if (int.TryParse(JsonUi.Str(st, "account_id"), out var eaid))
-                    _setBooksAccountId = eaid;
-                _requireEndingBal = true;
-                EndingBalanceBox.Focus(FocusState.Programmatic);
-                SetBooksFromBankBtn.Content = "Save ending bal + set Safe to spend";
-                SetBooksFromBankBtn.Visibility = Visibility.Visible;
-                show = true;
+                enterLabels.Add(JsonUi.Str(st, "label", "Enter bank ending balance"));
+                if (enterFirst)
+                {
+                    enterFirst = false;
+                    if (int.TryParse(JsonUi.Str(st, "account_id"), out var eaid))
+                    {
+                        _setBooksAccountId = eaid;
+                        SelectAccountById(eaid);
+                    }
+                    _requireEndingBal = true;
+                    EndingBalanceBox.Focus(FocusState.Programmatic);
+                    SetBooksFromBankBtn.Content = "Save ending bal + set Safe to spend";
+                    SetBooksFromBankBtn.Visibility = Visibility.Visible;
+                    show = true;
+                }
             }
             else if (action is "home" or "hold" or "bills" or "reconcile")
             {
@@ -532,6 +563,14 @@ public sealed partial class ImportPage : Page
                     GoHomeBtn.Content = "Home · match bal";
                 show = true;
             }
+        }
+        if (enterLabels.Count > 1)
+        {
+            // Multi-account bal-less: first is the active CTA; list the rest
+            ResultText.Text =
+                (ResultText.Text ?? "") +
+                "\nAlso need ending bal: " +
+                string.Join("; ", enterLabels.Skip(1));
         }
         NextStepsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -548,11 +587,8 @@ public sealed partial class ImportPage : Page
                 throw new InvalidOperationException("Pick the account that received the import.");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            // Bal-less import: require ending bal before trust (no failed API round-trip)
-            decimal? typedBal = null;
-            if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text)
-                && TryParseBankAmount(EndingBalanceBox.Text, out var parsedBal))
-                typedBal = parsedBal;
+            // Bal-less path: require ending bal; non-empty garbage fails loud
+            decimal? typedBal = ParseOptionalEndingBalanceOrThrow();
             if (_requireEndingBal && typedBal is null)
             {
                 EndingBalanceBox.Focus(FocusState.Programmatic);
@@ -650,10 +686,18 @@ public sealed partial class ImportPage : Page
                             ? " · set for Reconcile"
                             : ""));
                 }
-                await ApplyTypedEndingBalIfNeededAsync(api, accountId, ofxRes, lines);
-                AppendNextStepLines(lines, ofxRes);
+                var typedTrusted = await ApplyTypedEndingBalIfNeededAsync(api, accountId, ofxRes, lines);
+                if (!typedTrusted)
+                    AppendNextStepLines(lines, ofxRes);
                 ResultText.Text = string.Join("\n", lines);
-                ShowNextSteps(ofxRes);
+                if (typedTrusted)
+                {
+                    GoHomeBtn.Visibility = Visibility.Visible;
+                    GoHomeBtn.Content = "Home";
+                    NextStepsPanel.Visibility = Visibility.Visible;
+                }
+                else
+                    ShowNextSteps(ofxRes);
                 return;
             }
             if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
@@ -745,10 +789,18 @@ public sealed partial class ImportPage : Page
                 if (!string.IsNullOrEmpty(joined))
                     pdfLines.Add("Errors: " + joined);
             }
-            await ApplyTypedEndingBalIfNeededAsync(api, accountId, res, pdfLines);
-            AppendNextStepLines(pdfLines, res);
+            var typedTrusted = await ApplyTypedEndingBalIfNeededAsync(api, accountId, res, pdfLines);
+            if (!typedTrusted)
+                AppendNextStepLines(pdfLines, res);
             ResultText.Text = string.Join("\n", pdfLines);
-            ShowNextSteps(res);
+            if (typedTrusted)
+            {
+                GoHomeBtn.Visibility = Visibility.Visible;
+                GoHomeBtn.Content = "Home";
+                NextStepsPanel.Visibility = Visibility.Visible;
+            }
+            else
+                ShowNextSteps(res);
         }
         catch (Exception ex)
         {
