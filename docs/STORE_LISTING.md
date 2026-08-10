@@ -2,6 +2,9 @@
 
 Use this when filling Partner Center **Store listings**. Keep tone open-rarely, honest money, no jargon.
 
+**Ready-to-paste bundle:** [`store-assets/LISTING_COPY.txt`](../store-assets/LISTING_COPY.txt)  
+**Screenshots + logo:** [`store-assets/`](../store-assets/)
+
 ## Title
 
 **HonestSpend**

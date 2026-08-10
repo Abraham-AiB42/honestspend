@@ -1,0 +1,111 @@
+================================================================================
+HonestSpend — Microsoft Store listing copy (paste into Partner Center)
+================================================================================
+
+TITLE
+-----
+HonestSpend
+
+
+SHORT DESCRIPTION  (aim ≤200 characters)
+----------------------------------------
+Local-first money app: Safe to spend you can trust. Import bank CSV/OFX, match
+books to bank, sort charges, close the month. No bank passwords. One-time purchase.
+
+
+DESCRIPTION  (long — plain text for Store field)
+------------------------------------------------
+HonestSpend is a local-first money app for people who want one number they can
+trust—Safe to spend—without handing a cloud company their bank password.
+
+What you do (open rarely)
+1. Import a bank CSV, OFX/QFX, or PDF statement (or optional bank link with your own Plaid keys).
+2. When books don’t match the bank, one tap sets Safe to spend from the ending balance you trust.
+3. Sort a short list of charges so categories, fees, and reports stay clean.
+4. Close the month when the checklist is clear—then get back to life.
+
+Why it’s different
+• Honesty first: books ≠ bank is called out before busywork.
+• Your PC holds the ledger (default under your user profile; optional folder / OneDrive path you choose).
+• We never store bank website usernames or passwords. Download exports from your bank, then import.
+• Optional bring-your-own-key features: Plaid and AI categorize only with keys you supply.
+• Simple mode for daily use; Full books when you need ledgers, rules, and tax depth.
+
+Who it’s for
+Households and freelancers who want intentional cash control—not a social network for money.
+
+Who it’s not for
+Payroll, e-file tax filing, or replacing your bank’s own website.
+
+Price
+One-time purchase (lifetime personal). Pre-launch promotional pricing may apply in the Store.
+Source code is available for audit; official Store builds are the commercial product.
+
+
+FEATURE LIST  (use as bullets / features in Partner Center)
+-----------------------------------------------------------
+• Safe to spend you can trust
+• Books ≠ bank honesty after import
+• Import CSV, OFX/QFX, and PDF statements
+• Sort charges and fee checks
+• Month-close checklist
+• Local-first data on your PC
+• Optional BYOK bank link (your Plaid keys)
+• Simple day-to-day · Full books when needed
+
+
+KEYWORDS
+--------
+safe to spend, budget, personal finance, bank import, csv, ofx, local finance,
+reconcile, month close, cash flow, household budget
+
+
+CATEGORY
+--------
+Finance (Personal finance / Money management)
+
+
+PRIVACY POLICY URL
+------------------
+https://honestspend.net/privacy/
+
+
+SUPPORT
+-------
+https://github.com/Abraham-AiB42/honestspend/issues
+
+
+WEBSITE
+-------
+https://honestspend.net/
+
+
+AGE RATING NOTES
+----------------
+Financial information only. No social networking, no user-generated chat,
+no violence, no gambling mechanics.
+
+
+SCREENSHOTS  (upload from store-assets/screenshots/)
+----------------------------------------------------
+1. 01-home.png            — Safe to spend + Do this next
+2. 02-import.png          — CSV import + books ≠ bank next step
+3. 03-books-honesty.png   — After import honesty card
+4. 04-sort-charges.png    — Review queue / fee check
+5. 05-month-close.png     — Month-close checklist
+
+All shots use fictional demo household data. No real account numbers.
+
+
+LOGO / ICONS  (store-assets/logo/)
+---------------------------------
+• honestspend-mark.svg     — vector brand mark
+• honestspend-icon-source.jpg — generated icon concept
+• Use Partner Center square logo slots; also replace StoreLogo.png in the app
+  package assets when you ship a final icon set.
+
+
+CERTIFICATION NOTES  (runFullTrust)
+-----------------------------------
+See packaging/msix/Notes-for-certification.txt
+================================================================================

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="_shot-base.css" />
+  <title>Import</title>
+</head>
+<body>
+  <div class="desktop">
+    <div class="window">
+      <div class="titlebar"><span class="mark">H</span> HonestSpend</div>
+      <div class="body">
+        <aside class="nav">
+          <div class="nav-item">Home</div>
+          <div class="nav-item active">Import</div>
+          <div class="nav-item">Sort charges</div>
+        </aside>
+        <div class="main">
+          <h1>Import</h1>
+          <p class="muted" style="margin-bottom:12px;">Freeware path: download CSV from your bank (no passwords here). Plaid is optional BYOK.</p>
+          <div class="card">
+            <div class="label">Bank CSV (pick file)</div>
+            <p class="muted"><strong>Target account</strong> · Primary checking</p>
+            <p class="muted">File: Primary-checking-2026-07.csv</p>
+            <p class="muted">Ending balance entered: <strong style="color:#f0f4f8;">$4,287.50</strong></p>
+            <div class="btn-row">
+              <span class="btn">Import file</span>
+              <span class="btn ghost">Pick OFX/QFX…</span>
+              <span class="btn ghost">Pick PDF…</span>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:0;border-color:rgba(240,180,41,0.35);">
+            <div class="label">After import</div>
+            <div style="font-weight:650;margin-top:2px;">42 rows · 3 duplicates skipped</div>
+            <p class="muted">Books $4,120.00 ≠ bank $4,287.50. Set Safe to spend from bank ending balance?</p>
+            <div class="btn-row">
+              <span class="btn">Set Safe to spend from bank</span>
+              <span class="btn ghost">Sort charges</span>
+              <span class="btn ghost">Home</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="caption">HonestSpend · demo data · not a real account</div>
+</body>
+</html>
