@@ -1,0 +1,68 @@
+# HonestSpend Privacy Policy
+
+**Last updated:** 2026-08-10  
+**Product:** HonestSpend (local-first personal finance app)  
+**Publisher:** HonestSpend contributors
+
+This policy describes how HonestSpend handles information when you use the desktop app (including Microsoft Store and sideload builds).
+
+## Short version
+
+- Your money data stays **on your device** by default.
+- We do **not** operate a cloud ledger or bank password vault.
+- Optional features that talk to the internet use **keys you supply** (BYOK).
+
+## What we store locally
+
+On your PC (default folder `%USERPROFILE%\.financial-os`, or a path you choose in Settings):
+
+- Accounts, transactions, categories, and balances you enter or import  
+- App settings (API URL, data folder, optional backend path)  
+- Local backups you create  
+- Engine logs (for troubleshooting)  
+
+Uninstalling the Store package may not delete this data folder (by design so you can keep books across reinstalls). Delete the folder manually if you want a full wipe.
+
+## What we do **not** collect
+
+- Bank website usernames or passwords  
+- Your ledger data on our servers (there is no HonestSpend cloud ledger)  
+- Advertising identifiers for ad networks  
+
+## Optional internet features
+
+| Feature | Data sent | When |
+|---------|-----------|------|
+| **BYOK Plaid** | Your Plaid client id/secret and bank link tokens you authorize | Only if you enable bank link with **your** Plaid keys |
+| **BYOK Grok** | Transaction payee text for categorization suggestions | Only if you enable AI categorize with **your** xAI key |
+| **Microsoft Store** | Standard Store install/update diagnostics to Microsoft | If you install from the Store |
+
+The free path (CSV / OFX / PDF import) works **offline** after install.
+
+## Children
+
+HonestSpend is not directed at children under 13. Do not use the app to store a child’s data without appropriate parental control.
+
+## Your choices
+
+- Use **Import** only (no bank APIs)  
+- Turn off optional BYOK features  
+- Change **Data folder** (e.g. OneDrive) in Settings  
+- Export/delete data via backups and local file tools  
+- Uninstall the app  
+
+## Third parties
+
+- **Microsoft** — if you install from the Microsoft Store (their privacy terms apply to Store services).  
+- **Plaid / xAI** — only when you configure BYOK; subject to their policies.  
+
+## Contact
+
+Open an issue on the project repository:  
+https://github.com/Abraham-AiB42/honestspend  
+
+For Store listing, host a stable copy of this policy at a public URL (e.g. GitHub Pages or raw GitHub link) and paste that URL into Partner Center **Privacy policy URL**.
+
+## Changes
+
+We may update this policy; the “Last updated” date will change. Continued use after an update means you accept the revised policy for local freeware use; Store users may see listing updates when a new package is certified.

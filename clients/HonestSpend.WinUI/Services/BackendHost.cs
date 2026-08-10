@@ -26,6 +26,20 @@ public sealed class BackendHost : IDisposable
         if (await probe.HealthAsync(ct))
             return true;
 
+        // Store/MSIX: install engine from engine-portable.zip if needed
+        try
+        {
+            var eng = EngineBootstrap.EnsureEngineAvailable(out var msg);
+            if (eng is not null)
+                AppendLog("--- " + msg + " ---");
+            else if (!string.IsNullOrEmpty(msg))
+                AppendLog("--- engine bootstrap: " + msg + " ---");
+        }
+        catch (Exception ex)
+        {
+            AppendLog("--- engine bootstrap error: " + ex.Message + " ---");
+        }
+
         if (!TryStart())
             return false;
 
@@ -51,8 +65,9 @@ public sealed class BackendHost : IDisposable
             if (root is null)
             {
                 LastError =
-                    "Could not find HonestSpend engine. Place a repo clone, or an `engine\\` folder " +
-                    "next to the EXE (with .venv + src), or set Backend root in Settings.";
+                    "Could not find HonestSpend engine. Store builds need engine-portable.zip " +
+                    "(auto-installs to %LocalAppData%\\HonestSpend\\engine). Zip installs need " +
+                    "engine\\ next to the EXE. Or set Backend root in Settings.";
                 return false;
             }
 
@@ -153,6 +168,11 @@ public sealed class BackendHost : IDisposable
             Directory.Exists(AppConfig.BackendRoot) &&
             LooksLikeEngine(AppConfig.BackendRoot))
             return AppConfig.BackendRoot;
+
+        // Store install path (first-run extract of engine-portable.zip)
+        var localStore = EngineBootstrap.LocalEngineRoot;
+        if (LooksLikeEngine(localStore))
+            return localStore;
 
         var baseDir = new DirectoryInfo(AppContext.BaseDirectory);
 

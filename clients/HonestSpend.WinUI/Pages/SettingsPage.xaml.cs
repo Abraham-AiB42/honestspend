@@ -371,9 +371,51 @@ public sealed partial class SettingsPage : Page
             : "Logon: off";
     }
 
-    private async void StartEngine_Click(object sender, RoutedEventArgs e)
+    private async void InstallEngine_Click(object sender, RoutedEventArgs e)
     {
-        Save_Click(sender, e);
+        ErrorBar.IsOpen = false;
+        StatusText.Text = "Installing / repairing engine…";
+        try
+        {
+            var root = await Task.Run(() =>
+            {
+                // Force re-extract if zip present: delete incomplete LocalAppData install
+                var zip = EngineBootstrap.FindEnginePortableZip();
+                if (zip is not null && Directory.Exists(EngineBootstrap.LocalEngineRoot)
+                    && !BackendHost.LooksLikeEngine(EngineBootstrap.LocalEngineRoot))
+                {
+                    try { Directory.Delete(EngineBootstrap.LocalEngineRoot, true); } catch { /* ignore */ }
+                }
+                return EngineBootstrap.EnsureEngineAvailable(out var msg) is string eng
+                    ? (eng, msg)
+                    : (null as string, msg);
+            });
+            if (root.Item1 is null)
+            {
+                StatusText.Text = root.Item2 ?? "Engine install failed.";
+                ErrorBar.Message = StatusText.Text;
+                ErrorBar.IsOpen = true;
+                return;
+            }
+            BackendRootBox.Text = root.Item1;
+            AppConfig.BackendRoot = root.Item1;
+            StatusText.Text = root.Item2 + " · starting…";
+            await StartEngine_Click_Core();
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = ex.Message;
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void StartEngine_Click(object sender, RoutedEventArgs e)
+        => await StartEngine_Click_Core();
+
+    private async Task StartEngine_Click_Core()
+    {
+        Save_Click(this, new RoutedEventArgs());
         // Force new process so FOS_DATA_DIR is picked up
         try
         {

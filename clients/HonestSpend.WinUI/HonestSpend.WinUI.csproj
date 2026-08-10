@@ -39,6 +39,11 @@
     <Content Include="Assets\Wide310x150Logo.scale-200.png" />
   </ItemGroup>
 
+  <!-- Store/MSIX: first-run extracts to %LocalAppData%\HonestSpend\engine (see EngineBootstrap) -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)engine-portable.zip')">
+    <Content Include="engine-portable.zip" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>

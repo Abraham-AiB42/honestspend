@@ -16,10 +16,13 @@
                 Text="HonestSpend runs a local money engine. The app usually starts it for you — tap Start if Home says offline." />
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="Start / ping engine" Click="StartEngine_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="Install / repair engine" Click="InstallEngine_Click" />
                 <Button Content="Start tray now" Click="StartTray_Click" />
                 <Button Content="Stop tray" Click="StopTray_Click" />
                 <Button Content="Show window" Click="ShowWindow_Click" />
             </StackPanel>
+            <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                Text="Store installs extract the money engine to %LocalAppData%\HonestSpend\engine on first start (or use Install / repair)." />
             <TextBlock x:Name="EngineLogText" Opacity="0.6" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Startup shortcuts" />

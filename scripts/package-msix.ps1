@@ -81,32 +81,27 @@ else {
 }
 
 if (-not $SkipBuild) {
-    # Full venv in MSIX is large; default is UI-only + external engine (docs\MSIX.md).
-    if ($IncludeEngine) {
-        Write-Host "Staging engine into package content (large)..." -ForegroundColor Cyan
-        $engineStage = Join-Path $Root "clients\HonestSpend.WinUI\engine"
-        if (Test-Path $engineStage) { Remove-Item $engineStage -Recurse -Force }
-        New-Item -ItemType Directory -Force -Path $engineStage | Out-Null
-        $tmp = Join-Path $Root "dist\msix-engine-stage"
-        if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
-        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
-        $engineReadme = @(
-            "HonestSpend engine for MSIX.",
-            "",
-            "Preferred Store layout (v1 scaffold):",
-            "  - Install UI via MSIX",
-            "  - Engine under %LocalAppData%\HonestSpend\engine\ or sibling engine\",
-            "",
-            "See docs\MSIX.md for fat-package Content Include."
-        ) -join "`r`n"
-        Set-Content (Join-Path $engineStage "README-ENGINE.txt") $engineReadme -Encoding UTF8
-        & (Join-Path $Root "scripts\prepare-engine-bundle.ps1") -Target $tmp
-        if ($LASTEXITCODE -eq 0 -and (Test-Path (Join-Path $tmp "engine"))) {
-            Copy-Item (Join-Path $tmp "engine\*") $engineStage -Recurse -Force
-            Write-Host "  Engine staged under clients\HonestSpend.WinUI\engine\" -ForegroundColor Green
+    # Engine portable zip: first-run extracts to %LocalAppData%\HonestSpend\engine
+    $projDir = Join-Path $Root "clients\HonestSpend.WinUI"
+    $zipDist = Join-Path $Root "dist\engine-portable.zip"
+    $zipInProj = Join-Path $projDir "engine-portable.zip"
+    $needEngine = $IncludeEngine -or -not (Test-Path $zipDist)
+    if ($IncludeEngine -or (Test-Path $zipDist) -or $true) {
+        if (-not (Test-Path $zipDist) -or $IncludeEngine) {
+            Write-Host "Preparing engine-portable.zip for Store first-run..." -ForegroundColor Cyan
+            $tmp = Join-Path $Root "dist\msix-engine-stage"
+            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+            # Dummy so prepare-engine-bundle accepts Target
+            Set-Content (Join-Path $tmp ".keep") "" -Encoding ASCII
+            & (Join-Path $Root "scripts\prepare-engine-bundle.ps1") -Target $tmp
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $zipDist)) {
+                Write-Host "  Engine zip not created - MSIX will be UI-only (Settings can set Backend root)." -ForegroundColor Yellow
+            }
         }
-        else {
-            Write-Host "  Engine prepare failed or skipped - packaging UI only." -ForegroundColor Yellow
+        if (Test-Path $zipDist) {
+            Copy-Item $zipDist $zipInProj -Force
+            Write-Host "  Packaged: engine-portable.zip (first-run extract)" -ForegroundColor Green
         }
     }
 

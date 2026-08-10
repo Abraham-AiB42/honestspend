@@ -1,0 +1,1 @@
+C:\Users\abrah\source\repos\financial-os\dist\msix\HonestSpend.WinUI_1.0.31.0_x64_Test\HonestSpend.WinUI_1.0.31.0_x64.msix

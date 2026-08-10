@@ -1,0 +1,76 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.ReconcilePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="900">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Reconcile" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Books vs bank. Set institution balance from statement/Plaid, then trust bank or books." />
+                </StackPanel>
+                <Button x:ConnectionId='14' Grid.Column="1" Content="Refresh"                       />
+            </Grid>
+            <TextBlock x:ConnectionId='2' x:Name="SummaryText" Opacity="0.85" TextWrapping="Wrap" />
+
+            <ListView x:ConnectionId='3' x:Name="AcctList" SelectionMode="None">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Margin="0,0,0,8" Padding="12"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1" CornerRadius="8">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                                    <TextBlock Opacity="0.75" Text="{Binding Subtitle}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="6">
+                                    <Button x:ConnectionId='11' Content="Trust bank" Tag="{Binding}"                         />
+                                    <Button x:ConnectionId='12' Content="Trust books" Tag="{Binding}"                          />
+                                    <Button x:ConnectionId='13' Content="Set bank bal…" Tag="{Binding}"                       />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Card payment matches" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Cash outflows that look like card payments — confirm as transfers so books stay clean." />
+                    <ItemsControl x:ConnectionId='6' x:Name="PayList" />
+                    <ComboBox x:ConnectionId='7' x:Name="PayMatchBox" Header="Suggested payment match" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a match" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:ConnectionId='9' Content="Confirm as transfer"                         
+                                Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                    <TextBlock x:ConnectionId='8' x:Name="PayMsg" Opacity="0.85" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:ConnectionId='4' x:Name="MsgText" Opacity="0.85" TextWrapping="Wrap" />
+            <InfoBar x:ConnectionId='5' x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
+

@@ -1,0 +1,238 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="720">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Home" />
+                    <TextBlock x:ConnectionId='78' x:Name="StatusText" Opacity="0.7" Text="Connecting…" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button x:ConnectionId='77' Content="Refresh"                       />
+                </StackPanel>
+            </Grid>
+
+            <!-- SIMPLE: Safe to spend + do this next -->
+            <StackPanel x:ConnectionId='2' x:Name="SimplePanel" Spacing="14">
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="16" Padding="20">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Safe to spend" />
+                        <TextBlock x:ConnectionId='72' x:Name="SafeText" FontSize="44" FontWeight="SemiBold" Text="—" />
+                        <TextBlock x:ConnectionId='73' x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />
+                        <TextBlock x:ConnectionId='74' x:Name="RiskLine" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='75' x:Name="PendingLine" Opacity="0.75" TextWrapping="Wrap" Foreground="Orange" />
+                        <TextBlock x:ConnectionId='76' x:Name="WhoLine" Opacity="0.6" FontSize="12" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="16" Padding="20">
+                    <StackPanel Spacing="10">
+                        <TextBlock Opacity="0.7" Text="Do this next" />
+                        <TextBlock x:ConnectionId='67' x:Name="NextTitle" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" Text="—" />
+                        <TextBlock x:ConnectionId='68' x:Name="NextReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='69' x:Name="NextDisclaimer" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                        <Button x:ConnectionId='70' x:Name="NextBtn" Content="Continue" Style="{StaticResource AccentButtonStyle}"
+                                                     HorizontalAlignment="Left" />
+                        <TextBlock Opacity="0.7" Text="Other options" Margin="0,8,0,0" />
+                        <ItemsControl x:ConnectionId='71' x:Name="AltList" />
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Up next" />
+                        <ItemsControl x:ConnectionId='66' x:Name="AlertList" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='12' x:Name="BooksCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="After import / bank" />
+                        <TextBlock x:ConnectionId='61' x:Name="BooksTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='62' x:Name="BooksReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <ItemsControl x:ConnectionId='63' x:Name="BooksSamples" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:ConnectionId='64' x:Name="BooksBtn" Content="Continue" HorizontalAlignment="Left"
+                                                        Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:ConnectionId='65' x:Name="BooksSecondaryBtn" Content="Sort charges" HorizontalAlignment="Left"
+                                                                 Visibility="Collapsed" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='13' x:Name="FeeCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Fee check" />
+                        <TextBlock x:ConnectionId='54' x:Name="FeeTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='55' x:Name="FeeReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='56' x:Name="FeeItemLabel" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:ConnectionId='58' Content="Yes, a fee"                          Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:ConnectionId='59' Content="Not a fee"                          />
+                            <Button x:ConnectionId='60' Content="Skip"                       />
+                        </StackPanel>
+                        <TextBlock x:ConnectionId='57' x:Name="FeeMsg" Opacity="0.8" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='14' x:Name="RecurringCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Possible bills" />
+                        <TextBlock x:ConnectionId='47' x:Name="RecurringTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='48' x:Name="RecurringReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='49' x:Name="RecurringItemLabel" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:ConnectionId='51' Content="Add this bill"                              
+                                    Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:ConnectionId='52' Content="Skip"                             />
+                            <Button x:ConnectionId='53' Content="Add manually"                         />
+                        </StackPanel>
+                        <TextBlock x:ConnectionId='50' x:Name="RecurringMsg" Opacity="0.8" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='15' x:Name="PromoCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="0% promo" />
+                        <TextBlock x:ConnectionId='43' x:Name="PromoTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='44' x:Name="PromoReason" Opacity="0.85" TextWrapping="Wrap" />
+                        <Button x:ConnectionId='45' x:Name="PromoBtn" Content="Create set-aside" HorizontalAlignment="Left"
+                                                    Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock x:ConnectionId='46' x:Name="PromoMsg" Opacity="0.85" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='16' x:Name="MonthCloseCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Close the month" />
+                        <TextBlock x:ConnectionId='38' x:Name="MonthCloseSubtitle" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='39' x:Name="MonthCloseProgress" FontWeight="SemiBold" />
+                        <ItemsControl x:ConnectionId='40' x:Name="MonthCloseList" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:ConnectionId='41' x:Name="MonthCloseBtn" Content="Do next close step" HorizontalAlignment="Left"
+                                                             Style="{StaticResource AccentButtonStyle}" />
+                            <Button x:ConnectionId='42' x:Name="MarkMonthClosedBtn" Content="Mark month closed" HorizontalAlignment="Left"
+                                                                  Visibility="Collapsed"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='17' x:Name="TaxYearCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Tax year prep" />
+                        <TextBlock x:ConnectionId='33' x:Name="TaxYearTitle" FontWeight="SemiBold" FontSize="18" />
+                        <TextBlock x:ConnectionId='34' x:Name="TaxYearSubtitle" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='35' x:Name="TaxYearProgress" FontWeight="SemiBold" />
+                        <ItemsControl x:ConnectionId='36' x:Name="TaxYearList" />
+                        <Button x:ConnectionId='37' x:Name="TaxYearBtn" Content="Do next tax step" HorizontalAlignment="Left"
+                                                      Style="{StaticResource AccentButtonStyle}" />
+                        <TextBlock Opacity="0.6" FontSize="12" TextWrapping="Wrap"
+                            Text="Prep for TurboTax/CPA — not e-file. Educational only." />
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='18' x:Name="RitualCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="3-minute check" />
+                        <TextBlock x:ConnectionId='29' x:Name="RitualSubtitle" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:ConnectionId='30' x:Name="RitualProgress" FontWeight="SemiBold" />
+                        <ItemsControl x:ConnectionId='31' x:Name="RitualList" />
+                        <Button x:ConnectionId='32' x:Name="RitualNextBtn" Content="Do next open item" HorizontalAlignment="Left"
+                                                         Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:ConnectionId='19' x:Name="WealthCard" Visibility="Collapsed"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Grow wealth (basics only)" />
+                        <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                            Text="After you're safe — educational, not investment advice." />
+                        <ItemsControl x:ConnectionId='28' x:Name="WealthList" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:ConnectionId='25' Content="Add something"                   Style="{StaticResource AccentButtonStyle}" />
+                    <Button x:ConnectionId='26' Content="Can I buy?"                   />
+                    <Button x:ConnectionId='27' Content="Done for now"                    />
+                </StackPanel>
+                <TextBlock x:ConnectionId='20' x:Name="DoneText" Opacity="0.75" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:ConnectionId='23' Content="Rescue options"                      />
+                    <Button x:ConnectionId='24' Content="Fiscal brief"                     />
+                </StackPanel>
+                <TextBlock x:ConnectionId='21' x:Name="BriefText" TextWrapping="Wrap" Opacity="0.9" IsTextSelectionEnabled="True" />
+                <ItemsControl x:ConnectionId='22' x:Name="RescueList" />
+            </StackPanel>
+
+            <InfoBar x:ConnectionId='3' x:Name="ErrorBar" IsOpen="False" Severity="Error" IsClosable="True" />
+            <InfoBar x:ConnectionId='4' x:Name="SetupBar" IsOpen="False" Severity="Informational" IsClosable="True"
+                     Title="Almost there" Message="Add checking so we can show Safe to spend.">
+                <InfoBar.ActionButton>
+                    <Button x:ConnectionId='11' Content="2-minute setup"                     />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar x:ConnectionId='5' x:Name="EmptyBillBar" IsOpen="False" Severity="Informational" IsClosable="True"
+                     Title="Tip" Message="Add rent or a paycheck so Safe to spend knows what’s coming.">
+                <InfoBar.ActionButton>
+                    <Button x:ConnectionId='10' Content="Add bill"                         />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar x:ConnectionId='6' x:Name="BankTipBar" IsOpen="False" Severity="Informational" IsClosable="True"
+                     Title="Less typing later" Message="Link a bank or drop a CSV when you’re ready — optional.">
+                <InfoBar.ActionButton>
+                    <Button x:ConnectionId='9' Content="Link bank"                       />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar x:ConnectionId='7' x:Name="EngineBar" IsOpen="False" Severity="Warning" IsClosable="True"
+                     Title="Engine offline" Message="Start the local money engine (one click).">
+                <InfoBar.ActionButton>
+                    <Button x:ConnectionId='8' Content="Start engine"                           />
+                </InfoBar.ActionButton>
+            </InfoBar>
+        </StackPanel>
+    </ScrollViewer>
+</Page>
+

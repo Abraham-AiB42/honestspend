@@ -89,7 +89,11 @@ Engine is auto-detected from `.\engine\`. If offline: Settings → **Start engin
 # → dist\msix\*.msix
 ```
 
-See **[docs/MSIX.md](./MSIX.md)** for identity, `runFullTrust` certification notes, and engine packaging strategy.
+See **[docs/MSIX.md](./MSIX.md)** for identity, `runFullTrust` certification notes, and engine packaging strategy.  
+Partner Center: **[STORE_CHECKLIST.md](./STORE_CHECKLIST.md)** · listing **[STORE_LISTING.md](./STORE_LISTING.md)** · **[PRIVACY.md](./PRIVACY.md)**.
+
+On first launch, Store builds extract **engine-portable.zip** to  
+`%LocalAppData%\HonestSpend\engine` (or Settings → **Install / repair engine**).
 
 GitHub zip/Inno (Option B) remains the power-user / freeware sideload path.
 

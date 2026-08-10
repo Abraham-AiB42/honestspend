@@ -52,42 +52,34 @@ Output: `dist\msix\` (look for `.msix`).
 
 ## Partner Center checklist
 
+Full interactive checklist: **[STORE_CHECKLIST.md](./STORE_CHECKLIST.md)**  
+Listing copy: **[STORE_LISTING.md](./STORE_LISTING.md)** · Privacy: **[PRIVACY.md](./PRIVACY.md)**
+
 1. **New product → package type: MSIX** (sticky — choose carefully).  
 2. **Reserve name** e.g. HonestSpend.  
 3. **Product identity** → copy **Package/Identity Name** and **Publisher** into `Package.appxmanifest`.  
 4. Upload package from `dist\msix` or VS.  
 5. **Submission options → Restricted capabilities**: paste notes from  
    `packaging/msix/Notes-for-certification.txt` for `runFullTrust`.  
-6. Privacy policy URL if you collect personal data (local-only defaults still often need a policy page).  
-7. Screenshots + listing (Simple Home, Import, Safe to spend).  
+6. Privacy policy URL → host PRIVACY.md publicly.  
+7. Screenshots + listing from STORE_LISTING.md.  
 
-## Engine strategy (hybrid app)
+## Engine strategy (hybrid app) — implemented
 
-The UI **must** spawn a local Python engine (`BackendHost`). Options:
+The UI spawns a local Python engine (`BackendHost` + `EngineBootstrap`).
 
-### A — Recommended for first Store submission (smaller package)
+### Default Store path (automatic)
 
-1. MSIX contains **WinUI only** (self-contained).  
-2. On first run, extract or download **engine** under  
-   `%LocalAppData%\HonestSpend\engine\` (or document “Settings → Backend root”).  
-3. `BackendHost` already searches for `engine\` next to the EXE and configurable roots —  
-   extend paths later if package install path differs.
+1. `package-msix.ps1` builds **engine-portable.zip** (via `prepare-engine-bundle.ps1`) and includes it as package content.  
+2. On first `EnsureRunning`, **EngineBootstrap** extracts the zip to  
+   **`%LocalAppData%\HonestSpend\engine\`**.  
+3. Settings → **Install / repair engine** re-runs extract if needed.  
 
-### B — Fat package (`-IncludeEngine`)
+Still requires **runFullTrust** to execute `python.exe` from that folder.
 
-1. `prepare-engine-bundle.ps1` stages `engine\` into the project.  
-2. MSIX Content includes `engine\**` (wire `Content` Include when ready — venv is large).  
-3. Certification size + review time grow; still needs `runFullTrust` to execute Python.
+### Unpackaged GitHub zip
 
-Scaffold implements **A** by default; **B** is opt-in and incomplete until you add:
-
-```xml
-<!-- Example — only after staging engine\ -->
-<ItemGroup>
-  <Content Include="engine\**\*" CopyToOutputDirectory="PreserveNewest"
-           Exclude="engine\**\__pycache__\**;engine\**\*.pyc" />
-</ItemGroup>
-```
+`package-release.ps1` keeps `engine\` next to the EXE (and also writes `engine-portable.zip`).
 
 ## Identity placeholders
 

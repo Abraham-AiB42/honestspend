@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.31.2 — Store readiness: engine extract + listing docs
+
+- **EngineBootstrap**: first-run extract of `engine-portable.zip` → `%LocalAppData%\HonestSpend\engine`
+- Settings: **Install / repair engine**
+- `prepare-engine-bundle.ps1` writes `dist/engine-portable.zip`; MSIX pack includes it
+- Docs: PRIVACY, STORE_LISTING, STORE_CHECKLIST; `scripts/sync-version.ps1`
+
 ## 1.0.31.1 — MSIX packaging scaffold (Store track)
 
 - `Package.appxmanifest` full-trust Desktop Bridge identity + certification notes

@@ -1,0 +1,1 @@
+C:\Users\abrah\source\repos\financial-os\clients\HonestSpend.WinUI\HonestSpend.WinUI.csproj;x64
