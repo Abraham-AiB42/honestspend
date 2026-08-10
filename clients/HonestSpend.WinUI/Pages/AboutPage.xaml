@@ -14,8 +14,10 @@
             <TextBlock x:Name="MaturityText" Opacity="0.75" TextWrapping="Wrap"
                 Text="Local multi-entity liquidity OS." />
             <TextBlock TextWrapping="Wrap" FontSize="16">
-                Open-source freeware — not a bureau, not e-file, not payroll, not a loan marketplace.
+                Open-source code · official store builds planned as a one-time commercial license
+                (~$49.99) that unlocks all clients. Not a bureau, not e-file, not payroll, not a loan marketplace.
             </TextBlock>
+            <HyperlinkButton Content="Activate license" Click="GoLicense_Click" />
             <TextBlock Opacity="0.8" TextWrapping="Wrap">
                 • Never bounce checking&#x0a;
                 • Prefer interest-free card float when it's safe&#x0a;

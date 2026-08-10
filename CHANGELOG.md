@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.32 — Commercial license stub (buy once, all clients)
+
+- **Design:** `docs/LICENSING.md` — $49.99 lifetime personal, cross-store entitlement via publisher license
+- **Engine:** `license_service` + `GET/POST /api/license*` (local `license.json`, 90-day grace, OSS default unlocked)
+- **WinUI:** **Activate license** page; About links status + commercial note
+- **Config:** `FOS_LICENSE_ENFORCE`, `FOS_LICENSE_SERVER_URL`, `FOS_LICENSE_GRACE_DAYS`, `FOS_LICENSE_ALLOW_DEV_KEYS`
+- Dev keys `HS-DEV-LIFETIME` / `HS-TEST-LIFETIME` for local testing when enforce is off
+- CI/CD site + Store submit workflows remain separate (`docs/CI_CD.md`)
+
 ## 1.0.31.2 — Store readiness: engine extract + listing docs
 
 - **EngineBootstrap**: first-run extract of `engine-portable.zip` → `%LocalAppData%\HonestSpend\engine`

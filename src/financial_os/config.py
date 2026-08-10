@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     plaid_secret: str | None = None
     plaid_env: str = "sandbox"  # sandbox | development | production
 
+    # Commercial license (see docs/LICENSING.md). Default: OSS unlocked.
+    license_enforce: bool = False
+    license_grace_days: int = 90
+    license_server_url: str | None = None
+    license_allow_dev_keys: bool = False  # set true in CI; enforce=false also allows dev keys
+
     @property
     def plaid_enabled(self) -> bool:
         return bool(self.plaid_client_id and self.plaid_secret)

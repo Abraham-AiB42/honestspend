@@ -126,7 +126,18 @@ version bump + tag vX.Y.Z → release.yml → GitHub Release (zip)
 
 ---
 
-## 4. Security notes
+## 4. Licensing (commercial builds)
+
+See **[LICENSING.md](./LICENSING.md)**. For Store-signed builds, set in the package/engine environment:
+
+```
+FOS_LICENSE_ENFORCE=1
+# FOS_LICENSE_SERVER_URL=https://license.honestspend.net   # when Worker ships
+```
+
+OSS/default CI and GitHub zip: leave enforce off so source builds stay usable.
+
+## 5. Security notes
 
 - Never commit API tokens or client secrets.
 - Rotate any token that was pasted into chat or logs.

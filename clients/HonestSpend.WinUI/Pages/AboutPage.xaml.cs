@@ -1,5 +1,6 @@
 using HonestSpend_WinUI.Helpers;
 using HonestSpend_WinUI.Services;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -10,6 +11,12 @@ public sealed partial class AboutPage : Page
     public AboutPage()
     {
         InitializeComponent();
+    }
+
+    private void GoLicense_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("license");
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -32,9 +39,27 @@ public sealed partial class AboutPage : Page
                 $"Data: {JsonUi.Str(info, "data_dir")}\nDB: {JsonUi.Str(info, "db_path")} ({JsonUi.Str(info, "db_size_mb")} MB)\n" +
                 $"Grok {(info.TryGetProperty("grok_enabled", out var g) && g.GetBoolean() ? "enabled" : "off")} · " +
                 $"Plaid {(info.TryGetProperty("plaid_enabled", out var p) && p.GetBoolean() ? "enabled" : "off")}";
-            LicenseText.Text = is10
-                ? "MIT License · freeware · v1.0 liquidity OS"
-                : "MIT License · freeware · pre-1.0";
+
+            var licLine = "MIT source · Activate license for commercial / multi-device path";
+            try
+            {
+                var lic = await api.GetLicenseAsync();
+                var enforce = lic.TryGetProperty("enforce", out var en) && en.GetBoolean();
+                var licensed = lic.TryGetProperty("licensed", out var l) && l.GetBoolean();
+                var price = lic.TryGetProperty("price_usd", out var pr) && pr.TryGetDouble(out var pd)
+                    ? pd.ToString("0.00")
+                    : "49.99";
+                licLine = enforce
+                    ? (licensed
+                        ? $"Licensed · ${price} lifetime personal · MIT source available"
+                        : $"Commercial build · ${price} one-time · Activate license")
+                    : $"OSS build unlocked · store list price ${price} · MIT License";
+            }
+            catch
+            {
+                /* engine partial */
+            }
+            LicenseText.Text = licLine;
         }
         catch (Exception ex)
         {

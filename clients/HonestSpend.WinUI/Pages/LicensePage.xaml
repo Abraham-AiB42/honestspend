@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.LicensePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="640">
+            <StackPanel Spacing="4">
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Activate license" />
+                <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                    Text="One purchase unlocks every official client (Windows, Mac, mobile). Your books stay on this PC." />
+            </StackPanel>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Opacity="0.7" Text="Status" />
+                    <TextBlock x:Name="StatusTitle" FontSize="20" FontWeight="SemiBold" Text="…" />
+                    <TextBlock x:Name="StatusDetail" Opacity="0.85" TextWrapping="Wrap" />
+                    <TextBlock x:Name="PriceLine" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="12">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Enter license key" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Paste the key from your store receipt or account email. Same key works on all devices." />
+                    <TextBox x:Name="KeyBox" Header="License key"
+                             PlaceholderText="e.g. HS-… or your purchase key"
+                             HorizontalAlignment="Stretch" />
+                    <TextBox x:Name="EmailBox" Header="Email (optional)"
+                             PlaceholderText="For cross-device restore later"
+                             HorizontalAlignment="Stretch" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Activate" Click="Activate_Click"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Refresh status" Click="Refresh_Click" />
+                        <Button Content="Clear local license" Click="Clear_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="MsgText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Buy / restore" />
+                    <TextBlock Opacity="0.8" TextWrapping="Wrap"
+                        Text="Microsoft Store, Mac App Store, Google Play, and iOS will use the same HonestSpend license after purchase. Store “Restore” works on the store where you paid; other platforms use this key or email." />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Open honestspend.net" Click="OpenSite_Click" />
+                        <Button Content="Privacy policy" Click="OpenPrivacy_Click" />
+                    </StackPanel>
+                    <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                        Text="Dev/test: HS-DEV-LIFETIME works when enforcement is off (default OSS build). Commercial Store builds set FOS_LICENSE_ENFORCE=1." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="TechText" Opacity="0.55" FontSize="11" TextWrapping="Wrap"
+                       IsTextSelectionEnabled="True" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

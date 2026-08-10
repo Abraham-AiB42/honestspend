@@ -540,6 +540,48 @@ def health():
     return {"ok": True, "version": __version__, "app": settings.app_name, "product": "HonestSpend"}
 
 
+# --- License (buy once / all clients; local-first) ---
+
+
+class LicenseActivateIn(BaseModel):
+    key: str
+    email: str | None = None
+
+
+@app.get("/api/license")
+def license_status():
+    from financial_os.services.license_service import get_status
+
+    return get_status()
+
+
+@app.post("/api/license/activate")
+def license_activate(body: LicenseActivateIn):
+    from financial_os.services.license_service import activate_key
+
+    try:
+        return activate_key(body.key, body.email)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/license/clear")
+def license_clear():
+    from financial_os.services.license_service import clear_license
+
+    return clear_license()
+
+
+@app.post("/api/license/refresh")
+def license_refresh():
+    from financial_os.services.license_service import refresh_license
+
+    try:
+        return refresh_license()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/api/onboarding")
 def onboarding_status(db: Session = Depends(get_db)):
     from financial_os.services.onboarding import get_onboarding_status

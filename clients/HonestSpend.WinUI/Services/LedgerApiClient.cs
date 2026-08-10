@@ -513,6 +513,18 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> PutCreditProfileAsync(object body, CancellationToken ct = default)
         => PutJsonAsync("api/credit/profile", body, ct);
 
+    public Task<JsonElement> GetLicenseAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/license", ct);
+
+    public Task<JsonElement> ActivateLicenseAsync(string key, string? email = null, CancellationToken ct = default)
+        => PostJsonAsync("api/license/activate", new { key, email }, ct);
+
+    public Task<JsonElement> ClearLicenseAsync(CancellationToken ct = default)
+        => PostJsonAsync("api/license/clear", new { }, ct);
+
+    public Task<JsonElement> RefreshLicenseAsync(CancellationToken ct = default)
+        => PostJsonAsync("api/license/refresh", new { }, ct);
+
     public Task<JsonElement> GetSystemInfoAsync(CancellationToken ct = default)
         => GetJsonAsync("api/system/info", ct);
 

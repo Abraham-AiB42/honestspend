@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Visible in Simple mode; everything else is Full books.</summary>
     private static readonly HashSet<string> SimpleNavTags = new(StringComparer.OrdinalIgnoreCase)
     {
-        "home", "add", "setup", "buy", "review", "about",
+        "home", "add", "setup", "buy", "review", "about", "license",
     };
 
     public MainWindow()
@@ -296,7 +296,7 @@ public sealed partial class MainWindow : Window
         {
             if (item is NavigationViewItem nvi && nvi.Tag is string tag)
             {
-                var hide = WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "buy" or "about");
+                var hide = WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "buy" or "about" or "license");
                 nvi.Visibility = hide ? Visibility.Collapsed : Visibility.Visible;
             }
         }
@@ -343,7 +343,7 @@ public sealed partial class MainWindow : Window
 
     private void NavigateTag(string tag)
     {
-        if (AppState.ReadOnlySession && WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "about" or "buy"))
+        if (AppState.ReadOnlySession && WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "about" or "buy" or "license"))
         {
             SelectNav("home");
             NavFrame.Navigate(typeof(HomePage));
@@ -374,6 +374,7 @@ public sealed partial class MainWindow : Window
             case "tax": NavFrame.Navigate(typeof(TaxPage)); break;
             case "reports": NavFrame.Navigate(typeof(ReportsPage)); break;
             case "intermix": NavFrame.Navigate(typeof(IntermixPage)); break;
+            case "license": NavFrame.Navigate(typeof(LicensePage)); break;
             case "about": NavFrame.Navigate(typeof(AboutPage)); break;
         }
     }
