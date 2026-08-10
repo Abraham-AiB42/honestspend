@@ -65,10 +65,13 @@ img { max-width: 100%; height: auto; display: block; }
 .brand:hover { text-decoration: none; color: var(--text); }
 .brand-mark {
   width: 32px; height: 32px; border-radius: 8px;
-  background: linear-gradient(135deg, #3d9cf0, #2a6fb8);
-  display: grid; place-items: center;
-  font-size: 0.85rem; font-weight: 800; color: #fff;
-  box-shadow: 0 4px 12px rgba(61, 156, 240, 0.35);
+  display: block;
+  object-fit: contain;
+  background: transparent;
+  flex-shrink: 0;
+}
+.brand-mark--lg {
+  width: 40px; height: 40px;
 }
 .nav-links {
   display: flex; align-items: center; gap: 0.25rem 1.25rem;
@@ -177,6 +180,10 @@ img { max-width: 100%; height: auto; display: block; }
 .app-titlebar .dot.r { background: #e35d6a; }
 .app-titlebar .dot.y { background: #e6b450; }
 .app-titlebar .dot.g { background: #3ecf8e; }
+.app-titlebar .app-logo {
+  width: 18px; height: 18px; object-fit: contain;
+  border-radius: 3px; flex-shrink: 0;
+}
 .app-body { display: flex; min-height: 340px; }
 .app-nav {
   width: 168px; flex-shrink: 0;
