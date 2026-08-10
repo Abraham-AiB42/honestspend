@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.33 — Store license path + Simple Home polish
+
+- **Store license**: MSIX/packaged client sets `FOS_LICENSE_ENFORCE=1`; `StoreLicenseService` checks Microsoft Store and posts to `POST /api/license/store`
+- **Activate license** page: Restore Store purchase, open Store listing, clearer status, advanced clear
+- **Home (Simple)**: license soft-gate InfoBar when commercial build needs purchase; clearer Safe to spend card and status line
+- `PackageInfo` detects packaged vs unpackaged builds
+- Docs: LICENSING store sync notes
+
 ## 1.0.32 — Commercial license stub (buy once, all clients)
 
 - **Design:** `docs/LICENSING.md` — $49.99 lifetime personal, cross-store entitlement via publisher license

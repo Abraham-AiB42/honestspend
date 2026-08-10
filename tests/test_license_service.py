@@ -100,3 +100,26 @@ def test_lifetime_offline_past_grace(lic_dir: Path, monkeypatch: pytest.MonkeyPa
     # lifetime key/dev still valid offline past grace
     assert st["record_valid"] is True
     assert st["licensed"] is True
+
+
+def test_activate_store_entitlement(lic_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(ls.settings, "license_enforce", True)
+    st = ls.activate_store(is_active=True, store_kind="ms_store", is_trial=False)
+    assert st["store_active"] is True
+    assert st["licensed"] is True
+    assert st["source"] == "ms_store"
+    assert st["gate"] == "ok"
+
+    st2 = ls.activate_store(is_active=False, store_kind="ms_store")
+    assert st2["store_active"] is False
+    # store-sourced license cleared
+    assert st2["has_local_record"] is False
+
+
+def test_store_inactive_keeps_key_license(lic_dir: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(ls.settings, "license_enforce", True)
+    monkeypatch.setattr(ls.settings, "license_allow_dev_keys", True)
+    ls.activate_key("HS-DEV-LIFETIME")
+    st = ls.activate_store(is_active=False, store_kind="ms_store")
+    assert st["has_local_record"] is True
+    assert st["licensed"] is True

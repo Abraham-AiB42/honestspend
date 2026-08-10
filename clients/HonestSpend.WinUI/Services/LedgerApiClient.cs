@@ -519,6 +519,25 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> ActivateLicenseAsync(string key, string? email = null, CancellationToken ct = default)
         => PostJsonAsync("api/license/activate", new { key, email }, ct);
 
+    public Task<JsonElement> RegisterStoreLicenseAsync(
+        bool isActive,
+        bool isTrial = false,
+        string? detail = null,
+        string storeKind = "ms_store",
+        string? storeSku = null,
+        CancellationToken ct = default)
+        => PostJsonAsync(
+            "api/license/store",
+            new
+            {
+                is_active = isActive,
+                is_trial = isTrial,
+                detail,
+                store_kind = storeKind,
+                store_sku = storeSku,
+            },
+            ct);
+
     public Task<JsonElement> ClearLicenseAsync(CancellationToken ct = default)
         => PostJsonAsync("api/license/clear", new { }, ct);
 

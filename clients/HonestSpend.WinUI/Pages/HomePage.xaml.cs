@@ -72,6 +72,10 @@ public sealed partial class HomePage : Page
             }
 
             using var api = new LedgerApiClient();
+
+            // Store packages: soft license check (does not block reading Home)
+            await RefreshLicenseBannerAsync(api);
+
             _home = await api.GetHomeSimpleAsync();
 
             SafeText.Text = Money(_home, "safe_to_spend");
@@ -86,7 +90,7 @@ public sealed partial class HomePage : Page
 
             var risk = JsonUi.Str(_home, "next_risk_day", "");
             RiskLine.Text = string.IsNullOrEmpty(risk) || risk == "—"
-                ? "No near-term red day"
+                ? "No near-term cash crunch day"
                 : $"{UiCopy.NextRisk}: {risk}";
 
             var pend = JsonUi.Str(_home, "pending_warning", "");
@@ -95,9 +99,11 @@ public sealed partial class HomePage : Page
                 ? Visibility.Collapsed
                 : Visibility.Visible;
 
-            WhoLine.Text =
-                $"{JsonUi.Str(_home, "who_name")} · " +
-                (JsonUi.Str(_home, "money_view") == "all_money" ? UiCopy.AllMoney : UiCopy.ThisMoney);
+            var who = JsonUi.Str(_home, "who_name");
+            if (string.IsNullOrEmpty(who) || who == "—")
+                who = "This household";
+            var view = JsonUi.Str(_home, "money_view") == "all_money" ? UiCopy.AllMoney : UiCopy.ThisMoney;
+            WhoLine.Text = $"{who} · {view}";
 
             if (_home.TryGetProperty("do_this_next", out var next) && next.ValueKind == JsonValueKind.Object)
             {
@@ -423,7 +429,10 @@ public sealed partial class HomePage : Page
                     && ShouldShowBankTip();
             }
 
-            StatusText.Text = $"Connected · {JsonUi.Str(_home, "as_of")}";
+            var asOf = JsonUi.Str(_home, "as_of");
+            StatusText.Text = string.IsNullOrEmpty(asOf) || asOf == "—"
+                ? $"Ready · {view}"
+                : $"Ready · {view} · {asOf}";
         }
         catch (Exception ex)
         {
@@ -431,6 +440,51 @@ public sealed partial class HomePage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private async Task RefreshLicenseBannerAsync(LedgerApiClient api)
+    {
+        try
+        {
+            // Unpackaged / OSS: never nag
+            if (!PackageInfo.ShouldEnforceLicense)
+            {
+                LicenseBar.IsOpen = false;
+                return;
+            }
+
+            // Best-effort Store sync (silent)
+            if (PackageInfo.IsPackaged)
+                _ = await StoreLicenseService.SyncToEngineAsync();
+
+            var lic = await api.GetLicenseAsync();
+            var licensed = lic.TryGetProperty("licensed", out var l) && l.ValueKind == JsonValueKind.True;
+            var enforce = lic.TryGetProperty("enforce", out var e) && e.ValueKind == JsonValueKind.True;
+            if (enforce && !licensed)
+            {
+                LicenseBar.Title = "Purchase required";
+                LicenseBar.Message =
+                    "Restore your Microsoft Store purchase or activate a license to use the full commercial build.";
+                LicenseBar.Severity = InfoBarSeverity.Warning;
+                LicenseBar.IsOpen = true;
+            }
+            else
+            {
+                LicenseBar.IsOpen = false;
+            }
+        }
+        catch
+        {
+            LicenseBar.IsOpen = false;
+        }
+    }
+
+    private void LicenseBar_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("license");
+        else
+            Frame?.Navigate(typeof(LicensePage));
     }
 
     private static bool ShouldShowBankTip()

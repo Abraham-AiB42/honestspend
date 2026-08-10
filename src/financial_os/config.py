@@ -32,10 +32,13 @@ class Settings(BaseSettings):
     plaid_env: str = "sandbox"  # sandbox | development | production
 
     # Commercial license (see docs/LICENSING.md). Default: OSS unlocked.
+    # Store/MSIX packaged client sets FOS_LICENSE_ENFORCE=1 when launching the engine.
     license_enforce: bool = False
     license_grace_days: int = 90
     license_server_url: str | None = None
     license_allow_dev_keys: bool = False  # set true in CI; enforce=false also allows dev keys
+    # store | unpackaged | sideload | dev — set by WinUI BackendHost when known
+    license_distribution: str | None = None
 
     @property
     def plaid_enabled(self) -> bool:

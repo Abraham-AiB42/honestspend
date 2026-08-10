@@ -12,61 +12,75 @@
             <StackPanel Spacing="4">
                 <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Activate license" />
                 <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                    Text="One purchase unlocks every official client (Windows, Mac, mobile). Your books stay on this PC." />
+                    Text="One Microsoft Store purchase unlocks HonestSpend on this PC. Your books stay local." />
             </StackPanel>
 
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            <!-- Status -->
+            <Border x:Name="StatusBorder"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="8">
                     <TextBlock Opacity="0.7" Text="Status" />
-                    <TextBlock x:Name="StatusTitle" FontSize="20" FontWeight="SemiBold" Text="…" />
+                    <TextBlock x:Name="StatusTitle" FontSize="22" FontWeight="SemiBold" Text="…" />
                     <TextBlock x:Name="StatusDetail" Opacity="0.85" TextWrapping="Wrap" />
                     <TextBlock x:Name="PriceLine" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                    <TextBlock x:Name="PromoLine" Opacity="0.7" FontSize="12" TextWrapping="Wrap"
+                               Foreground="#F0B429" />
                 </StackPanel>
             </Border>
 
+            <!-- Microsoft Store -->
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Microsoft Store" />
+                    <TextBlock Opacity="0.8" TextWrapping="Wrap"
+                        Text="Bought on the Store? Restore verifies your Microsoft account license and unlocks this install. Publisher: Agency in Box 42." />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="RestoreStoreBtn" Content="Restore Store purchase"
+                                Click="RestoreStore_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Open Microsoft Store" Click="OpenStore_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="StoreMsg" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                </StackPanel>
+            </Border>
+
+            <!-- License key (cross-device / future) -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="12">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Enter license key" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="License key (optional)" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Paste the key from your store receipt or account email. Same key works on all devices." />
+                        Text="For cross-device unlock later, or a key from support. Most Store buyers only need Restore above." />
                     <TextBox x:Name="KeyBox" Header="License key"
-                             PlaceholderText="e.g. HS-… or your purchase key"
+                             PlaceholderText="e.g. HS-…"
                              HorizontalAlignment="Stretch" />
                     <TextBox x:Name="EmailBox" Header="Email (optional)"
-                             PlaceholderText="For cross-device restore later"
+                             PlaceholderText="For restore on other devices later"
                              HorizontalAlignment="Stretch" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Activate" Click="Activate_Click"
+                        <Button Content="Activate key" Click="Activate_Click"
                                 Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Refresh status" Click="Refresh_Click" />
-                        <Button Content="Clear local license" Click="Clear_Click" />
                     </StackPanel>
                     <TextBlock x:Name="MsgText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                 </StackPanel>
             </Border>
 
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="16">
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Buy / restore" />
-                    <TextBlock Opacity="0.8" TextWrapping="Wrap"
-                        Text="Microsoft Store, Mac App Store, Google Play, and iOS will use the same HonestSpend license after purchase. Store “Restore” works on the store where you paid; other platforms use this key or email." />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Open honestspend.net" Click="OpenSite_Click" />
-                        <Button Content="Privacy policy" Click="OpenPrivacy_Click" />
-                    </StackPanel>
+            <Expander Header="Advanced" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="8" Padding="0,12,0,0">
+                    <Button Content="Clear local license record" Click="Clear_Click" HorizontalAlignment="Left" />
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Dev/test: HS-DEV-LIFETIME works when enforcement is off (default OSS build). Commercial Store builds set FOS_LICENSE_ENFORCE=1." />
+                        Text="Clears this PC’s license file only. Does not cancel a Microsoft Store purchase." />
+                    <HyperlinkButton Content="honestspend.net" Click="OpenSite_Click" />
+                    <HyperlinkButton Content="Privacy policy" Click="OpenPrivacy_Click" />
+                    <TextBlock x:Name="TechText" Opacity="0.55" FontSize="11" TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True" />
                 </StackPanel>
-            </Border>
-
-            <TextBlock x:Name="TechText" Opacity="0.55" FontSize="11" TextWrapping="Wrap"
-                       IsTextSelectionEnabled="True" />
+            </Expander>
         </StackPanel>
     </ScrollViewer>
 </Page>

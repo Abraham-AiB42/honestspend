@@ -25,16 +25,27 @@
 
             <!-- SIMPLE: Safe to spend + do this next -->
             <StackPanel x:Name="SimplePanel" Spacing="14">
+                <!-- License soft gate (Store / commercial only) -->
+                <InfoBar x:Name="LicenseBar" IsOpen="False" Severity="Warning"
+                         IsClosable="False" Title="License">
+                    <InfoBar.ActionButton>
+                        <Button Content="Activate / restore" Click="LicenseBar_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="16" Padding="20">
-                    <StackPanel Spacing="8">
-                        <TextBlock Opacity="0.7" Text="Safe to spend" />
-                        <TextBlock x:Name="SafeText" FontSize="44" FontWeight="SemiBold" Text="—" />
+                    <StackPanel Spacing="6">
+                        <TextBlock Opacity="0.7" FontSize="13" Text="Safe to spend" />
+                        <TextBlock Opacity="0.55" FontSize="12" TextWrapping="Wrap"
+                            Text="What you can use today after bills, buffer, and set-asides" />
+                        <TextBlock x:Name="SafeText" FontSize="48" FontWeight="SemiBold"
+                                   Margin="0,4,0,0" Text="—" />
                         <TextBlock x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />
-                        <TextBlock x:Name="RiskLine" Opacity="0.8" TextWrapping="Wrap" />
+                        <TextBlock x:Name="RiskLine" Opacity="0.8" TextWrapping="Wrap" Margin="0,4,0,0" />
                         <TextBlock x:Name="PendingLine" Opacity="0.75" TextWrapping="Wrap" Foreground="Orange" />
-                        <TextBlock x:Name="WhoLine" Opacity="0.6" FontSize="12" />
+                        <TextBlock x:Name="WhoLine" Opacity="0.55" FontSize="12" Margin="0,4,0,0" />
                     </StackPanel>
                 </Border>
 
@@ -42,13 +53,13 @@
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="16" Padding="20">
                     <StackPanel Spacing="10">
-                        <TextBlock Opacity="0.7" Text="Do this next" />
-                        <TextBlock x:Name="NextTitle" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" Text="—" />
+                        <TextBlock Opacity="0.7" FontSize="13" Text="Do this next" />
+                        <TextBlock x:Name="NextTitle" FontSize="22" FontWeight="SemiBold" TextWrapping="Wrap" Text="—" />
                         <TextBlock x:Name="NextReason" Opacity="0.85" TextWrapping="Wrap" />
                         <TextBlock x:Name="NextDisclaimer" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                         <Button x:Name="NextBtn" Content="Continue" Style="{StaticResource AccentButtonStyle}"
-                                Click="DoNext_Click" HorizontalAlignment="Left" />
-                        <TextBlock Opacity="0.7" Text="Other options" Margin="0,8,0,0" />
+                                Click="DoNext_Click" HorizontalAlignment="Left" MinWidth="140" />
+                        <TextBlock Opacity="0.65" FontSize="12" Text="Other options" Margin="0,8,0,0" />
                         <ItemsControl x:Name="AltList" />
                     </StackPanel>
                 </Border>

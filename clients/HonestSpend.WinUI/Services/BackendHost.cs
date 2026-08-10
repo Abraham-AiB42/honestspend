@@ -89,6 +89,15 @@ public sealed class BackendHost : IDisposable
             if (!string.IsNullOrWhiteSpace(AppConfig.DataDir))
                 psi.Environment["FOS_DATA_DIR"] = AppConfig.DataDir.Trim();
 
+            // Commercial license: Store/MSIX packages enforce; unpackaged stays OSS-unlocked
+            // unless the user sets FOS_LICENSE_ENFORCE explicitly in the environment.
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FOS_LICENSE_ENFORCE")))
+            {
+                psi.Environment["FOS_LICENSE_ENFORCE"] =
+                    PackageInfo.ShouldEnforceLicense ? "1" : "0";
+            }
+            psi.Environment["FOS_LICENSE_DISTRIBUTION"] = PackageInfo.Distribution;
+
             _process = Process.Start(psi);
             if (_process is null)
             {

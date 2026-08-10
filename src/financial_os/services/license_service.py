@@ -85,6 +85,14 @@ def enforce_enabled() -> bool:
     return bool(getattr(settings, "license_enforce", False))
 
 
+def distribution() -> str:
+    """How this engine instance was launched: store | unpackaged | unknown."""
+    d = str(getattr(settings, "license_distribution", "") or "").strip().lower()
+    if d in ("store", "unpackaged", "sideload", "dev"):
+        return d
+    return "unknown"
+
+
 def grace_days() -> int:
     try:
         d = int(getattr(settings, "license_grace_days", DEFAULT_GRACE_DAYS) or DEFAULT_GRACE_DAYS)
@@ -197,6 +205,7 @@ def get_status() -> dict[str, Any]:
         "enforce": enforce,
         "licensed": product_licensed,
         "gate": gate,
+        "distribution": distribution(),
         "has_local_record": rec is not None,
         "record_valid": ev.licensed,
         "reason": ev.reason if rec else ("oss_default" if not enforce else "no_license"),
@@ -208,11 +217,16 @@ def get_status() -> dict[str, Any]:
         "max_devices": DEFAULT_MAX_DEVICES,
         "privacy_url": "https://honestspend.net/privacy/",
         "site_url": "https://honestspend.net/",
+        "store_url": "https://apps.microsoft.com/search?query=HonestSpend",
         "buy_hint": (
-            "One-time purchase (~$49.99) on Microsoft Store, Apple, Google Play, "
-            "or direct — same license unlocks all official clients."
+            "One-time purchase ($49.99 list) on Microsoft Store. "
+            "Same license unlocks official clients as they ship."
         ),
-        "activate_hint": "Enter the license key from your purchase receipt or account email.",
+        "activate_hint": (
+            "If you bought on Microsoft Store, use Restore Store purchase. "
+            "Or enter a license key from your receipt / account email."
+        ),
+        "promo_hint": "Pre-launch 50% off through October 21, 2026 where the Store promo is active.",
     }
 
     if rec:
@@ -220,6 +234,8 @@ def get_status() -> dict[str, Any]:
         out["plan"] = rec.get("plan") or PLAN_LIFETIME
         out["email"] = rec.get("email")
         out["source"] = rec.get("source")
+        out["store_kind"] = rec.get("store_kind")
+        out["is_trial"] = bool(rec.get("is_trial"))
         out["activated_at"] = rec.get("activated_at")
         out["last_verified_at"] = rec.get("last_verified_at")
         out["expires_at"] = rec.get("expires_at")
@@ -278,6 +294,73 @@ def activate_key(key: str, email: str | None = None) -> dict[str, Any]:
         "Developer lifetime license activated (local)."
         if is_dev
         else "License activated on this device. Use the same key on other official clients."
+    )
+    return status
+
+
+def activate_store(
+    *,
+    is_active: bool,
+    store_kind: str = "ms_store",
+    is_trial: bool = False,
+    store_sku: str | None = None,
+    detail: str | None = None,
+) -> dict[str, Any]:
+    """Record Microsoft Store (or other store) entitlement from the client.
+
+    The WinUI client verifies StoreContext.GetAppLicenseAsync() and posts the result.
+    """
+    kind = (store_kind or "ms_store").strip().lower() or "ms_store"
+    if kind not in ("ms_store", "apple", "google", "direct"):
+        kind = "ms_store"
+
+    if not is_active:
+        # Do not wipe a valid key-based license if Store says inactive (e.g. offline Store)
+        rec = _load_raw()
+        if rec and str(rec.get("source") or "") in ("key", "dev", "direct"):
+            status = get_status()
+            status["store_checked"] = True
+            status["store_active"] = False
+            status["message"] = "Store purchase not active; existing key license kept."
+            return status
+        # Clear only store-sourced licenses
+        if rec and str(rec.get("source") or "") in ("ms_store", "apple", "google"):
+            clear_license()
+        status = get_status()
+        status["store_checked"] = True
+        status["store_active"] = False
+        status["message"] = detail or "No active Microsoft Store license on this account."
+        return status
+
+    now = _utc_now()
+    existing = _load_raw() or {}
+    rec = {
+        "schema": SCHEMA,
+        "license_id": existing.get("license_id") or f"lic_{uuid.uuid4().hex[:16]}",
+        "key_fingerprint": existing.get("key_fingerprint"),
+        "email": existing.get("email"),
+        "plan": PLAN_LIFETIME if not is_trial else "trial",
+        "max_devices": DEFAULT_MAX_DEVICES,
+        "source": kind,
+        "store_kind": kind,
+        "store_sku": (store_sku or "").strip() or None,
+        "is_trial": bool(is_trial),
+        "activated_at": existing.get("activated_at") or _iso(now),
+        "last_verified_at": _iso(now),
+        "expires_at": None,
+        "device_id": device_id(),
+        "token": existing.get("token"),
+        "notes": detail,
+    }
+    _save_raw(rec)
+    status = get_status()
+    status["activated"] = True
+    status["store_checked"] = True
+    status["store_active"] = True
+    status["message"] = (
+        "Microsoft Store trial active on this device."
+        if is_trial
+        else "Microsoft Store purchase verified on this device."
     )
     return status
 

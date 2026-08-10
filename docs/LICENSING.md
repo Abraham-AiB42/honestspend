@@ -166,8 +166,10 @@ Regional / family SKUs can adjust later without changing plan id `lifetime_perso
 
 - [x] Design doc (this file)
 - [x] Local `license_service` + `/api/license*`
-- [x] WinUI Activate page (stub + real local activate)
-- [ ] License Cloudflare Worker
-- [ ] Microsoft Store receipt → activate
-- [ ] Soft/hard gate in commercial builds (`FOS_LICENSE_ENFORCE=1` in store pipeline)
+- [x] WinUI Activate page (key + Store restore)
+- [x] Microsoft Store entitlement → `POST /api/license/store` (via StoreContext)
+- [x] Packaged builds auto-set `FOS_LICENSE_ENFORCE=1` when launching engine
+- [x] Soft gate banner on Simple Home when enforce && !licensed
+- [ ] License Cloudflare Worker (cross-device email/key server)
+- [ ] Hard gate (optional) if certification requires
 - [ ] Mac / mobile clients share same API contract

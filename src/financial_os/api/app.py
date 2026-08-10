@@ -548,6 +548,14 @@ class LicenseActivateIn(BaseModel):
     email: str | None = None
 
 
+class LicenseStoreIn(BaseModel):
+    is_active: bool
+    store_kind: str = "ms_store"
+    is_trial: bool = False
+    store_sku: str | None = None
+    detail: str | None = None
+
+
 @app.get("/api/license")
 def license_status():
     from financial_os.services.license_service import get_status
@@ -563,6 +571,20 @@ def license_activate(body: LicenseActivateIn):
         return activate_key(body.key, body.email)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/license/store")
+def license_store(body: LicenseStoreIn):
+    """Client posts Microsoft Store (or other) entitlement after StoreContext check."""
+    from financial_os.services.license_service import activate_store
+
+    return activate_store(
+        is_active=body.is_active,
+        store_kind=body.store_kind,
+        is_trial=body.is_trial,
+        store_sku=body.store_sku,
+        detail=body.detail,
+    )
 
 
 @app.post("/api/license/clear")
