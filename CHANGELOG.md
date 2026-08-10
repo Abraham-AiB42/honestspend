@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.27 — WinUI ending-bal hygiene · chrono same-day CSV · multi enter_bal
+
+- **WinUI**: `TryParseBankAmount` on CSV import; fail loud if box non-empty but bad
+- Clear/rebind ending-bal box on file pick + preview (no stale override)
+- OFX/PDF: apply typed ending bal when file did not set bank bal
+- **CSV**: same-day ending bal from amount↔running-bal orientation (chrono + newest-first)
+- **Inbox**: multi-account `enter_ending_bal` CTAs; clearer empty-file error
+
 ## 1.0.26 — Inbox enter_ending_bal · same-day CSV · PDF interest lines
 
 - **Inbox**: bal-less success passes `account_id` → aggregate `enter_ending_bal` CTA

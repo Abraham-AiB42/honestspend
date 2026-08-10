@@ -269,6 +269,11 @@ public sealed partial class ImportPage : Page
             : $"Plaid off · {hint}";
     }
 
+    private void ClearEndingBalanceBox()
+    {
+        EndingBalanceBox.Text = "";
+    }
+
     private async void PickCsv_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(new[] { ".csv", ".txt" });
@@ -276,6 +281,7 @@ public sealed partial class ImportPage : Page
         _csvFile = file;
         _ofxFile = null;
         _pdfFile = null;
+        ClearEndingBalanceBox();
         CsvPathText.Text = file.Name;
     }
 
@@ -286,6 +292,7 @@ public sealed partial class ImportPage : Page
         _ofxFile = file;
         _csvFile = null;
         _pdfFile = null;
+        ClearEndingBalanceBox();
         CsvPathText.Text = file.Name + " (OFX/QFX)";
     }
 
@@ -296,7 +303,48 @@ public sealed partial class ImportPage : Page
         _pdfFile = file;
         _csvFile = null;
         _ofxFile = null;
+        ClearEndingBalanceBox();
         CsvPathText.Text = file.Name + " (PDF)";
+    }
+
+    /// <summary>
+    /// Parse optional ending-bal box. Empty → null. Non-empty must parse or throw.
+    /// </summary>
+    private decimal? ParseOptionalEndingBalanceOrThrow()
+    {
+        if (string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
+            return null;
+        if (!TryParseBankAmount(EndingBalanceBox.Text, out var bal))
+        {
+            EndingBalanceBox.Focus(FocusState.Programmatic);
+            throw new InvalidOperationException(
+                "Bank ending balance is not a valid amount (try 1234.56, (50.00), or 50.00-).");
+        }
+        return bal;
+    }
+
+    /// <summary>
+    /// After OFX/PDF import: apply typed ending bal when the file did not set bank bal.
+    /// </summary>
+    private async Task ApplyTypedEndingBalIfNeededAsync(
+        LedgerApiClient api, int accountId, JsonElement res, List<string> lines)
+    {
+        var typed = ParseOptionalEndingBalanceOrThrow();
+        if (typed is null)
+            return;
+        var fileSetInst =
+            (res.TryGetProperty("institution_balance_set", out var ibs)
+             && ibs.ValueKind == JsonValueKind.True)
+            || (!string.IsNullOrEmpty(Prop(res, "ending_balance"))
+                && Prop(res, "ending_balance") != "?"
+                && Prop(res, "ending_balance") != "—");
+        if (fileSetInst)
+        {
+            lines.Add("Typed ending bal ignored — file already set bank ending balance.");
+            return;
+        }
+        await api.SetInstitutionBalanceAsync(accountId, typed.Value, markReconciled: false);
+        lines.Add($"Bank ending bal ${typed.Value:0.00} (typed) · set for Reconcile");
     }
 
     private async void PickXlsx_Click(object sender, RoutedEventArgs e)
@@ -339,6 +387,14 @@ public sealed partial class ImportPage : Page
                     $"PDF · pages {JsonUi.Str(pdfRes, "pages")} · candidates {JsonUi.Str(pdfRes, "candidates")}",
                     JsonUi.Str(pdfRes, "hint"),
                 };
+                var pdfEnd = JsonUi.Str(pdfRes, "ending_balance");
+                if (!string.IsNullOrEmpty(pdfEnd) && pdfEnd != "—" && pdfEnd != "?")
+                {
+                    pdfLines.Add($"Ending balance from file: ${pdfEnd}");
+                    EndingBalanceBox.Text = pdfEnd;
+                }
+                else
+                    EndingBalanceBox.Text = "";
                 if (pdfRes.TryGetProperty("sample", out var pdfSample) && pdfSample.ValueKind == JsonValueKind.Array)
                 {
                     pdfLines.Add("Sample:");
@@ -359,6 +415,14 @@ public sealed partial class ImportPage : Page
                     (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "ledger_balance")) ? "" : $" · ledger ${JsonUi.Str(ofxRes, "ledger_balance")}"),
                     JsonUi.Str(ofxRes, "hint"),
                 };
+                var ofxEnd = JsonUi.Str(ofxRes, "ledger_balance");
+                if (!string.IsNullOrEmpty(ofxEnd) && ofxEnd != "—" && ofxEnd != "?")
+                {
+                    ofxLines.Add($"Ending balance from file: ${ofxEnd}");
+                    EndingBalanceBox.Text = ofxEnd;
+                }
+                else
+                    EndingBalanceBox.Text = "";
                 if (ofxRes.TryGetProperty("sample", out var ofxSample) && ofxSample.ValueKind == JsonValueKind.Array)
                 {
                     ofxLines.Add("Sample:");
@@ -380,11 +444,15 @@ public sealed partial class ImportPage : Page
                 (string.IsNullOrEmpty(JsonUi.Str(map, "balance_col")) ? "" : $" · balance → {JsonUi.Str(map, "balance_col")}"),
             };
             var endBal = JsonUi.Str(csvRes, "ending_balance");
-            if (!string.IsNullOrEmpty(endBal))
+            if (!string.IsNullOrEmpty(endBal) && endBal != "—" && endBal != "?")
             {
                 csvLines.Add($"Ending balance from file: ${endBal}");
-                if (string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
-                    EndingBalanceBox.Text = endBal;
+                // Always rebind from this preview so stale overrides cannot poison import
+                EndingBalanceBox.Text = endBal;
+            }
+            else
+            {
+                EndingBalanceBox.Text = "";
             }
             if (csvRes.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
@@ -582,21 +650,15 @@ public sealed partial class ImportPage : Page
                             ? " · set for Reconcile"
                             : ""));
                 }
+                await ApplyTypedEndingBalIfNeededAsync(api, accountId, ofxRes, lines);
                 AppendNextStepLines(lines, ofxRes);
                 ResultText.Text = string.Join("\n", lines);
                 ShowNextSteps(ofxRes);
                 return;
             }
             if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
-            decimal? instBal = null;
-            if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
-            {
-                var balText = EndingBalanceBox.Text.Trim().Replace("$", "").Replace(",", "");
-                if (decimal.TryParse(balText, System.Globalization.NumberStyles.Number,
-                        System.Globalization.CultureInfo.InvariantCulture, out var parsedBal)
-                    || decimal.TryParse(balText, out parsedBal))
-                    instBal = parsedBal;
-            }
+            // Typed box: parse with bank rules; fail loud if non-empty garbage (no silent drop)
+            decimal? instBal = ParseOptionalEndingBalanceOrThrow();
             using var streamCsv = await _csvFile.OpenStreamForReadAsync();
             var res = await api.ImportBankCsvAsync(
                 streamCsv,
@@ -667,6 +729,15 @@ public sealed partial class ImportPage : Page
                 $"created {Prop(res, "transactions_created")} · skipped {Prop(res, "skipped_existing")} · " +
                 $"categorized {Prop(res, "categorized")}",
             };
+            if (!string.IsNullOrEmpty(Prop(res, "ending_balance")) && Prop(res, "ending_balance") != "?")
+            {
+                pdfLines.Add(
+                    $"Bank ending bal ${Prop(res, "ending_balance")}" +
+                    (string.IsNullOrEmpty(Prop(res, "balance_source")) ? "" : $" ({Prop(res, "balance_source")})") +
+                    (string.IsNullOrEmpty(Prop(res, "drift")) || Prop(res, "drift") == "?"
+                        ? ""
+                        : $" · books drift ${Prop(res, "drift")}"));
+            }
             if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);
@@ -674,6 +745,7 @@ public sealed partial class ImportPage : Page
                 if (!string.IsNullOrEmpty(joined))
                     pdfLines.Add("Errors: " + joined);
             }
+            await ApplyTypedEndingBalIfNeededAsync(api, accountId, res, pdfLines);
             AppendNextStepLines(pdfLines, res);
             ResultText.Text = string.Join("\n", pdfLines);
             ShowNextSteps(res);

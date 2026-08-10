@@ -98,7 +98,6 @@ def _csv_looks_newest_first(pairs: list[tuple[date, Decimal]]) -> bool:
         return True
     if pairs[0][0] < pairs[-1][0]:
         return False
-    # Same first/last date (same-day export): count consecutive non-increasing steps
     down = up = 0
     for i in range(1, len(pairs)):
         if pairs[i][0] < pairs[i - 1][0]:
@@ -109,34 +108,81 @@ def _csv_looks_newest_first(pairs: list[tuple[date, Decimal]]) -> bool:
         return True
     if up > down:
         return False
-    # All same date: prefer first bal as ending when multi-row same day is
-    # typically newest-first in retail exports (first row = latest running bal).
-    # Chronological same-day is less common for multi-row; first-row wins when
-    # we cannot tell — but running bals: newest-first first row is most recent.
-    # Use first for same-day multi-row (retail default); single-row is trivial.
+    # All same date without amount signals: retail default newest-first
     unique_dates = {d for d, _ in pairs}
     return len(unique_dates) == 1 and len(pairs) > 1
 
 
+def _same_day_orientation_from_amounts(
+    rows: list[tuple[Decimal, Decimal]],
+) -> str | None:
+    """Return 'newest_first' | 'chrono' | None from (running_bal, amount) same-day rows.
+
+    Chronological: bal[i] ≈ bal[i-1] + amount[i]
+    Newest-first:  bal[i] ≈ bal[i+1] + amount[i]  (amount on row i took older→newer)
+    """
+    if len(rows) < 2:
+        return None
+    tol = Decimal("0.02")
+    chrono_ok = True
+    for i in range(1, len(rows)):
+        prev_bal, _ = rows[i - 1]
+        bal, amt = rows[i]
+        if abs((prev_bal + amt) - bal) > tol:
+            chrono_ok = False
+            break
+    reverse_ok = True
+    for i in range(len(rows) - 1):
+        bal, amt = rows[i]
+        older_bal, _ = rows[i + 1]
+        if abs((older_bal + amt) - bal) > tol:
+            reverse_ok = False
+            break
+    if reverse_ok and not chrono_ok:
+        return "newest_first"
+    if chrono_ok and not reverse_ok:
+        return "chrono"
+    return None
+
+
 def ending_balance_from_pairs(
     pairs: list[tuple[date, Decimal]],
+    amounts: list[Decimal | None] | None = None,
 ) -> Decimal | None:
     """Pick institution ending bal from (txn_date, balance) samples.
 
-    Uses balance on max(txn_date). Tie-break by file orientation: newest-first
-    takes the first bal on that date; chronological takes the last.
-    Same-day newest-first (common short bank downloads) is detected via
-    consecutive date steps / all-same-date multi-row heuristic.
+    Uses balance on max(txn_date). Orientation:
+      · multi-day date order heuristic
+      · same-day with amounts: reconstruct chrono vs newest-first from deltas
+      · same-day without amounts: retail newest-first default
     """
     if not pairs:
         return None
+    if amounts is not None and len(amounts) != len(pairs):
+        amounts = None
     max_d = max(d for d, _ in pairs)
-    same = [b for d, b in pairs if d == max_d]
-    if not same:
+    same_idx = [i for i, (d, _) in enumerate(pairs) if d == max_d]
+    same_bals = [pairs[i][1] for i in same_idx]
+    if not same_bals:
         return None
+    if len(same_bals) == 1:
+        return same_bals[0]
+
+    # Same-day multi-row: prefer amount-consistency when every row has an amount
+    if amounts is not None and all(d == max_d for d, _ in pairs):
+        amts = [amounts[i] for i in same_idx]
+        if all(a is not None for a in amts):
+            orient = _same_day_orientation_from_amounts(
+                [(pairs[i][1], amounts[i]) for i in same_idx]  # type: ignore[misc]
+            )
+            if orient == "newest_first":
+                return same_bals[0]
+            if orient == "chrono":
+                return same_bals[-1]
+
     if _csv_looks_newest_first(pairs):
-        return same[0]
-    return same[-1]
+        return same_bals[0]
+    return same_bals[-1]
 
 
 def _find_col(headers: list[str], keys: tuple[str, ...]) -> int | None:
@@ -279,6 +325,7 @@ def preview_bank_csv(
     sample: list[dict[str, Any]] = []
     scanned = 0
     bal_pairs: list[tuple[date, Decimal]] = []
+    bal_amounts: list[Decimal | None] = []
     for row in reader:
         if not row or all(not (c or "").strip() for c in row):
             continue
@@ -300,6 +347,7 @@ def preview_bank_csv(
             bal = _parse_amount(row[bal_i])
             if bal is not None and d is not None:
                 bal_pairs.append((d, bal))
+                bal_amounts.append(amount)
         if len(sample) < max_rows:
             sample.append(
                 {
@@ -317,11 +365,30 @@ def preview_bank_csv(
             if not row or bal_i >= len(row):
                 continue
             d = _parse_date(row[date_i] if date_i is not None and date_i < len(row) else "")
+            amount: Decimal | None = None
+            if amt_i is not None and amt_i < len(row):
+                amount = _parse_amount(row[amt_i])
+            else:
+                deb = (
+                    _parse_amount(row[debit_i])
+                    if debit_i is not None and debit_i < len(row)
+                    else None
+                )
+                cred = (
+                    _parse_amount(row[credit_i])
+                    if credit_i is not None and credit_i < len(row)
+                    else None
+                )
+                if deb and deb != 0:
+                    amount = -abs(deb)
+                elif cred and cred != 0:
+                    amount = abs(cred)
             bal = _parse_amount(row[bal_i])
             if bal is not None and d is not None:
                 bal_pairs.append((d, bal))
+                bal_amounts.append(amount)
 
-    ending = ending_balance_from_pairs(bal_pairs)
+    ending = ending_balance_from_pairs(bal_pairs, bal_amounts)
 
     return {
         "ok": len(errors) == 0,
@@ -426,6 +493,7 @@ def import_bank_csv(
     }
 
     bal_pairs: list[tuple[date, Decimal]] = []
+    bal_amounts: list[Decimal | None] = []
     for row in reader:
         result.rows_scanned += 1
         if not row or all(not (c or "").strip() for c in row):
@@ -438,12 +506,6 @@ def import_bank_csv(
             payee = ""
             if desc_i is not None and desc_i < len(row):
                 payee = (row[desc_i] or "").strip()
-
-            # Balance column: sample on every dated row (even if amount is bad)
-            if bal_i is not None and bal_i < len(row):
-                bal = _parse_amount(row[bal_i])
-                if bal is not None:
-                    bal_pairs.append((d, bal))
 
             amount: Decimal | None = None
             if amt_i is not None and amt_i < len(row):
@@ -463,6 +525,14 @@ def import_bank_csv(
                     amount = -abs(deb)
                 elif cred and cred != 0:
                     amount = abs(cred)
+
+            # Balance column: sample on every dated row (even if amount is bad)
+            if bal_i is not None and bal_i < len(row):
+                bal = _parse_amount(row[bal_i])
+                if bal is not None:
+                    bal_pairs.append((d, bal))
+                    bal_amounts.append(amount)
+
             if amount is None or amount == 0:
                 result.skipped_bad += 1
                 continue
@@ -510,8 +580,8 @@ def import_bank_csv(
 
     session.flush()
 
-    # Ending balance → institution_balance (max txn date, not raw file order)
-    column_ending = ending_balance_from_pairs(bal_pairs)
+    # Ending balance → institution_balance (max txn date + amount orientation)
+    column_ending = ending_balance_from_pairs(bal_pairs, bal_amounts)
     bal_to_apply: Decimal | None = None
     bal_source: str | None = None
     if institution_balance is not None:

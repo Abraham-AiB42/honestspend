@@ -182,7 +182,8 @@ def test_csv_ending_balance_same_day_newest_first(tmp_path: Path):
         (date_cls(2026, 8, 5), Decimal("980.00")),
         (date_cls(2026, 8, 5), Decimal("1000.00")),
     ]
-    assert ending_balance_from_pairs(pairs) == Decimal("980.00")
+    amts = [Decimal("-20.00"), Decimal("-4.50")]
+    assert ending_balance_from_pairs(pairs, amts) == Decimal("980.00")
 
     s = _session(tmp_path)
     personal = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -210,6 +211,47 @@ def test_csv_ending_balance_same_day_newest_first(tmp_path: Path):
     assert result.ending_balance == "980.00"
     s.refresh(acct)
     assert acct.institution_balance == Decimal("980.00")
+    s.close()
+
+
+def test_csv_ending_balance_same_day_chronological(tmp_path: Path):
+    """Same-day chronological: last row is ending running bal (amount-consistent)."""
+    from financial_os.services.bank_csv import ending_balance_from_pairs, preview_bank_csv
+    from datetime import date as date_cls
+
+    pairs = [
+        (date_cls(2026, 8, 5), Decimal("995.50")),
+        (date_cls(2026, 8, 5), Decimal("975.50")),
+    ]
+    amts = [Decimal("-4.50"), Decimal("-20.00")]
+    assert ending_balance_from_pairs(pairs, amts) == Decimal("975.50")
+
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Chase",
+        current_balance=Decimal("1000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Date,Description,Amount,Balance
+2026-08-05,COFFEE,-4.50,995.50
+2026-08-05,PAY,-20.00,975.50
+"""
+    prev = preview_bank_csv(StringIO(csv_text))
+    assert prev.get("ending_balance") == "975.50"
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+    )
+    assert result.ending_balance == "975.50"
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("975.50")
     s.close()
 
 

@@ -193,6 +193,41 @@ def test_inbox_enter_ending_bal_bal_less_csv(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_inbox_multi_account_enter_ending_bal(tmp_path: Path, monkeypatch):
+    """Two bal-less cash accounts → enter_ending_bal for both."""
+    from financial_os.db import Account, Profile
+
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("1000"))
+    s.flush()
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=personal.id,
+            kind="savings",
+            nickname="Emergency savings",
+            current_balance=Decimal("500"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    s.commit()
+    layout = ensure_inbox_layout()
+    Path(layout["inbox"]).joinpath("Primary-checking.csv").write_text(
+        "Date,Description,Amount\n2026-08-01,A,-1.00\n",
+        encoding="utf-8",
+    )
+    Path(layout["inbox"]).joinpath("Emergency-savings.csv").write_text(
+        "Date,Description,Amount\n2026-08-01,B,-2.00\n",
+        encoding="utf-8",
+    )
+    result = process_inbox(s)
+    enter = [st for st in (result.get("next_steps") or []) if st.get("action") == "enter_ending_bal"]
+    assert len(enter) >= 2
+    aids = {st.get("account_id") for st in enter}
+    assert len(aids) >= 2
+    s.close()
+
+
 def test_inbox_archives_bal_only_ofx(tmp_path: Path, monkeypatch):
     """LEDGERBAL-only OFX (no STMTTRN) still archives and can surface set_books."""
     s = _session(tmp_path, monkeypatch)

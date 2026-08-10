@@ -248,6 +248,8 @@ def process_inbox(
     # account_id -> (abs_drift, drift, books, inst) for set_books aggregation
     drift_by_acct: dict[int, tuple[Decimal, Decimal, str, str]] = {}
     last_success_account_id: int | None = None
+    # Accounts that imported money-in but still lack institution_balance
+    need_ending_accounts: list[int] = []
 
     for meta in files:
         path = Path(meta["path"])
@@ -384,11 +386,26 @@ def process_inbox(
                             )
                     except Exception:
                         pass
+                # Bal-less money-in → enter_ending_bal for this account
+                if not inst_set:
+                    try:
+                        session.refresh(acct)
+                    except Exception:
+                        pass
+                    if acct.institution_balance is None and acct.id not in need_ending_accounts:
+                        need_ending_accounts.append(acct.id)
                 dest = archive_dir() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{path.name}"
                 shutil.move(str(path), str(dest))
                 entry["archived_to"] = str(dest)
             elif res.errors:
                 entry["ok"] = False
+                entry["error"] = entry.get("error") or (
+                    res.errors[0] if res.errors else "Import failed"
+                )
+            elif not money_in:
+                entry["error"] = (
+                    "No transactions or bank balance found — file left in inbox."
+                )
         except Exception as e:
             entry["ok"] = False
             entry["error"] = str(e)
@@ -414,8 +431,9 @@ def process_inbox(
             # Worst absolute drift first
             account_id, pack = max(drift_by_acct.items(), key=lambda kv: kv[1][0])
             _, drift, books_bal, inst_bal = pack
+        elif need_ending_accounts:
+            account_id = need_ending_accounts[0]
         elif last_success_account_id is not None:
-            # Bal-less success: still surface enter_ending_bal for that account
             account_id = last_success_account_id
         total_skipped = sum(int(r.get("skipped_existing") or 0) for r in results)
         next_steps = build_post_import_next_steps(
@@ -430,6 +448,30 @@ def process_inbox(
             institution_balance=inst_bal,
             source="inbox",
         )
+        # Multi-account: extra enter_ending_bal CTAs for other bal-less successes
+        have_enter = {
+            st.get("account_id")
+            for st in next_steps
+            if st.get("action") == "enter_ending_bal"
+        }
+        for aid in need_ending_accounts:
+            if str(aid) in have_enter:
+                continue
+            arow = session.get(Account, aid)
+            if arow is None or arow.institution_balance is not None:
+                continue
+            nick = (arow.nickname or f"Account {aid}")[:40]
+            next_steps.append(
+                {
+                    "action": "enter_ending_bal",
+                    "label": f"Enter bank ending bal · {nick}",
+                    "detail": (
+                        "No Balance/LEDGERBAL in file — type statement ending bal "
+                        "so Safe to spend stays honest."
+                    ),
+                    "account_id": str(aid),
+                }
+            )
 
     ofx_linked = sum(1 for m in match_modes if m == "ofx_acctid")
     return {
