@@ -75,6 +75,38 @@ def test_import_brief_uncategorized(client: TestClient, tmp_path, monkeypatch):
         assert "COFFEE" in (brief["sample_uncategorized"][0] if brief["sample_uncategorized"] else "")
 
 
+def test_import_brief_books_vs_bank_drift(tmp_path: Path):
+    from financial_os.db import Profile
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 'd.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    try:
+        seed_all(s)
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        acct = Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Primary",
+            current_balance=Decimal("100"),
+            institution_balance=Decimal("500"),
+            is_cash_for_ifpp=True,
+        )
+        s.add(acct)
+        s.flush()
+        brief = build_import_brief(s, profile_id=personal.id)
+        assert brief["attention"] == "action"
+        assert brief["primary_action"] == "set_books_from_bank"
+        assert brief["drift_count"] == 1
+        assert brief["account_id"] == acct.id
+    finally:
+        s.close()
+        eng.dispose()
+
+
 def test_post_import_next_steps_uncategorized(tmp_path: Path):
     from financial_os.db import Profile
     from sqlalchemy.orm import sessionmaker

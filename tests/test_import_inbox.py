@@ -106,3 +106,41 @@ def test_inbox_refuses_unmatched_filename(tmp_path: Path, monkeypatch):
     assert "match" in (result["results"][0].get("error") or "").lower()
     assert path.exists()  # not archived on failure
     s.close()
+
+
+def test_inbox_default_only_when_passed(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("1000"))
+    s.commit()
+    from financial_os.db import Account
+
+    acct = s.query(Account).filter(Account.kind == "checking").one()
+    layout = ensure_inbox_layout()
+    path = Path(layout["inbox"]) / "mystery-export.csv"
+    path.write_text(
+        "Date,Description,Amount\n2026-08-01,X,-1.00\n",
+        encoding="utf-8",
+    )
+    # Explicit default allows unmatched
+    result = process_inbox(s, default_account_id=acct.id)
+    assert result["transactions_created"] >= 1
+    assert result["results"][0].get("match_mode") == "default"
+    s.close()
+
+
+def test_inbox_set_books_next_steps(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("500"))
+    s.commit()
+    layout = ensure_inbox_layout()
+    path = Path(layout["inbox"]) / "Primary-checking.csv"
+    path.write_text(
+        "Date,Description,Amount,Balance\n"
+        "2026-08-01,COFFEE,-4.50,995.50\n",
+        encoding="utf-8",
+    )
+    result = process_inbox(s)
+    assert result["transactions_created"] >= 1
+    actions = {st.get("action") for st in result.get("next_steps") or []}
+    assert "set_books_from_bank" in actions
+    s.close()

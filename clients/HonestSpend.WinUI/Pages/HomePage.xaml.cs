@@ -16,6 +16,7 @@ public sealed partial class HomePage : Page
     private string _nextAction = "hold";
     private string _ritualNextAction = "hold";
     private string _booksAction = "hold";
+    private int? _booksAccountId;
     private int? _promoAccountId;
     private string _monthCloseAction = "hold";
     private int? _monthCloseAccountId;
@@ -103,6 +104,10 @@ public sealed partial class HomePage : Page
                 NextReason.Text = JsonUi.Str(next, "reason");
                 NextBtn.Content = JsonUi.Str(next, "button_label", "Continue");
                 _nextAction = JsonUi.Str(next, "action", "hold");
+                if (next.TryGetProperty("params", out var nparams) && nparams.ValueKind == JsonValueKind.Object
+                    && nparams.TryGetProperty("account_id", out var naid)
+                    && naid.ValueKind == JsonValueKind.Number)
+                    _booksAccountId = naid.GetInt32();
                 var disc = JsonUi.Str(next, "disclaimer", "");
                 NextDisclaimer.Text = string.IsNullOrEmpty(disc) || disc == "—" ? "" : disc;
                 NextDisclaimer.Visibility = string.IsNullOrEmpty(NextDisclaimer.Text)
@@ -127,8 +132,9 @@ public sealed partial class HomePage : Page
             if (alerts.Count == 0) alerts.Add("All clear — no action queue.");
             AlertList.ItemsSource = alerts;
 
-            // Live books / import brief (dream H1-A1)
+            // Live books / import brief (dream H1-A1) — includes books≠bank honesty
             _booksAction = "hold";
+            _booksAccountId = null;
             if (_home.TryGetProperty("books_brief", out var books) && books.ValueKind == JsonValueKind.Object)
             {
                 var attn = JsonUi.Str(books, "attention", "clear");
@@ -141,6 +147,8 @@ public sealed partial class HomePage : Page
                     BooksReason.Text = JsonUi.Str(books, "reason");
                     _booksAction = JsonUi.Str(books, "primary_action", "review");
                     BooksBtn.Content = JsonUi.Str(books, "button_label", "Continue");
+                    if (books.TryGetProperty("account_id", out var baid) && baid.ValueKind == JsonValueKind.Number)
+                        _booksAccountId = baid.GetInt32();
                     var samples = new List<string>();
                     if (books.TryGetProperty("sample_uncategorized", out var sa) && sa.ValueKind == JsonValueKind.Array)
                     {
@@ -414,8 +422,36 @@ public sealed partial class HomePage : Page
         DoNext_Click(sender, e);
     }
 
-    private void Books_Click(object sender, RoutedEventArgs e)
+    private async Task TrustBooksFromBankAsync()
     {
+        try
+        {
+            if (_booksAccountId is not int aid)
+            {
+                Frame?.Navigate(typeof(ImportPage));
+                return;
+            }
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.ReconcileTrustAsync(aid, "institution");
+            PromoMsg.Text =
+                $"Safe to spend updated · books ${JsonUi.Str(res, "books_balance")} (trusted bank).";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void Books_Click(object sender, RoutedEventArgs e)
+    {
+        if (_booksAction is "set_books_from_bank")
+        {
+            await TrustBooksFromBankAsync();
+            return;
+        }
         _nextAction = _booksAction switch
         {
             "review" => "review",
@@ -689,6 +725,9 @@ public sealed partial class HomePage : Page
                 break;
             case "import":
                 Frame?.Navigate(typeof(ImportPage));
+                break;
+            case "set_books_from_bank":
+                _ = TrustBooksFromBankAsync();
                 break;
             case "promo_sink":
             case "promo_balloon":

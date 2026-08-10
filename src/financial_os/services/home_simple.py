@@ -97,9 +97,6 @@ def build_home_simple(
     from financial_os.services.import_reminders import build_import_reminder
 
     import_rem = build_import_reminder(session, as_of=as_of)
-    do_this = _do_this_next(ifpp, desk, alerts, wealth, cash, import_rem=import_rem)
-    plain_alerts = [_plain_alert(a) for a in alerts[:3]]
-
     sc = ifpp_d.get("ifpp_scope") or "entity"
     pid = ifpp_d.get("profile_id")
     who_name = _who_name(session, pid)
@@ -119,6 +116,10 @@ def build_home_simple(
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
+    do_this = _do_this_next(
+        ifpp, desk, alerts, wealth, cash, import_rem=import_rem, books=books
+    )
+    plain_alerts = [_plain_alert(a) for a in alerts[:3]]
     fees = build_fee_brief(
         session,
         profile_id=pid if sc == "entity" else None,
@@ -293,6 +294,19 @@ def _enrich_ritual(
 ) -> dict[str, Any]:
     """Fold live-books + fee state into the 3-minute checklist."""
     steps = list(ritual.get("steps") or [])
+    # Inject books≠bank honesty after sort_charges when drift present
+    if books.get("primary_action") == "set_books_from_bank" and int(books.get("drift_count") or 0) > 0:
+        steps.insert(
+            1,
+            {
+                "id": "books_match_bank",
+                "title": books.get("title") or "Books ≠ bank",
+                "done": False,
+                "action": "set_books_from_bank",
+                "detail": books.get("reason") or "Set Safe to spend from bank ending bal.",
+                "account_id": books.get("account_id"),
+            },
+        )
     # Update fees_ok from fee_brief (stronger than digest alone)
     for step in steps:
         if step.get("id") == "fees_ok" and fees.get("needs_attention"):
@@ -416,6 +430,7 @@ def _do_this_next(
     wealth: list[dict],
     cash: Decimal,
     import_rem: dict[str, Any] | None = None,
+    books: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     head = desk.get("headline") or {}
 
@@ -434,6 +449,18 @@ def _do_this_next(
                 "Delay optional bills if allowed",
             ],
             "priority": "fiscal",
+        }
+
+    # Books ≠ bank (honesty) — after red-now, before soft tips
+    if books and books.get("primary_action") == "set_books_from_bank":
+        return {
+            "title": books.get("title") or "Books ≠ bank",
+            "reason": books.get("reason") or "Set Safe to spend from bank ending balance.",
+            "action": "set_books_from_bank",
+            "button_label": books.get("button_label") or "Set Safe to spend from bank",
+            "params": {"account_id": books.get("account_id")},
+            "alternatives": ["Import → Set Safe to spend from bank", "Sort charges first if needed"],
+            "priority": "books",
         }
 
     # Critical fee / promo

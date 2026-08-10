@@ -10,6 +10,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from decimal import Decimal
+
 from financial_os.config import settings
 from financial_os.db import Account
 from financial_os.services.bank_csv import import_bank_csv
@@ -153,14 +155,22 @@ def resolve_account_for_file(
             matched = match_account_by_ofx_acctid(session, meta.get("acctid"))
             if matched is not None:
                 return matched, 100, "ofx_acctid"
-            # last-4 of ACCTID vs nickname / external_id
+            # last-4 only when exactly one account matches (avoid wrong-card poison)
             if meta.get("acctid"):
                 last4 = re.sub(r"\D+", "", meta["acctid"])[-4:]
                 if last4:
-                    for a in accounts:
-                        blob = f"{a.nickname or ''} {a.institution or ''} {a.external_id or ''}"
-                        if last4 in re.sub(r"\D+", "", blob):
-                            return a, 40, "ofx_last4"
+                    hits = [
+                        a
+                        for a in accounts
+                        if last4
+                        in re.sub(
+                            r"\D+",
+                            "",
+                            f"{a.nickname or ''}{a.institution or ''}{a.external_id or ''}",
+                        )
+                    ]
+                    if len(hits) == 1:
+                        return hits[0], 40, "ofx_last4"
         except Exception:
             pass
 
@@ -218,6 +228,8 @@ def process_inbox(
     any_ok = False
     profile_ids: set[int] = set()
     match_modes: list[str] = []
+    # account_id -> (abs_drift, drift, books, inst) for set_books aggregation
+    drift_by_acct: dict[int, tuple[Decimal, Decimal, str, str]] = {}
 
     for meta in files:
         path = Path(meta["path"])
@@ -300,6 +312,9 @@ def process_inbox(
                     )
                 entry["format"] = "csv"
                 entry["rows_scanned"] = res.rows_scanned
+                if getattr(res, "ending_balance", None):
+                    entry["ledger_balance"] = res.ending_balance
+                    entry["drift"] = res.drift
 
             entry["ok"] = not res.errors or res.transactions_created > 0
             entry["transactions_created"] = res.transactions_created
@@ -307,11 +322,32 @@ def process_inbox(
             entry["skipped_bad"] = res.skipped_bad
             entry["categorized"] = res.categorized
             entry["errors"] = res.errors[:5]
+            entry["next_steps"] = list(getattr(res, "next_steps", None) or [])
             if res.transactions_created or res.skipped_existing:
                 any_ok = True
                 total_created += res.transactions_created
                 total_categorized += int(res.categorized or 0)
                 profile_ids.add(acct.profile_id)
+                # Track worst drift for set_books aggregation
+                raw_drift = getattr(res, "drift", None) or entry.get("drift")
+                books_b = getattr(res, "books_balance", None)
+                inst_b = (
+                    getattr(res, "ledger_balance", None)
+                    or getattr(res, "ending_balance", None)
+                    or entry.get("ledger_balance")
+                )
+                if raw_drift is not None and inst_b is not None:
+                    try:
+                        dval = Decimal(str(raw_drift))
+                        if abs(dval) >= Decimal("0.01"):
+                            drift_by_acct[acct.id] = (
+                                abs(dval),
+                                dval,
+                                str(books_b or ""),
+                                str(inst_b),
+                            )
+                    except Exception:
+                        pass
                 dest = archive_dir() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{path.name}"
                 shutil.move(str(path), str(dest))
                 entry["archived_to"] = str(dest)
@@ -333,13 +369,24 @@ def process_inbox(
     if any_ok and not dry_run and profile_ids:
         from financial_os.services.import_brief import build_post_import_next_steps
 
-        # Prefer the first touched profile; books brief is per-entity
         pid = sorted(profile_ids)[0]
+        account_id = None
+        drift: Decimal | None = None
+        books_bal: str | None = None
+        inst_bal: str | None = None
+        if drift_by_acct:
+            # Worst absolute drift first
+            account_id, pack = max(drift_by_acct.items(), key=lambda kv: kv[1][0])
+            _, drift, books_bal, inst_bal = pack
         next_steps = build_post_import_next_steps(
             session,
             profile_id=pid,
+            account_id=account_id,
             created=total_created,
             categorized=total_categorized,
+            drift=drift,
+            books_balance=books_bal,
+            institution_balance=inst_bal,
             source="inbox",
         )
 

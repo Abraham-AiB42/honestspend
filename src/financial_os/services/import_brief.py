@@ -81,15 +81,39 @@ def build_import_brief(
         if ts < cutoff:
             stale += 1
 
-    # Has any cash account? (for “link bank” soft tip)
+    # Cash IFPP books vs bank ending bal (honesty)
     aq = session.query(Account).filter(Account.archived_at.is_(None))
     if profile_id is not None:
         aq = aq.filter(Account.profile_id == profile_id)
+    accounts = aq.all()
     has_cash = any(
-        a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp for a in aq.all()
+        a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp for a in accounts
     )
+    drift_rows: list[dict[str, Any]] = []
+    for a in accounts:
+        if not (a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp):
+            continue
+        if a.institution_balance is None:
+            continue
+        books = _d(a.current_balance)
+        inst = _d(a.institution_balance)
+        d = (books - inst).quantize(Decimal("0.01"))
+        if abs(d) >= Decimal("0.01"):
+            drift_rows.append(
+                {
+                    "account_id": a.id,
+                    "nickname": a.nickname,
+                    "books_balance": str(books),
+                    "institution_balance": str(inst),
+                    "drift": str(d),
+                }
+            )
+    drift_rows.sort(key=lambda r: abs(Decimal(r["drift"])), reverse=True)
+    drift_count = len(drift_rows)
+    top_drift = drift_rows[0] if drift_rows else None
 
-    # Attention level for Simple card
+    # Attention: honesty before optional tips
+    set_books_account_id: int | None = None
     if needs_reauth:
         attention = "action"
         title = "Bank needs re-connect"
@@ -102,6 +126,20 @@ def build_import_brief(
         reason = "Uncategorized charges make tax and reports fuzzy. Accept categories in Sort charges."
         primary_action = "review"
         button = "Sort charges"
+    elif drift_count > 0 and top_drift is not None:
+        attention = "action"
+        title = (
+            f"Books ≠ bank · {top_drift['nickname']}"
+            if drift_count == 1
+            else f"{drift_count} accounts: books ≠ bank"
+        )
+        reason = (
+            f"Books ${top_drift['books_balance']} vs bank ${top_drift['institution_balance']} "
+            f"(Δ ${top_drift['drift']}). One tap sets Safe to spend from bank."
+        )
+        primary_action = "set_books_from_bank"
+        button = "Set Safe to spend from bank"
+        set_books_account_id = int(top_drift["account_id"])
     elif pending_count > 0 and pending_out >= Decimal("100"):
         attention = "watch"
         title = f"{pending_count} pending · ${pending_out.quantize(Decimal('0.01'))} out"
@@ -122,10 +160,10 @@ def build_import_brief(
         button = "Done"
     elif not linked and has_cash:
         attention = "optional"
-        title = "Optional: link a bank"
-        reason = "Manual balances work. Link bank or Import CSV when you want less typing."
-        primary_action = "plaid"
-        button = "Link bank"
+        title = "Optional: import bank file"
+        reason = "Manual balances work. Import CSV/OFX when you want less typing."
+        primary_action = "import"
+        button = "Import"
     else:
         attention = "clear"
         title = "No import queue"
@@ -139,6 +177,7 @@ def build_import_brief(
         "reason": reason,
         "primary_action": primary_action,
         "button_label": button,
+        "account_id": set_books_account_id,
         "uncategorized_count": uncat,
         "pending_count": pending_count,
         "pending_outflows_abs": str(pending_out.quantize(Decimal("0.01"))),
@@ -150,6 +189,8 @@ def build_import_brief(
         "plaid_needs_reauth": needs_reauth,
         "plaid_stale": stale,
         "has_cash": has_cash,
+        "drift_count": drift_count,
+        "drift_accounts": drift_rows[:5],
         "needs_attention": attention in ("action", "watch"),
     }
 

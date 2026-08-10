@@ -198,8 +198,10 @@ public sealed partial class ImportPage : Page
         HideNextSteps();
         try
         {
+            // Only pass default when user opts in — silent default poisons wrong accounts
             int? defaultAcct = null;
-            if (AccountBox.SelectedItem is ComboBoxItem { Tag: int id })
+            if (InboxUseSelectedAccountBox.IsChecked == true
+                && AccountBox.SelectedItem is ComboBoxItem { Tag: int id })
                 defaultAcct = id;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();

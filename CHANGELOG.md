@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.19 — Inbox honesty closeout · Home books≠bank
+
+- Inbox: aggregate **set_books_from_bank** next_steps (worst drift account)
+- WinUI: unmatched files **refused by default** (opt-in “use Target account”)
+- OFX last-4 match only when **unique**
+- Home **books_brief** + Do this next + 3-min ritual when cash books ≠ bank ending bal
+- One-tap trust from Home (Do this next / After import card)
+
 ## 1.0.18 — Open-rarely Home · reliable Release publish
 
 - Home: hide **month-close** when period closed; hide **tax year** when complete; compact **3-min ritual** when all clear

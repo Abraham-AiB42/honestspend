@@ -45,8 +45,11 @@
                                 Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Refresh" Click="RefreshInbox_Click" />
                     </StackPanel>
+                    <CheckBox x:Name="InboxUseSelectedAccountBox"
+                              Content="Unmatched files → use Target account below (off = refuse unmatched)"
+                              IsChecked="False" />
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Tip: name files with account nicknames (e.g. Primary-checking.csv). Daily task HonestSpend-ImportInbox can run this automatically." />
+                        Text="Name files with account nicknames (e.g. Primary-checking.csv). Unmatched files are refused unless you opt in above." />
                 </StackPanel>
             </Border>
 
