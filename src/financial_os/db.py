@@ -278,6 +278,54 @@ class WhatIfScenario(Base):
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class BudgetRule(Base):
+    """Period budget plan per entity (profile) + category.
+
+    period: daily | weekly | monthly
+    active_weekdays: bitmask Mon=bit0 … Sun=bit6 (Python date.weekday())
+    """
+
+    __tablename__ = "budget_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
+    name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    period: Mapped[str] = mapped_column(String(16), default="monthly")  # daily|weekly|monthly
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    # Mon–Fri default: bits 0..4 = 31
+    active_weekdays: Mapped[int] = mapped_column(Integer, default=31)
+    week_starts_on: Mapped[int] = mapped_column(Integer, default=0)  # 0=Mon … 6=Sun
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(32), default="manual")  # manual|suggested|accepted_suggestion
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(tz=None)
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    category: Mapped[Category] = relationship()
+
+
+class BudgetAdjustment(Base):
+    """Temporary cut / skip that frees budget reserve for Safe to spend."""
+
+    __tablename__ = "budget_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    budget_rule_id: Mapped[int] = mapped_column(ForeignKey("budget_rules.id"), index=True)
+    profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"), index=True)
+    # skip_workdays | scale_remaining | release_remaining
+    kind: Mapped[str] = mapped_column(String(32))
+    params_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    applies_from: Mapped[date] = mapped_column(Date)
+    applies_to: Mapped[date] = mapped_column(Date)
+    note: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(tz=None)
+    )
+
+
 class CategoryRule(Base):
     """Merchant/payee pattern → category. Priority: higher wins first."""
 
@@ -357,6 +405,11 @@ class AppSettings(Base):
     # Month-close ritual (YYYY-MM + timestamp when user marked closed)
     month_close_period: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
     month_close_last_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Period budgets: reserve remaining into Safe to spend (Excel Budget.xlsx parity)
+    budget_reserve_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    budget_week_starts_on: Mapped[int] = mapped_column(Integer, default=0)  # 0=Mon
+    # Mon–Fri default bitmask
+    budget_workdays: Mapped[int] = mapped_column(Integer, default=31)
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:

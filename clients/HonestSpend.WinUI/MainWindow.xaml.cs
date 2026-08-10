@@ -358,6 +358,7 @@ public sealed partial class MainWindow : Window
             case "entities": NavFrame.Navigate(typeof(EntitiesPage)); break;
             case "accounts": NavFrame.Navigate(typeof(AccountsPage)); break;
             case "ledger": NavFrame.Navigate(typeof(LedgerPage)); break;
+            case "budgets": NavFrame.Navigate(typeof(BudgetsPage)); break;
             case "review": NavFrame.Navigate(typeof(ReviewPage)); break;
             case "rules": NavFrame.Navigate(typeof(RulesPage)); break;
             case "import": NavFrame.Navigate(typeof(ImportPage)); break;

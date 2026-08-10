@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -191,6 +191,62 @@ def _mig_12_month_close(conn) -> None:
     _exec_ignore(conn, "ALTER TABLE app_settings ADD COLUMN month_close_last_at DATETIME")
 
 
+def _mig_13_budgets(conn) -> None:
+    """Period budgets (daily/weekly/monthly) + cuts + Safe to spend reserve."""
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS budget_rules ("
+            "id INTEGER PRIMARY KEY,"
+            "profile_id INTEGER NOT NULL,"
+            "category_id INTEGER NOT NULL,"
+            "name VARCHAR(128),"
+            "period VARCHAR(16) DEFAULT 'monthly',"
+            "amount NUMERIC(14,2) DEFAULT 0,"
+            "active_weekdays INTEGER DEFAULT 31,"
+            "week_starts_on INTEGER DEFAULT 0,"
+            "active BOOLEAN DEFAULT 1,"
+            "source VARCHAR(32) DEFAULT 'manual',"
+            "notes TEXT,"
+            "created_at DATETIME,"
+            "updated_at DATETIME)"
+        )
+    )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS budget_adjustments ("
+            "id INTEGER PRIMARY KEY,"
+            "budget_rule_id INTEGER NOT NULL,"
+            "profile_id INTEGER NOT NULL,"
+            "kind VARCHAR(32) NOT NULL,"
+            "params_json TEXT,"
+            "applies_from DATE NOT NULL,"
+            "applies_to DATE NOT NULL,"
+            "note VARCHAR(256),"
+            "created_at DATETIME)"
+        )
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN budget_reserve_enabled BOOLEAN DEFAULT 1",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN budget_week_starts_on INTEGER DEFAULT 0",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN budget_workdays INTEGER DEFAULT 31",
+    )
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_budget_rules_profile ON budget_rules(profile_id)",
+    )
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_budget_rules_cat ON budget_rules(category_id)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -205,6 +261,7 @@ MIGRATIONS: dict[int, Callable] = {
     10: _mig_10_whatif_scenarios,
     11: _mig_11_import_reminders,
     12: _mig_12_month_close,
+    13: _mig_13_budgets,
 }
 
 

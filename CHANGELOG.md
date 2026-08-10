@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.34 — Period budgets (daily / weekly / monthly)
+
+- **Budget rules** per entity: daily (workdays), weekly, monthly — Excel Budget.xlsx parity
+- **History suggestions**: trailing ~90 workdays / 24 weeks / 18 months (avg + median + trend)
+- **Safe to spend** subtracts remaining budget reserve (no double-count)
+- **Cuts**: skip N workdays, scale weekly remaining, release monthly — frees reserve
+- **API**: `/api/budgets*`, status, suggestions, cuts
+- **WinUI**: Full books **Budgets** page; Simple Home budget summary + cut chips
+- Schema v13: `budget_rules`, `budget_adjustments`, reserve settings
+- No carryover between periods (by design)
+
 ## 1.0.33 — Store license path + Simple Home polish
 
 - **Store license**: MSIX/packaged client sets `FOS_LICENSE_ENFORCE=1`; `StoreLicenseService` checks Microsoft Store and posts to `POST /api/license/store`

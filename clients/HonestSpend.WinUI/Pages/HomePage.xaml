@@ -39,13 +39,26 @@
                     <StackPanel Spacing="6">
                         <TextBlock Opacity="0.7" FontSize="13" Text="Safe to spend" />
                         <TextBlock Opacity="0.55" FontSize="12" TextWrapping="Wrap"
-                            Text="What you can use today after bills, buffer, and set-asides" />
+                            Text="After bills, buffer, tax vault, and remaining budgets (reserved)" />
                         <TextBlock x:Name="SafeText" FontSize="48" FontWeight="SemiBold"
                                    Margin="0,4,0,0" Text="—" />
+                        <TextBlock x:Name="BudgetReserveLine" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                         <TextBlock x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />
                         <TextBlock x:Name="RiskLine" Opacity="0.8" TextWrapping="Wrap" Margin="0,4,0,0" />
                         <TextBlock x:Name="PendingLine" Opacity="0.75" TextWrapping="Wrap" Foreground="Orange" />
                         <TextBlock x:Name="WhoLine" Opacity="0.55" FontSize="12" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="BudgetCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Opacity="0.7" Text="Budgets this period" />
+                        <ItemsControl x:Name="BudgetSummaryList" />
+                        <ItemsControl x:Name="BudgetCutList" />
+                        <Button Content="Manage budgets" HorizontalAlignment="Left" Click="BudgetsManage_Click" />
                     </StackPanel>
                 </Border>
 

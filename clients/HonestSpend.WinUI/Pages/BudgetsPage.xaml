@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.BudgetsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="720">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Budgets" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Daily (workdays), weekly, and monthly plans. Remaining reserves Safe to spend. History drives suggestions." />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
+            </Grid>
+
+            <InfoBar x:Name="MsgBar" IsOpen="False" IsClosable="True" Severity="Informational" />
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Safe to spend reserve" />
+                    <TextBlock x:Name="ReserveText" Opacity="0.85" TextWrapping="Wrap" Text="…" />
+                    <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                        Text="Unused budget remaining is reserved so it is not counted twice as free cash. Cuts free reserve deliberately." />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Daily" />
+            <ItemsControl x:Name="DailyList" />
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Weekly" />
+            <ItemsControl x:Name="WeeklyList" />
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Monthly" />
+            <ItemsControl x:Name="MonthlyList" />
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock FontWeight="SemiBold" Text="Add / update budget" />
+                    <ComboBox x:Name="CategoryBox" Header="Category" HorizontalAlignment="Stretch" />
+                    <ComboBox x:Name="PeriodBox" Header="Period" SelectedIndex="2" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="Daily (workdays)" Tag="daily" />
+                        <ComboBoxItem Content="Weekly" Tag="weekly" />
+                        <ComboBoxItem Content="Monthly" Tag="monthly" IsSelected="True" />
+                    </ComboBox>
+                    <TextBox x:Name="AmountBox" Header="Plan amount ($)" PlaceholderText="e.g. 26" />
+                    <TextBox x:Name="NameBox" Header="Name (optional)" PlaceholderText="e.g. Lunch / Food" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Save budget" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Load suggestions" Click="Suggest_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Suggestions from history" />
+            <TextBlock Opacity="0.7" FontSize="12" TextWrapping="Wrap"
+                Text="Trailing averages: ~90 workdays · 24 weeks · 18 months. Accept to set plan." />
+            <ItemsControl x:Name="SuggestList" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Free cash (cuts)" />
+            <ItemsControl x:Name="CutList" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

@@ -79,6 +79,7 @@ public sealed partial class HomePage : Page
             _home = await api.GetHomeSimpleAsync();
 
             SafeText.Text = Money(_home, "safe_to_spend");
+            ApplyBudgetSummary(_home);
             var status = JsonUi.Str(_home, "status", "safe");
             StatusLine.Text = JsonUi.Str(_home, "status_label", status);
             StatusLine.Foreground = status switch
@@ -485,6 +486,61 @@ public sealed partial class HomePage : Page
             mw.NavigatePublic("license");
         else
             Frame?.Navigate(typeof(LicensePage));
+    }
+
+    private void BudgetsManage_Click(object sender, RoutedEventArgs e)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("budgets");
+        else
+            Frame?.Navigate(typeof(BudgetsPage));
+    }
+
+    private void ApplyBudgetSummary(JsonElement home)
+    {
+        var reserve = JsonUi.Str(home, "budget_reserve", "0");
+        var before = JsonUi.Str(home, "safe_to_spend_before_budgets", "");
+        if (!string.IsNullOrEmpty(reserve) && reserve != "0" && reserve != "0.00" && reserve != "—")
+        {
+            BudgetReserveLine.Text = string.IsNullOrEmpty(before) || before == "—"
+                ? $"${reserve} held in category budgets"
+                : $"${reserve} in budgets (was ${before} before reserve)";
+            BudgetReserveLine.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            BudgetReserveLine.Text = "";
+            BudgetReserveLine.Visibility = Visibility.Collapsed;
+        }
+
+        var lines = new List<string>();
+        var cuts = new List<string>();
+        if (home.TryGetProperty("budgets", out var b) && b.ValueKind == JsonValueKind.Object)
+        {
+            if (b.TryGetProperty("summary", out var sum) && sum.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var it in sum.EnumerateArray())
+                {
+                    lines.Add(
+                        $"{JsonUi.Str(it, "name")} ({JsonUi.Str(it, "period")}): " +
+                        $"${JsonUi.Str(it, "remaining")} left of ${JsonUi.Str(it, "plan")}");
+                }
+            }
+            if (b.TryGetProperty("cut_offers", out var co) && co.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var o in co.EnumerateArray())
+                {
+                    cuts.Add($"{JsonUi.Str(o, "label")} · free ${JsonUi.Str(o, "free_amount")}");
+                    if (cuts.Count >= 3)
+                        break;
+                }
+            }
+        }
+        BudgetSummaryList.ItemsSource = lines;
+        BudgetCutList.ItemsSource = cuts;
+        BudgetCard.Visibility = lines.Count > 0 || cuts.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     private static bool ShouldShowBankTip()

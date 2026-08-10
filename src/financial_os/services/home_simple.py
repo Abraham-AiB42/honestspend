@@ -45,7 +45,13 @@ def build_home_simple(
     dig = build_digest(session, as_of=as_of, profile_id=profile_id, scope=scope)
     desk = build_capital_desk(session, as_of=as_of, profile_id=profile_id, scope=scope)
 
-    cash = _d(ifpp.cash_spendable)
+    cash_raw = _d(ifpp.cash_spendable)
+    # Period budgets: reserve remaining envelopes so Safe to spend doesn't double-count
+    from financial_os.services.budget_service import budget_reserve_total, home_budget_payload
+
+    budgets = home_budget_payload(session, profile_id=profile_id, as_of=as_of)
+    reserve = budget_reserve_total(session, profile_id=profile_id, as_of=as_of)
+    cash = max(ZERO, cash_raw - reserve)
     is_red = bool(ifpp.is_red_now)
     alerts = dig.get("alerts") or []
     critical = [a for a in alerts if a.get("level") in ("critical", "warn")]
@@ -147,8 +153,13 @@ def build_home_simple(
     return {
         "as_of": as_of.isoformat(),
         "safe_to_spend": str(cash.quantize(Decimal("0.01"))),
+        "safe_to_spend_before_budgets": str(cash_raw.quantize(Decimal("0.01"))),
+        "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+        "budgets": budgets,
         "can_charge_no_interest": str(_d(ifpp.card_float_interest_free).quantize(Decimal("0.01"))),
-        "total_power": str(_d(ifpp.combined_purchasing_power).quantize(Decimal("0.01"))),
+        "total_power": str(
+            (cash + _d(ifpp.card_float_interest_free)).quantize(Decimal("0.01"))
+        ),
         "status": status,
         "status_label": status_label,
         "next_risk_day": ifpp.next_red_day.isoformat() if ifpp.next_red_day else None,

@@ -587,6 +587,178 @@ def license_store(body: LicenseStoreIn):
     )
 
 
+# --- Period budgets (daily / weekly / monthly) ---
+
+
+class BudgetRuleIn(BaseModel):
+    profile_id: int
+    category_id: int
+    period: str = "monthly"  # daily|weekly|monthly
+    amount: Decimal
+    name: str | None = None
+    active_weekdays: int | None = None
+    week_starts_on: int | None = None
+    source: str = "manual"
+    notes: str | None = None
+
+
+class BudgetAcceptSuggestionIn(BaseModel):
+    profile_id: int
+    category_id: int
+    period: str
+    amount: Decimal | None = None  # default = engine suggestion
+    name: str | None = None
+    active_weekdays: int | None = None
+
+
+class BudgetCutIn(BaseModel):
+    budget_rule_id: int
+    kind: str
+    params: dict | None = None
+    note: str | None = None
+
+
+@app.get("/api/budgets")
+def budgets_list(profile_id: int | None = None, db: Session = Depends(get_db)):
+    from financial_os.services.budget_service import list_rules
+
+    rows = list_rules(db, profile_id)
+    out = []
+    for r in rows:
+        out.append(
+            {
+                "id": r.id,
+                "profile_id": r.profile_id,
+                "category_id": r.category_id,
+                "name": r.name,
+                "period": r.period,
+                "amount": str(r.amount),
+                "active_weekdays": r.active_weekdays,
+                "week_starts_on": r.week_starts_on,
+                "active": r.active,
+                "source": r.source,
+                "notes": r.notes,
+            }
+        )
+    return {"items": out}
+
+
+@app.get("/api/budgets/status")
+def budgets_status_api(
+    profile_id: int | None = None,
+    as_of: date | None = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.budget_service import budgets_status
+
+    return budgets_status(db, profile_id=profile_id, as_of=as_of)
+
+
+@app.get("/api/budgets/suggestions")
+def budgets_suggestions_api(
+    profile_id: int | None = None,
+    as_of: date | None = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.budget_service import suggestions
+
+    return suggestions(db, profile_id=profile_id, as_of=as_of)
+
+
+@app.post("/api/budgets")
+def budgets_create(body: BudgetRuleIn, db: Session = Depends(get_db)):
+    from financial_os.services.budget_service import create_rule
+
+    try:
+        rule = create_rule(
+            db,
+            profile_id=body.profile_id,
+            category_id=body.category_id,
+            period=body.period,
+            amount=body.amount,
+            name=body.name,
+            active_weekdays=body.active_weekdays,
+            week_starts_on=body.week_starts_on,
+            source=body.source,
+            notes=body.notes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {
+        "id": rule.id,
+        "profile_id": rule.profile_id,
+        "category_id": rule.category_id,
+        "period": rule.period,
+        "amount": str(rule.amount),
+        "name": rule.name,
+        "source": rule.source,
+    }
+
+
+@app.post("/api/budgets/suggestions/accept")
+def budgets_accept_suggestion(body: BudgetAcceptSuggestionIn, db: Session = Depends(get_db)):
+    from financial_os.services.budget_service import create_rule, suggest_for_category
+
+    amt = body.amount
+    if amt is None:
+        sug = suggest_for_category(
+            db,
+            profile_id=body.profile_id,
+            category_id=body.category_id,
+            period=body.period,
+        )
+        amt = Decimal(sug["suggested_amount"])
+    rule = create_rule(
+        db,
+        profile_id=body.profile_id,
+        category_id=body.category_id,
+        period=body.period,
+        amount=amt,
+        name=body.name,
+        active_weekdays=body.active_weekdays,
+        source="accepted_suggestion",
+    )
+    return {"id": rule.id, "amount": str(rule.amount), "period": rule.period}
+
+
+@app.get("/api/budgets/cuts")
+def budgets_cuts_preview(
+    profile_id: int | None = None,
+    as_of: date | None = None,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.budget_service import preview_cuts
+
+    return {"offers": preview_cuts(db, profile_id=profile_id, as_of=as_of)}
+
+
+@app.post("/api/budgets/cuts/apply")
+def budgets_cuts_apply(body: BudgetCutIn, db: Session = Depends(get_db)):
+    from financial_os.services.budget_service import apply_cut
+
+    try:
+        return apply_cut(
+            db,
+            budget_rule_id=body.budget_rule_id,
+            kind=body.kind,
+            params=body.params,
+            note=body.note,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.delete("/api/budgets/{rule_id}")
+def budgets_delete(rule_id: int, db: Session = Depends(get_db)):
+    from financial_os.db import BudgetRule
+
+    row = db.get(BudgetRule, rule_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    row.active = False
+    return {"ok": True}
+
+
 @app.post("/api/license/clear")
 def license_clear():
     from financial_os.services.license_service import clear_license

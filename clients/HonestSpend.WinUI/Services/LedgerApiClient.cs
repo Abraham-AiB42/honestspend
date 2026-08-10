@@ -513,6 +513,52 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> PutCreditProfileAsync(object body, CancellationToken ct = default)
         => PutJsonAsync("api/credit/profile", body, ct);
 
+    public Task<JsonElement> GetBudgetStatusAsync(int? profileId = null, CancellationToken ct = default)
+    {
+        var q = "api/budgets/status";
+        var pid = profileId ?? AppState.SelectedProfileId;
+        if (pid is not null)
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> GetBudgetSuggestionsAsync(int? profileId = null, CancellationToken ct = default)
+    {
+        var q = "api/budgets/suggestions";
+        var pid = profileId ?? AppState.SelectedProfileId;
+        if (pid is not null)
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> GetBudgetCutsAsync(int? profileId = null, CancellationToken ct = default)
+    {
+        var q = "api/budgets/cuts";
+        var pid = profileId ?? AppState.SelectedProfileId;
+        if (pid is not null)
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> CreateBudgetAsync(
+        int profileId,
+        int categoryId,
+        string period,
+        decimal amount,
+        string? name = null,
+        CancellationToken ct = default)
+        => PostJsonAsync(
+            "api/budgets",
+            new
+            {
+                profile_id = profileId,
+                category_id = categoryId,
+                period,
+                amount,
+                name,
+            },
+            ct);
+
     public Task<JsonElement> GetLicenseAsync(CancellationToken ct = default)
         => GetJsonAsync("api/license", ct);
 
