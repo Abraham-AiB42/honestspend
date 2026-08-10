@@ -154,6 +154,13 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
             continue
 
         bal0 = Decimal(str(current or 0))
+        avail0: Decimal | None = None
+        if kind == "credit":
+            if available is not None:
+                avail0 = Decimal(str(available))
+            elif limit is not None and current is not None:
+                # Mirror existing-account fallback so first link is honest
+                avail0 = Decimal(str(limit)) - Decimal(str(current))
         row = Account(
             profile_id=item.profile_id,
             kind=kind,
@@ -162,7 +169,7 @@ def _sync_accounts(session: Session, item: PlaidItem) -> list[Account]:
             current_balance=bal0,
             institution_balance=bal0 if current is not None else None,
             credit_limit=Decimal(str(limit)) if limit is not None else None,
-            available_credit=Decimal(str(available)) if available is not None and kind == "credit" else None,
+            available_credit=avail0,
             is_cash_for_ifpp=kind in ("checking", "savings"),
             plaid_item_pk=item.id,
             plaid_account_id=plaid_aid,

@@ -253,13 +253,14 @@ def import_statement_pdf(
 
     for r in rows:
         amt = r["amount"]
+        payee = r["payee"]
         if amount_sign == "invert":
             amt = -amt
-        # bank style: expenses negative — if statement shows charges as positive, flip for credit cards
-        if acct.kind == "credit" and amt > 0:
-            # charges increase balance owed → store as negative spend convention
-            amt = -amt
-        payee = r["payee"]
+        elif amount_sign == "bank" and acct.kind == "credit":
+            # Charges → negative; payments (THANK YOU / PAYMENT) → positive
+            from financial_os.services.import_amounts import normalize_credit_import_amount
+
+            amt = normalize_credit_import_amount(amt, payee)
         d = r["txn_date"]
         ext = f"pdf:{account_id}:{d.isoformat()}:{payee[:48]}:{amt}"
         ext = ext[:200]

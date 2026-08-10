@@ -105,10 +105,12 @@ public sealed partial class HomePage : Page
                 NextReason.Text = JsonUi.Str(next, "reason");
                 NextBtn.Content = JsonUi.Str(next, "button_label", "Continue");
                 _nextAction = JsonUi.Str(next, "action", "hold");
-                if (next.TryGetProperty("params", out var nparams) && nparams.ValueKind == JsonValueKind.Object
-                    && nparams.TryGetProperty("account_id", out var naid)
-                    && naid.ValueKind == JsonValueKind.Number)
-                    _booksAccountId = naid.GetInt32();
+                if (next.TryGetProperty("params", out var nparams) && nparams.ValueKind == JsonValueKind.Object)
+                {
+                    var aid = JsonUi.Int(nparams, "account_id", 0);
+                    if (aid > 0)
+                        _booksAccountId = aid;
+                }
                 var disc = JsonUi.Str(next, "disclaimer", "");
                 NextDisclaimer.Text = string.IsNullOrEmpty(disc) || disc == "—" ? "" : disc;
                 NextDisclaimer.Visibility = string.IsNullOrEmpty(NextDisclaimer.Text)
@@ -134,8 +136,10 @@ public sealed partial class HomePage : Page
             AlertList.ItemsSource = alerts;
 
             // Live books / import brief (dream H1-A1) — includes books≠bank honesty
+            // Prefer books_brief.account_id; fall back to do_this_next params / ritual.
             _booksAction = "hold";
             _booksSecondaryAction = "";
+            var doThisAccountId = _booksAccountId;
             _booksAccountId = null;
             BooksSecondaryBtn.Visibility = Visibility.Collapsed;
             if (_home.TryGetProperty("books_brief", out var books) && books.ValueKind == JsonValueKind.Object)
@@ -150,8 +154,9 @@ public sealed partial class HomePage : Page
                     BooksReason.Text = JsonUi.Str(books, "reason");
                     _booksAction = JsonUi.Str(books, "primary_action", "review");
                     BooksBtn.Content = JsonUi.Str(books, "button_label", "Continue");
-                    if (books.TryGetProperty("account_id", out var baid) && baid.ValueKind == JsonValueKind.Number)
-                        _booksAccountId = baid.GetInt32();
+                    var baid = JsonUi.Int(books, "account_id", 0);
+                    if (baid > 0)
+                        _booksAccountId = baid;
                     var sec = JsonUi.Str(books, "secondary_action");
                     var secLabel = JsonUi.Str(books, "secondary_label");
                     if (!string.IsNullOrEmpty(sec) && sec != "—" && !string.IsNullOrEmpty(secLabel) && secLabel != "—")
@@ -176,6 +181,8 @@ public sealed partial class HomePage : Page
             {
                 BooksCard.Visibility = Visibility.Collapsed;
             }
+            if (_booksAccountId is null && doThisAccountId is int dta && dta > 0)
+                _booksAccountId = dta;
 
             // Fee inbox (dream H1-C2) — confirm / dismiss one at a time
             _feeItems.Clear();
@@ -270,14 +277,9 @@ public sealed partial class HomePage : Page
                             if (!done && _monthCloseAction == "hold" && !opt)
                             {
                                 _monthCloseAction = JsonUi.Str(st, "action", "hold");
-                                if (st.TryGetProperty("account_id", out var maid))
-                                {
-                                    if (maid.ValueKind == JsonValueKind.Number)
-                                        _monthCloseAccountId = maid.GetInt32();
-                                    else if (maid.ValueKind == JsonValueKind.String
-                                        && int.TryParse(maid.GetString(), out var maidInt))
-                                        _monthCloseAccountId = maidInt;
-                                }
+                                var maid = JsonUi.Int(st, "account_id", 0);
+                                if (maid > 0)
+                                    _monthCloseAccountId = maid;
                             }
                         }
                     }
@@ -366,7 +368,13 @@ public sealed partial class HomePage : Page
                             var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
                             rLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")} — {JsonUi.Str(st, "detail")}");
                             if (!done && _ritualNextAction == "hold")
+                            {
                                 _ritualNextAction = JsonUi.Str(st, "action", "hold");
+                                // Parity with month-close: capture account_id for one-tap set_books
+                                var raid = JsonUi.Int(st, "account_id", 0);
+                                if (raid > 0)
+                                    _booksAccountId = raid;
+                            }
                         }
                     }
                     RitualList.ItemsSource = rLines;

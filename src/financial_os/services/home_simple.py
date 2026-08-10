@@ -294,7 +294,7 @@ def _enrich_ritual(
 ) -> dict[str, Any]:
     """Fold live-books + fee state into the 3-minute checklist."""
     steps = list(ritual.get("steps") or [])
-    # Inject books≠bank honesty after sort_charges when drift present
+    # Inject books≠bank honesty before sort_charges (after checking_safe) when drift present
     if books.get("primary_action") == "set_books_from_bank" and int(books.get("drift_count") or 0) > 0:
         steps.insert(
             1,

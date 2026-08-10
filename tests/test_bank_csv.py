@@ -246,6 +246,7 @@ def test_credit_csv_positive_charges_as_spend(tmp_path: Path):
         kind="credit",
         nickname="Visa",
         current_balance=Decimal("200"),
+        credit_limit=Decimal("1000"),
         is_cash_for_ifpp=False,
     )
     s.add(acct)
@@ -264,4 +265,46 @@ def test_credit_csv_positive_charges_as_spend(tmp_path: Path):
     assert result.transactions_created == 2
     amts = sorted(float(t.amount) for t in s.query(Transaction).all())
     assert amts == [-45.99, -12.0]
+    s.refresh(acct)
+    # Credit: owed -= amount; charges negative → owed rises 200+45.99+12
+    assert acct.current_balance == Decimal("257.99")
+    assert acct.available_credit == Decimal("742.01")
+    s.close()
+
+
+def test_credit_csv_payment_does_not_inflate_owed(tmp_path: Path):
+    """Payments (even as + or −) must reduce balance owed, not raise it."""
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Visa",
+        current_balance=Decimal("200"),
+        credit_limit=Decimal("1000"),
+        is_cash_for_ifpp=False,
+    )
+    s.add(acct)
+    s.flush()
+    # Issuer-style: charges +, payment − ; plus bank-style payment +
+    csv_text = """Date,Description,Amount
+2026-08-01,AMAZON,45.99
+2026-08-02,PAYMENT THANK YOU,-100.00
+2026-08-03,AUTOPAY PAYMENT,50.00
+"""
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+        amount_sign="bank",
+    )
+    assert result.transactions_created == 3
+    by_payee = {t.payee: float(t.amount) for t in s.query(Transaction).all()}
+    assert by_payee["AMAZON"] == -45.99
+    assert by_payee["PAYMENT THANK YOU"] == 100.0
+    assert by_payee["AUTOPAY PAYMENT"] == 50.0
+    s.refresh(acct)
+    # 200 + 45.99 - 100 - 50 = 95.99
+    assert acct.current_balance == Decimal("95.99")
     s.close()

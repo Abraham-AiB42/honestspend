@@ -198,6 +198,8 @@ def build_month_close(
         recon_action = "hold"
         recon_button = "Reconcile"
 
+    uncat_n = int(books.get("uncategorized_count") or 0)
+    # Honesty before Sort: fees → books≠bank (reconcile) → sort → promo → tax → backup
     steps = [
         {
             "id": "fees",
@@ -208,15 +210,28 @@ def build_month_close(
             "button_label": "Review fees",
         },
         {
+            "id": "reconcile",
+            "title": recon_title,
+            "done": reconcile_done,
+            "action": recon_action,
+            "detail": recon_detail,
+            "button_label": recon_button,
+            "account_id": recon_account_id,
+            "drifted": drifted,
+            "missing_bank_balance": missing_bank_bal,
+        },
+        {
             "id": "sort_charges",
             "title": (
-                f"Sort charges ({books.get('uncategorized_count', 0)})"
-                if books.get("uncategorized_count")
-                else "Charges categorized"
+                f"Sort charges ({uncat_n})" if uncat_n else "Charges categorized"
             ),
-            "done": int(books.get("uncategorized_count") or 0) == 0,
+            "done": uncat_n == 0,
             "action": "review",
-            "detail": books.get("reason") or "",
+            "detail": (
+                f"{uncat_n} uncategorized — accept categories so tax/reports stay clean."
+                if uncat_n
+                else "All charges categorized."
+            ),
             "button_label": "Sort charges",
         },
         {
@@ -243,17 +258,6 @@ def build_month_close(
             "action": "fund_tax_vault" if not tax_done else "hold",
             "detail": tax_detail,
             "button_label": "Set aside for taxes",
-        },
-        {
-            "id": "reconcile",
-            "title": recon_title,
-            "done": reconcile_done,
-            "action": recon_action,
-            "detail": recon_detail,
-            "button_label": recon_button,
-            "account_id": recon_account_id,
-            "drifted": drifted,
-            "missing_bank_balance": missing_bank_bal,
         },
         {
             "id": "backup",

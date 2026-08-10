@@ -157,6 +157,16 @@ def test_month_close_gate_cash_drift(tmp_path, monkeypatch):
         assert recon["action"] == "set_books_from_bank"
         assert recon.get("account_id") == primary.id
         assert "Safe to spend" in (recon.get("button_label") or "")
+        # Honesty before Sort: reconcile must precede sort_charges in step order
+        ids = [x["id"] for x in close["steps"]]
+        assert ids.index("reconcile") < ids.index("sort_charges")
+        # First incomplete required step after fees should prefer set_books over review
+        first_open = next(
+            x for x in close["steps"]
+            if not x.get("done") and not x.get("optional") and x["id"] != "fees"
+        )
+        assert first_open["id"] == "reconcile"
+        assert first_open["action"] == "set_books_from_bank"
     finally:
         s.close()
         eng.dispose()

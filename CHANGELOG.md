@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.22 — Credit payment signs · month-close honesty · Plaid tests
+
+- **Credit CSV/PDF**: payments (PAYMENT/AUTOPAY/THANK YOU) stay positive; charges flip; no more inflated owed on pay-downs
+- Shared `import_amounts.normalize_credit_import_amount` for CSV + PDF
+- **Month-close**: reconcile/set_books **before** Sort charges; sort detail is uncat-only copy
+- **Plaid**: `available_credit` fallback on first link; unit tests for snapshot balances / no txn double-apply
+- **Home WinUI**: ritual + do_this `account_id` via `JsonUi.Int` (string|number) for one-tap set_books
+- Tests: credit charge+payment balance, import_amounts, plaid mock sync
+
 ## 1.0.21 — Plaid parity · secondary Sort · ending bal · credit CSV
 
 - **Plaid**: always `/accounts/get` on sync; set `institution_balance` + books from snapshot (no double txn deltas)

@@ -412,9 +412,11 @@ def import_bank_csv(
 
             if amount_sign == "invert":
                 amount = -amount
-            elif amount_sign == "bank" and acct.kind == "credit" and amount > 0:
-                # Match PDF: many credit CSVs list charges as positive → store as spend (negative)
-                amount = -amount
+            elif amount_sign == "bank" and acct.kind == "credit":
+                # Charges → negative spend; payments → positive (reduce owed). See import_amounts.
+                from financial_os.services.import_amounts import normalize_credit_import_amount
+
+                amount = normalize_credit_import_amount(amount, payee)
 
             if bal_i is not None and bal_i < len(row):
                 bal = _parse_amount(row[bal_i])

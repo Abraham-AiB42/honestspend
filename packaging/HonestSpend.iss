@@ -6,7 +6,7 @@
 ;   - dist\HonestSpend-Windows-x64\ populated by package-release.ps1
 
 #define MyAppName "HonestSpend"
-#define MyAppVersion "1.0.21"
+#define MyAppVersion "1.0.22"
 ; Keep in sync with pyproject.toml / financial_os.__version__
 #define MyAppPublisher "HonestSpend contributors"
 #define MyAppExeName "HonestSpend.WinUI.exe"
