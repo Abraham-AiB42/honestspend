@@ -9,6 +9,7 @@ build/
 .env
 *.db
 .DS_Store
+.wrangler/
 
 # .NET / WinUI build outputs
 **/bin/
