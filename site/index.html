@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HonestSpend — Honest books. Safe to spend.</title>
+  <meta name="description" content="Local-first money app for Windows. Safe to spend you can trust. Import bank CSV/OFX, match books to bank, sort charges, close the month. No bank passwords. Freeware." />
+  <meta name="theme-color" content="#0c1118" />
+  <link rel="canonical" href="https://honestspend.net/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://honestspend.net/" />
+  <meta property="og:title" content="HonestSpend — Honest books. Safe to spend." />
+  <meta property="og:description" content="Local-first Windows money app. Safe to spend you can trust. CSV/OFX import, books ≠ bank honesty, month close. No bank passwords." />
+  <meta property="og:site_name" content="HonestSpend" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="HonestSpend — Honest books. Safe to spend." />
+  <meta name="twitter:description" content="Local-first Windows money app. Import CSV/OFX, match books to bank, sort charges, close the month." />
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "HonestSpend",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "Windows 10, Windows 11",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "description": "Local-first personal finance app with Safe to spend, bank CSV/OFX import, and month close.",
+    "url": "https://honestspend.net/",
+    "author": { "@type": "Organization", "name": "HonestSpend" }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        HonestSpend
+      </a>
+      <nav aria-label="Primary">
+        <ul class="nav-links">
+          <li class="hide-sm"><a href="#features">Features</a></li>
+          <li class="hide-sm"><a href="#screenshots">Screenshots</a></li>
+          <li class="hide-sm"><a href="#how">How it works</a></li>
+          <li class="hide-sm"><a href="#faq">FAQ</a></li>
+          <li><a href="/privacy/">Privacy</a></li>
+          <li><a class="nav-cta" href="#download">Download</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <span class="eyebrow">Windows · local-first · freeware</span>
+          <h1>Honest books.<br />Safe to spend.</h1>
+          <p class="lede">
+            A money app that tells you the truth when books don’t match the bank—
+            then gets out of your way. Import exports from your bank, set
+            <strong>Safe to spend</strong>, sort a few charges, close the month.
+          </p>
+          <div class="btn-row">
+            <a class="btn btn-primary" href="#download">Get HonestSpend</a>
+            <a class="btn btn-secondary" href="#screenshots">See the app</a>
+          </div>
+          <div class="trust-pills">
+            <span class="pill">No bank passwords stored</span>
+            <span class="pill">Data stays on your PC</span>
+            <span class="pill">CSV · OFX · PDF import</span>
+            <span class="pill">Optional BYOK Plaid</span>
+          </div>
+          <p class="hero-note">Demo figures below use fictional household data — not a real account.</p>
+        </div>
+
+        <!-- Hero screenshot: Home -->
+        <figure aria-label="HonestSpend Home with demo data">
+          <div class="app-window">
+            <div class="app-titlebar">
+              <span class="dots" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></span>
+              HonestSpend
+            </div>
+            <div class="app-body">
+              <aside class="app-nav" aria-hidden="true">
+                <div class="nav-item active"><span class="ico">⌂</span> Home</div>
+                <div class="nav-item"><span class="ico">+</span> Add</div>
+                <div class="nav-item"><span class="ico">↓</span> Import</div>
+                <div class="nav-item"><span class="ico">☰</span> Sort charges</div>
+                <div class="nav-item"><span class="ico">▦</span> Accounts</div>
+                <div class="nav-item"><span class="ico">≡</span> Ledger</div>
+              </aside>
+              <div class="app-main">
+                <div class="app-toolbar">
+                  <span>Who</span>
+                  <span class="chip">Household</span>
+                  <span class="chip">This money</span>
+                  <span class="chip">Simple</span>
+                </div>
+                <div style="margin-bottom:0.5rem;font-size:15px;font-weight:650;">Home</div>
+                <div class="app-card">
+                  <div class="label">Safe to spend</div>
+                  <div class="big">$2,847.32</div>
+                  <div class="status ok">On track · buffer $1,000 held</div>
+                  <p>Checking after bills &amp; set-asides. Intentional 0% float separate.</p>
+                </div>
+                <div class="app-card">
+                  <div class="label">Do this next</div>
+                  <div style="font-size:15px;font-weight:650;margin-top:0.15rem;">Match bank ending balance</div>
+                  <p>Books $4,120.00 · bank $4,287.50 on Primary checking. One tap sets Safe to spend from bank.</p>
+                  <div class="app-btn-row">
+                    <span class="app-btn">Set Safe to spend from bank</span>
+                    <span class="app-btn ghost">Sort charges</span>
+                  </div>
+                </div>
+                <div class="app-card" style="margin-bottom:0;">
+                  <div class="label">Up next</div>
+                  <p style="margin:0;">Rent $1,850 · Fri · Paycheck $3,200 · next Fri</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <figcaption class="shot-caption">Home — Safe to spend + Do this next (demo household)</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="alt" id="features">
+      <div class="container">
+        <div class="section-head">
+          <h2>Built for open-rarely honesty</h2>
+          <p>Most apps hide the gap between your books and the bank. HonestSpend surfaces it first—then gives you one honest next step.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature">
+            <div class="icon" aria-hidden="true">$</div>
+            <h3>Safe to spend you can trust</h3>
+            <p>One number for day-to-day decisions: cash after bills, buffers, and set-asides—not a vanity balance.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">≠</div>
+            <h3>Books ≠ bank, called out</h3>
+            <p>After import, see the gap. One-tap “Set Safe to spend from bank” when the ending balance is the truth.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">↓</div>
+            <h3>Freeware money-in</h3>
+            <p>Download CSV, OFX/QFX, or PDF from your bank site. We never store bank logins. Optional BYOK Plaid with <em>your</em> keys.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">✓</div>
+            <h3>Sort charges · close the month</h3>
+            <p>A short review queue keeps tax and reports clean. Month-close checklist when you’re ready—not every day.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">🖥</div>
+            <h3>Local-first on your PC</h3>
+            <p>Ledger lives under your profile (or a folder you pick, e.g. OneDrive). Uninstall keeps data so books survive reinstalls.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">⚡</div>
+            <h3>Simple by default · Full books when needed</h3>
+            <p>Daily Home is quiet. Flip to Full books for ledgers, rules, tax vault, and CPA-depth work.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screenshots -->
+    <section id="screenshots">
+      <div class="container">
+        <div class="section-head">
+          <h2>The app, with demo data</h2>
+          <p>Accurate UI layouts from HonestSpend Windows (Simple mode). Numbers and payees are fictional demo info for the marketing site.</p>
+        </div>
+
+        <div class="shots">
+          <!-- Import -->
+          <article class="shot">
+            <div class="shot-copy">
+              <h3>Import — set books from the bank</h3>
+              <p>Pick a CSV or OFX export, map to an account, optional ending balance. When bank and books differ, the next step is honest—not buried.</p>
+              <ul>
+                <li>CSV · OFX/QFX · PDF statements</li>
+                <li>Inbox drop folder for batch imports</li>
+                <li>“Set Safe to spend from bank” after a mismatch</li>
+              </ul>
+            </div>
+            <figure>
+              <div class="app-window">
+                <div class="app-titlebar">
+                  <span class="dots" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></span>
+                  HonestSpend
+                </div>
+                <div class="app-body">
+                  <aside class="app-nav" aria-hidden="true">
+                    <div class="nav-item"><span class="ico">⌂</span> Home</div>
+                    <div class="nav-item active"><span class="ico">↓</span> Import</div>
+                    <div class="nav-item"><span class="ico">☰</span> Sort charges</div>
+                  </aside>
+                  <div class="app-main">
+                    <div style="font-size:15px;font-weight:650;margin-bottom:0.65rem;">Import</div>
+                    <div class="app-card">
+                      <div class="label">Bank CSV (pick file)</div>
+                      <p style="margin:0.25rem 0;"><strong>Target account</strong> · Primary checking</p>
+                      <p style="margin:0;">File: <span style="font-family:var(--mono);font-size:11px;">Primary-checking-2026-07.csv</span></p>
+                      <p style="margin:0.35rem 0 0;">Ending balance entered: <strong>$4,287.50</strong></p>
+                      <div class="app-btn-row">
+                        <span class="app-btn">Import file</span>
+                        <span class="app-btn ghost">Pick OFX/QFX…</span>
+                      </div>
+                    </div>
+                    <div class="app-card" style="margin-bottom:0;border-color:rgba(240,180,41,0.35);">
+                      <div class="label">After import</div>
+                      <div style="font-weight:650;margin-top:0.15rem;">42 rows · 3 duplicates skipped</div>
+                      <p>Books $4,120.00 ≠ bank $4,287.50. Set Safe to spend from bank ending balance?</p>
+                      <div class="app-btn-row">
+                        <span class="app-btn">Set Safe to spend from bank</span>
+                        <span class="app-btn ghost">Sort charges</span>
+                        <span class="app-btn ghost">Home</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="shot-caption">Import result with books ≠ bank honesty (demo)</figcaption>
+            </figure>
+          </article>
+
+          <!-- Books honesty on Home -->
+          <article class="shot reverse">
+            <div class="shot-copy">
+              <h3>After import / bank — honesty card</h3>
+              <p>Home keeps the mismatch visible until you act. Primary action aligns Safe to spend with the trusted bank figure; secondary path is Sort charges.</p>
+              <ul>
+                <li>Clear books vs bank amounts</li>
+                <li>Sample payees from the last import</li>
+                <li>No silent “sync” that invents cash</li>
+              </ul>
+            </div>
+            <figure>
+              <div class="app-window">
+                <div class="app-titlebar">
+                  <span class="dots" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></span>
+                  HonestSpend
+                </div>
+                <div class="app-body">
+                  <aside class="app-nav" aria-hidden="true">
+                    <div class="nav-item active"><span class="ico">⌂</span> Home</div>
+                    <div class="nav-item"><span class="ico">↓</span> Import</div>
+                  </aside>
+                  <div class="app-main">
+                    <div class="app-card">
+                      <div class="label">Safe to spend</div>
+                      <div class="big">$2,680.00</div>
+                      <div class="status warn">Books behind bank · review below</div>
+                    </div>
+                    <div class="app-card" style="margin-bottom:0;border-color:rgba(61,156,240,0.35);">
+                      <div class="label">After import / bank</div>
+                      <div style="font-size:15px;font-weight:650;">Books ≠ bank on Primary checking</div>
+                      <p>Books <strong>$4,120.00</strong> · bank ending <strong>$4,287.50</strong> (+$167.50).</p>
+                      <div class="line-item">
+                        <div><div class="payee">ACME PAYROLL</div><div class="meta">Jul 28 · deposit</div></div>
+                        <div class="amt" style="color:var(--success);">+$3,200.00</div>
+                      </div>
+                      <div class="line-item">
+                        <div><div class="payee">RIVER GROCERY</div><div class="meta">Jul 26 · debit</div></div>
+                        <div class="amt neg">−$84.12</div>
+                      </div>
+                      <div class="app-btn-row">
+                        <span class="app-btn">Set Safe to spend from bank</span>
+                        <span class="app-btn ghost">Sort charges</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="shot-caption">Home honesty card after import (demo)</figcaption>
+            </figure>
+          </article>
+
+          <!-- Sort charges -->
+          <article class="shot">
+            <div class="shot-copy">
+              <h3>Sort charges — short review queue</h3>
+              <p>Only what still needs a category or fee check. Confirm fee-like payees so they stop hitting Safe to spend by accident.</p>
+              <ul>
+                <li>Payee · amount · suggested category</li>
+                <li>Fee confirm / dismiss</li>
+                <li>Rules can learn from your choices</li>
+              </ul>
+            </div>
+            <figure>
+              <div class="app-window">
+                <div class="app-titlebar">
+                  <span class="dots" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></span>
+                  HonestSpend
+                </div>
+                <div class="app-body">
+                  <aside class="app-nav" aria-hidden="true">
+                    <div class="nav-item"><span class="ico">⌂</span> Home</div>
+                    <div class="nav-item active"><span class="ico">☰</span> Sort charges</div>
+                  </aside>
+                  <div class="app-main">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:0.65rem;">
+                      <div style="font-size:15px;font-weight:650;">Sort charges</div>
+                      <span class="badge">3 left</span>
+                    </div>
+                    <div class="app-card">
+                      <div class="line-item" style="border:none;padding:0;">
+                        <div>
+                          <div class="payee">CLOUD HOSTING CO</div>
+                          <div class="meta">Jul 22 · Primary checking</div>
+                        </div>
+                        <div class="amt neg">−$29.00</div>
+                      </div>
+                      <p style="margin-top:0.5rem;">Suggested: <span class="badge blue">Software</span></p>
+                      <div class="app-btn-row">
+                        <span class="app-btn">Accept</span>
+                        <span class="app-btn ghost">Change category</span>
+                        <span class="app-btn ghost">Skip</span>
+                      </div>
+                    </div>
+                    <div class="app-card">
+                      <div class="line-item" style="border:none;padding:0;">
+                        <div>
+                          <div class="payee">ATM FEE — BRANCH</div>
+                          <div class="meta">Jul 19 · possible fee</div>
+                        </div>
+                        <div class="amt neg">−$3.50</div>
+                      </div>
+                      <p style="margin-top:0.5rem;"><span class="badge">Fee check</span> Confirm so Safe to spend stays honest.</p>
+                      <div class="app-btn-row">
+                        <span class="app-btn">Yes, a fee</span>
+                        <span class="app-btn ghost">Not a fee</span>
+                      </div>
+                    </div>
+                    <div class="app-card" style="margin-bottom:0;opacity:0.75;">
+                      <div class="line-item" style="border:none;padding:0;">
+                        <div>
+                          <div class="payee">CORNER COFFEE</div>
+                          <div class="meta">Jul 18</div>
+                        </div>
+                        <div class="amt neg">−$6.45</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="shot-caption">Sort charges review queue (demo)</figcaption>
+            </figure>
+          </article>
+
+          <!-- Month close -->
+          <article class="shot reverse">
+            <div class="shot-copy">
+              <h3>Close the month — checklist, not a chore every day</h3>
+              <p>When the queue is clear and books match, mark the month closed. Progress stays visible on Home so you open the app rarely—on purpose.</p>
+              <ul>
+                <li>Import done · uncategorized cleared</li>
+                <li>Reconcile / set books from bank when needed</li>
+                <li>Mark month closed when the list is green</li>
+              </ul>
+            </div>
+            <figure>
+              <div class="app-window">
+                <div class="app-titlebar">
+                  <span class="dots" aria-hidden="true"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></span>
+                  HonestSpend
+                </div>
+                <div class="app-body">
+                  <aside class="app-nav" aria-hidden="true">
+                    <div class="nav-item active"><span class="ico">⌂</span> Home</div>
+                  </aside>
+                  <div class="app-main">
+                    <div class="app-card">
+                      <div class="label">Safe to spend</div>
+                      <div class="big">$2,847.32</div>
+                      <div class="status ok">Matched bank · July ready to close</div>
+                    </div>
+                    <div class="app-card" style="margin-bottom:0;">
+                      <div class="label">Close the month</div>
+                      <div style="font-weight:650;margin-top:0.15rem;">July 2026 · 3 of 4 done</div>
+                      <div class="progress-bar" aria-hidden="true"><span style="width:75%"></span></div>
+                      <div class="check-row"><span class="box done"></span><span>Import latest bank export</span></div>
+                      <div class="check-row"><span class="box done"></span><span>Books matched bank ending balance</span></div>
+                      <div class="check-row"><span class="box done"></span><span>Sort charges queue empty</span></div>
+                      <div class="check-row"><span class="box"></span><span>Confirm tax set-aside for the month</span></div>
+                      <div class="app-btn-row">
+                        <span class="app-btn">Do next close step</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption class="shot-caption">Month-close checklist on Home (demo)</figcaption>
+            </figure>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="alt" id="how">
+      <div class="container">
+        <div class="section-head">
+          <h2>How it works</h2>
+          <p>Four steps. No bank password vault. No daily busywork.</p>
+        </div>
+        <div class="steps">
+          <div class="step">
+            <h3>Import</h3>
+            <p>Download CSV/OFX from your bank site (or drop into the inbox). Optional: your own Plaid keys.</p>
+          </div>
+          <div class="step">
+            <h3>Match bank</h3>
+            <p>When books ≠ bank, one tap sets Safe to spend from the ending balance you trust.</p>
+          </div>
+          <div class="step">
+            <h3>Sort a few</h3>
+            <p>Clear the short queue so categories and fees stay clean for tax and reports.</p>
+          </div>
+          <div class="step">
+            <h3>Close the month</h3>
+            <p>Checklist green → mark closed. Open rarely until the next import reminder.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Honesty callout -->
+    <section>
+      <div class="container">
+        <div class="callout">
+          <div>
+            <h2>Why “honest”?</h2>
+            <p>
+              Cloud budget apps often show a polished number while silently treating bank sync as truth—
+              or your spreadsheet as truth—without saying which. HonestSpend is local-first: <strong>your books</strong>
+              are day-to-day truth, and bank exports (or optional BYOK link) keep them honest. When they diverge, we say so.
+            </p>
+          </div>
+          <table class="compare-table">
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th>HonestSpend</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Bank passwords</td>
+                <td>Never stored here</td>
+              </tr>
+              <tr>
+                <td>Ledger location</td>
+                <td>Your PC (or folder you choose)</td>
+              </tr>
+              <tr>
+                <td>Money-in default</td>
+                <td>CSV / OFX / PDF freeware path</td>
+              </tr>
+              <tr>
+                <td>Cloud ledger</td>
+                <td>None — we don’t host your books</td>
+              </tr>
+              <tr>
+                <td>Price</td>
+                <td>Freeware / open source</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download -->
+    <section class="alt" id="download">
+      <div class="container">
+        <div class="download-box">
+          <h2>Get HonestSpend for Windows</h2>
+          <p>
+            Microsoft Store build (MSIX) is the recommended path when available.
+            GitHub releases include a portable zip for sideload / power users.
+          </p>
+          <div class="btn-row" style="justify-content:center;">
+            <a class="btn btn-primary" href="https://github.com/Abraham-AiB42/honestspend/releases/latest" rel="noopener">
+              Download from GitHub
+            </a>
+            <a class="btn btn-secondary" href="https://github.com/Abraham-AiB42/honestspend" rel="noopener">
+              Source on GitHub
+            </a>
+          </div>
+          <p class="dl-meta">
+            Windows 10/11 · x64 · Requires local engine (bundled in release zip; Store first-run extract)<br />
+            Docs: <a href="https://github.com/Abraham-AiB42/honestspend/blob/main/docs/INSTALL.md" rel="noopener">Install</a>
+            · <a href="/privacy/">Privacy</a>
+            · <a href="https://github.com/Abraham-AiB42/honestspend/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq">
+      <div class="container">
+        <div class="section-head">
+          <h2>FAQ</h2>
+          <p>Straight answers. More detail on the <a href="/privacy/">privacy page</a>.</p>
+        </div>
+        <div class="faq">
+          <details>
+            <summary>Do you store my bank password?</summary>
+            <p>No. The freeware path uses files you download from your bank. Optional bank link uses Plaid keys <em>you</em> provide (BYOK)—not our vault.</p>
+          </details>
+          <details>
+            <summary>Where does my data live?</summary>
+            <p>On your computer, by default under <code>%USERPROFILE%\.financial-os</code>, or a folder you choose in Settings (including OneDrive if you point it there).</p>
+          </details>
+          <details>
+            <summary>Is there a subscription?</summary>
+            <p>No. HonestSpend is freeware / open source. Optional third-party services (Plaid, xAI) are only if you bring your own keys and pay them directly.</p>
+          </details>
+          <details>
+            <summary>What is Safe to spend?</summary>
+            <p>Cash you can use without bouncing checking—after known bills, buffers, and set-asides. It’s the primary Home number in Simple mode.</p>
+          </details>
+          <details>
+            <summary>Windows only?</summary>
+            <p>Yes for the polished WinUI client today. The engine is local Python/API-first so other clients can follow; Mac/Linux/mobile are roadmap, not vapor promises on this page.</p>
+          </details>
+          <details>
+            <summary>Who is it not for?</summary>
+            <p>Not payroll, not e-file tax filing, not a replacement for your bank’s website. Households and freelancers who want honest cash control are the sweet spot.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <a class="brand" href="/">
+          <span class="brand-mark" aria-hidden="true">H</span>
+          HonestSpend
+        </a>
+        <ul class="footer-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#download">Download</a></li>
+          <li><a href="/privacy/">Privacy</a></li>
+          <li><a href="https://github.com/Abraham-AiB42/honestspend" rel="noopener">GitHub</a></li>
+          <li><a href="https://github.com/Abraham-AiB42/honestspend/issues" rel="noopener">Support</a></li>
+        </ul>
+      </div>
+      <p class="footer-bottom">
+        © <span id="y"></span> HonestSpend · Honest books. Safe to spend. ·
+        <a href="/privacy/">Privacy Policy</a>
+      </p>
+    </div>
+  </footer>
+  <script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+</body>
+</html>

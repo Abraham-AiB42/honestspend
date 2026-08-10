@@ -61,7 +61,10 @@ HonestSpend is not directed at children under 13. Do not use the app to store a 
 Open an issue on the project repository:  
 https://github.com/Abraham-AiB42/honestspend  
 
-For Store listing, host a stable copy of this policy at a public URL (e.g. GitHub Pages or raw GitHub link) and paste that URL into Partner Center **Privacy policy URL**.
+**Public privacy policy URL (Store / Partner Center):**  
+https://honestspend.net/privacy/
+
+(Source copy lives in `docs/PRIVACY.md` and is published as HTML at `site/privacy/`.)
 
 ## Changes
 

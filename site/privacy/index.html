@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy Policy — HonestSpend</title>
+  <meta name="description" content="HonestSpend Privacy Policy: local-first finance app. Your ledger stays on your device. No bank password vault. Optional BYOK features only." />
+  <meta name="theme-color" content="#0c1118" />
+  <link rel="canonical" href="https://honestspend.net/privacy/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://honestspend.net/privacy/" />
+  <meta property="og:title" content="Privacy Policy — HonestSpend" />
+  <meta property="og:description" content="How HonestSpend handles information. Local-first; no cloud ledger; no bank passwords stored by us." />
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container nav">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">H</span>
+        HonestSpend
+      </a>
+      <nav aria-label="Primary">
+        <ul class="nav-links">
+          <li class="hide-sm"><a href="/#features">Features</a></li>
+          <li class="hide-sm"><a href="/#download">Download</a></li>
+          <li><a href="/privacy/" aria-current="page">Privacy</a></li>
+          <li><a class="nav-cta" href="/#download">Download</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="container legal">
+    <h1>Privacy Policy</h1>
+    <p class="meta">
+      <strong>Product:</strong> HonestSpend (local-first personal finance app)<br />
+      <strong>Publisher:</strong> HonestSpend contributors<br />
+      <strong>Last updated:</strong> August 10, 2026<br />
+      <strong>URL:</strong> <a href="https://honestspend.net/privacy/">https://honestspend.net/privacy/</a>
+    </p>
+
+    <div class="short-box">
+      <strong>Short version</strong>
+      <ul>
+        <li>Your money data stays <strong>on your device</strong> by default.</li>
+        <li>We do <strong>not</strong> operate a cloud ledger or bank password vault.</li>
+        <li>Optional features that talk to the internet use <strong>keys you supply</strong> (bring your own key / BYOK).</li>
+        <li>The free import path (CSV / OFX / PDF) works <strong>offline</strong> after install.</li>
+      </ul>
+    </div>
+
+    <p>
+      This Privacy Policy describes how information is handled when you use HonestSpend,
+      including Microsoft Store builds, sideload / GitHub release builds, and related
+      optional features. It applies to the desktop application and to this website
+      (<a href="https://honestspend.net/">honestspend.net</a>).
+    </p>
+    <p>
+      HonestSpend is designed as a <strong>local-first</strong> product: the primary
+      copy of your financial books lives on hardware you control. Please read this
+      policy carefully. If you do not agree, do not use the app or optional online features.
+    </p>
+
+    <h2>1. Who we are</h2>
+    <p>
+      “HonestSpend,” “we,” “us,” and “our” refer to the HonestSpend project and its
+      contributors as published at
+      <a href="https://github.com/Abraham-AiB42/honestspend" rel="noopener">github.com/Abraham-AiB42/honestspend</a>.
+      There is no separate HonestSpend cloud account system that holds your ledger for you.
+    </p>
+    <p>
+      Contact for privacy questions related to the open-source project:
+      open an issue at
+      <a href="https://github.com/Abraham-AiB42/honestspend/issues" rel="noopener">github.com/Abraham-AiB42/honestspend/issues</a>.
+    </p>
+
+    <h2>2. Scope</h2>
+    <p>This policy covers:</p>
+    <ul>
+      <li>The HonestSpend Windows desktop application (WinUI client and local Python engine).</li>
+      <li>Default and user-chosen local data folders on your computer.</li>
+      <li>Optional internet features you explicitly enable (for example BYOK Plaid or BYOK AI).</li>
+      <li>Installation and updates via Microsoft Store or GitHub releases, where applicable.</li>
+      <li>This marketing website (honestspend.net) and the privacy page itself.</li>
+    </ul>
+    <p>This policy does <strong>not</strong> control:</p>
+    <ul>
+      <li>Your bank’s website, mobile app, or statement exports.</li>
+      <li>Microsoft’s processing when you use the Microsoft Store or Windows diagnostics.</li>
+      <li>Third parties whose keys or services you optionally configure (e.g. Plaid, xAI), once data leaves your machine under those relationships.</li>
+      <li>GitHub, Cloudflare, or other hosts of project websites and source code under their own policies.</li>
+    </ul>
+
+    <h2>3. What we store locally on your device</h2>
+    <p>
+      By default, application data is stored under your Windows user profile at
+      <code>%USERPROFILE%\.financial-os</code> (or an equivalent path documented in the app).
+      In Settings you may choose another folder (for example a path under OneDrive or another drive).
+    </p>
+    <p>Typical local data includes:</p>
+    <ul>
+      <li>Accounts, balances, transactions, categories, rules, and related bookkeeping records you enter or import.</li>
+      <li>Entity / household scope settings and UI preferences (e.g. Simple vs Full books).</li>
+      <li>App settings such as API URL for the local engine, data folder path, and optional backend root.</li>
+      <li>Local backups you create through the app or scripts.</li>
+      <li>Engine and client logs used for troubleshooting (may include error messages and technical paths; avoid pasting logs publicly if they contain personal detail).</li>
+      <li>Optional encrypted or unencrypted backup archives you choose to create.</li>
+    </ul>
+    <p>
+      <strong>Uninstall note:</strong> Removing the Microsoft Store package or deleting the app folder
+      may <em>not</em> delete the data directory. That is intentional so your books can survive reinstalls.
+      Delete the data folder manually if you want a full wipe.
+    </p>
+
+    <h2>4. What we do not collect</h2>
+    <p>In normal freeware use of HonestSpend as a local app, we do <strong>not</strong>:</p>
+    <ul>
+      <li>Store bank website usernames or passwords in HonestSpend.</li>
+      <li>Operate an HonestSpend cloud ledger that receives your full transaction history by default.</li>
+      <li>Sell your financial data to advertisers.</li>
+      <li>Require an HonestSpend online account to use CSV / OFX / PDF import and local Safe to spend.</li>
+      <li>Use advertising identifiers for ad networks inside the desktop app.</li>
+    </ul>
+    <p>
+      We cannot see the contents of your local database unless you voluntarily send
+      files, screenshots, or logs to support (for example by attaching them to a GitHub issue).
+      Please redact account numbers and personal identifiers before sharing.
+    </p>
+
+    <h2>5. How money gets into the app (freeware path)</h2>
+    <p>
+      The primary money-in path is files <strong>you</strong> download from your bank or card issuer
+      (CSV, OFX/QFX, or PDF statements) and import into HonestSpend—or drop into a local inbox folder.
+      HonestSpend does not log into your bank for you on that path.
+    </p>
+    <p>
+      After install, that path is designed to work <strong>without continuous internet access</strong>
+      to HonestSpend servers (there is no HonestSpend-hosted ledger). Your machine still needs whatever
+      connectivity your bank’s site requires when you download exports yourself.
+    </p>
+
+    <h2>6. Optional internet features</h2>
+    <p>
+      Some features send data off your device only when you enable them and supply configuration.
+      You can use HonestSpend without these features.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>What may leave your device</th>
+          <th>When</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>BYOK Plaid</strong> (optional bank link)</td>
+          <td>Credentials and tokens for <em>your</em> Plaid application; bank link tokens and account/transaction data as mediated by Plaid under your agreement with Plaid and your institution.</td>
+          <td>Only if you enable bank link and configure <strong>your</strong> Plaid client id/secret (or equivalent).</td>
+        </tr>
+        <tr>
+          <td><strong>BYOK AI / Grok</strong> (optional categorization help)</td>
+          <td>Text you allow for suggestions (e.g. payee / memo strings) via the provider API using <strong>your</strong> API key.</td>
+          <td>Only if you enable AI categorize and set <strong>your</strong> key (e.g. xAI).</td>
+        </tr>
+        <tr>
+          <td><strong>Microsoft Store</strong></td>
+          <td>Standard install, update, and Store diagnostics processed by Microsoft.</td>
+          <td>If you install or update from the Microsoft Store.</td>
+        </tr>
+        <tr>
+          <td><strong>GitHub releases / source</strong></td>
+          <td>Standard web/download logs on GitHub’s infrastructure when you visit or download.</td>
+          <td>If you use GitHub to obtain builds or file issues.</td>
+        </tr>
+        <tr>
+          <td><strong>This website</strong></td>
+          <td>Standard web server / CDN logs (IP address, user agent, referrer, pages requested). See section 10.</td>
+          <td>When you browse honestspend.net.</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>
+      Third-party privacy terms apply to those services when you use them. Review
+      Plaid, xAI (or other AI providers), Microsoft, GitHub, and Cloudflare policies as relevant.
+    </p>
+
+    <h2>7. Honesty features and balances</h2>
+    <p>
+      Features such as “books ≠ bank,” “Set Safe to spend from bank,” and month-close checklists
+      operate on data <strong>already on your device</strong> (imports, balances, and settings you control).
+      They do not require uploading your ledger to HonestSpend servers.
+    </p>
+
+    <h2>8. Children</h2>
+    <p>
+      HonestSpend is not directed at children under 13. Do not use the app to store a child’s
+      personal data without appropriate parental authority and compliance with applicable law
+      (including COPPA where it applies). We do not knowingly collect personal information from
+      children under 13 through the product.
+    </p>
+
+    <h2>9. Your choices and controls</h2>
+    <ul>
+      <li><strong>Import only:</strong> Use CSV / OFX / PDF without enabling bank APIs.</li>
+      <li><strong>Disable BYOK:</strong> Do not enter Plaid or AI keys; turn optional features off in Settings.</li>
+      <li><strong>Data folder:</strong> Change where books are stored (including cloud-synced folders you manage).</li>
+      <li><strong>Backups &amp; export:</strong> Create local backups; copy or delete files with normal OS tools.</li>
+      <li><strong>Wipe:</strong> Delete the data folder and uninstall the app for a full local removal.</li>
+      <li><strong>Logs:</strong> Clear or avoid sharing logs that may contain sensitive paths or payee text.</li>
+    </ul>
+
+    <h2>10. This website (honestspend.net)</h2>
+    <p>
+      The marketing site is a static site intended to describe the product and host this policy.
+      It does not provide a login for your financial ledger.
+    </p>
+    <p>When you visit the site, hosting/CDN providers (for example Cloudflare Pages) may process:</p>
+    <ul>
+      <li>IP address and approximate location derived from IP</li>
+      <li>Browser type, device type, and user agent</li>
+      <li>Pages requested, timestamps, and referrer URL</li>
+      <li>Security-related signals (e.g. bot management) as configured by the host</li>
+    </ul>
+    <p>
+      We do not intentionally place advertising cookies on this marketing site for third-party ad networks.
+      Essential hosting and security technologies may still use cookies or similar storage as provided by the CDN.
+      Check your browser settings to control cookies.
+    </p>
+
+    <h2>11. Third parties</h2>
+    <ul>
+      <li><strong>Microsoft</strong> — Store distribution, Windows platform services, and related diagnostics when you use those channels.</li>
+      <li><strong>Plaid</strong> — only if you configure BYOK bank link; subject to Plaid’s terms and your institution’s terms.</li>
+      <li><strong>xAI or other AI providers</strong> — only if you configure BYOK AI features with your key.</li>
+      <li><strong>GitHub</strong> — source code, issues, and release downloads.</li>
+      <li><strong>Cloudflare</strong> (or successor hosts) — website and privacy page delivery.</li>
+    </ul>
+    <p>
+      We are not responsible for third-party practices outside our control. Follow their privacy policies
+      and your agreements with them.
+    </p>
+
+    <h2>12. Security</h2>
+    <p>
+      Because data is local-first, <strong>your device security is the primary control</strong>:
+      full-disk encryption, OS user accounts, screen lock, and careful backup handling matter.
+      Optional features that use network APIs rely on TLS as implemented by those clients/libraries
+      and on the secrecy of keys you store on your machine.
+    </p>
+    <p>
+      No method of electronic storage or transmission is 100% secure. Use strong device credentials
+      and do not commit API keys to public repositories.
+    </p>
+
+    <h2>13. International users</h2>
+    <p>
+      HonestSpend is developed with a primary Windows desktop audience. If you use the app outside
+      the United States, you are responsible for ensuring that local storage and any optional
+      third-party services you enable are lawful in your jurisdiction. This policy is provided
+      in English.
+    </p>
+
+    <h2>14. Legal bases (where applicable)</h2>
+    <p>
+      If data protection laws that require a “legal basis” apply to any limited processing we control
+      (for example server logs on this website), those bases may include legitimate interests in
+      operating a secure static site and providing product documentation, and consent where you
+      choose optional third-party integrations. Local ledger data processed solely on your device
+      under your control is generally not transmitted to us.
+    </p>
+
+    <h2>15. Retention</h2>
+    <ul>
+      <li><strong>Local app data:</strong> retained until you delete it or wipe the data folder.</li>
+      <li><strong>Website logs:</strong> retained according to the hosting provider’s defaults and our configuration, typically for security and operations for a limited period.</li>
+      <li><strong>Support communications:</strong> issues and emails you send may be retained as long as needed to respond and maintain the project.</li>
+    </ul>
+
+    <h2>16. Changes to this policy</h2>
+    <p>
+      We may update this Privacy Policy from time to time. The “Last updated” date at the top
+      will change when we do. The current version will be published at
+      <a href="https://honestspend.net/privacy/">https://honestspend.net/privacy/</a>.
+      Continued use of the app or website after an update means you accept the revised policy
+      for local freeware use to the extent permitted by law. Microsoft Store users may also see
+      listing updates when a new package is certified.
+    </p>
+
+    <h2>17. Contact</h2>
+    <p>
+      Privacy questions and requests related to the open-source HonestSpend project:<br />
+      <a href="https://github.com/Abraham-AiB42/honestspend/issues" rel="noopener">https://github.com/Abraham-AiB42/honestspend/issues</a>
+    </p>
+    <p>
+      For Microsoft Store listing purposes, the public privacy policy URL is:<br />
+      <strong><a href="https://honestspend.net/privacy/">https://honestspend.net/privacy/</a></strong>
+    </p>
+
+    <h2>18. Summary table</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Where</th>
+          <th>Shared with HonestSpend servers?</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Ledger, accounts, transactions</td>
+          <td>Your PC (chosen folder)</td>
+          <td>No (no cloud ledger)</td>
+        </tr>
+        <tr>
+          <td>Bank website password</td>
+          <td>Not stored by HonestSpend</td>
+          <td>N/A</td>
+        </tr>
+        <tr>
+          <td>CSV / OFX / PDF imports</td>
+          <td>Processed locally</td>
+          <td>No</td>
+        </tr>
+        <tr>
+          <td>BYOK Plaid / AI</td>
+          <td>Third parties you configure</td>
+          <td>Only via those third parties when you enable them</td>
+        </tr>
+        <tr>
+          <td>Website visits</td>
+          <td>CDN / host logs</td>
+          <td>Standard request metadata only</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="margin-top:2.5rem;color:var(--text-dim);font-size:0.9rem;">
+      This document is provided for transparency about the HonestSpend product. It is not legal advice.
+      If you need formal counsel for a commercial deployment, consult a qualified attorney.
+    </p>
+
+    <p style="margin-top:1.5rem;">
+      <a class="btn btn-secondary" href="/">← Back to HonestSpend</a>
+    </p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <a class="brand" href="/">
+          <span class="brand-mark" aria-hidden="true">H</span>
+          HonestSpend
+        </a>
+        <ul class="footer-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="/#download">Download</a></li>
+          <li><a href="/privacy/">Privacy</a></li>
+          <li><a href="https://github.com/Abraham-AiB42/honestspend" rel="noopener">GitHub</a></li>
+        </ul>
+      </div>
+      <p class="footer-bottom">
+        © <span id="y"></span> HonestSpend ·
+        <a href="/privacy/">Privacy Policy</a> ·
+        honestspend.net
+      </p>
+    </div>
+  </footer>
+  <script>document.getElementById("y").textContent = new Date().getFullYear();</script>
+</body>
+</html>

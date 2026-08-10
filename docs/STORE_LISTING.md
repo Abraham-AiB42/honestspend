@@ -78,8 +78,6 @@ GitHub issues: https://github.com/Abraham-AiB42/honestspend/issues
 
 ## Privacy policy URL
 
-Host [PRIVACY.md](./PRIVACY.md) publicly, e.g.:
+**https://honestspend.net/privacy/**
 
-`https://github.com/Abraham-AiB42/honestspend/blob/main/docs/PRIVACY.md`
-
-(Or a GitHub Pages HTML render if Partner Center rejects blob URLs.)
+(Source: [PRIVACY.md](./PRIVACY.md) · site: `site/privacy/`)

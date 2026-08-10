@@ -4,7 +4,7 @@
 # Usage (from repo root):
 #   .\scripts\publish-winui.ps1
 #   .\scripts\publish-winui.ps1 -Configuration Release
-#   .\scripts\publish-winui.ps1 -Msix   # if Windows Application Packaging tools available
+#   .\scripts\publish-winui.ps1 -Msix   # points at package-msix.ps1
 
 param(
     [ValidateSet("Debug", "Release")]
@@ -21,19 +21,21 @@ if (-not (Test-Path $Proj)) {
     Write-Error "Project not found: $Proj"
 }
 
-Write-Host "Publishing HonestSpend.WinUI ($Configuration, win-x64) → $Out"
+Write-Host "Publishing HonestSpend.WinUI ($Configuration, win-x64) -> $Out"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
-# Explicit PublishTrimmed=false — WinUI self-contained + trim is fragile (NETSDK1102).
-dotnet publish $Proj `
-    -c $Configuration `
-    -p:Platform=x64 `
-    -p:RuntimeIdentifier=win-x64 `
-    -p:SelfContained=true `
-    -p:PublishReadyToRun=true `
-    -p:PublishTrimmed=false `
-    -o $Out
-
+# Explicit PublishTrimmed=false - WinUI self-contained + trim is fragile (NETSDK1102).
+$publishArgs = @(
+    "publish", $Proj,
+    "-c", $Configuration,
+    "-p:Platform=x64",
+    "-p:RuntimeIdentifier=win-x64",
+    "-p:SelfContained=true",
+    "-p:PublishReadyToRun=true",
+    "-p:PublishTrimmed=false",
+    "-o", $Out
+)
+& dotnet @publishArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
@@ -43,14 +45,14 @@ Write-Host "Run:  $Out\HonestSpend.WinUI.exe"
 Write-Host ""
 Write-Host "Bundle the Python engine next to the EXE (recommended):"
 Write-Host "  .\scripts\prepare-engine-bundle.ps1 -Target `"$Out`""
-Write-Host "Creates $Out\engine with .venv — BackendHost auto-detects it."
+Write-Host "Creates $Out\engine with .venv - BackendHost auto-detects it."
 Write-Host ""
 Write-Host "Or keep using a full repo clone and set Backend root in Settings."
 
 if ($Msix) {
     Write-Host ""
     Write-Host "MSIX scaffold: .\scripts\package-msix.ps1  (see docs\MSIX.md)"
-    Write-Host "Or VS: Package and Publish — set Package.appxmanifest Publisher CN first."
+    Write-Host "Or VS: Package and Publish - set Package.appxmanifest Publisher CN first."
 }
 
 Write-Host "Done."
