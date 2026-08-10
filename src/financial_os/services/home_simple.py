@@ -463,7 +463,7 @@ def _do_this_next(
             "priority": "books",
         }
 
-    # Critical fee / promo
+    # Critical fee / promo (before Sort — fiscal first)
     for a in alerts:
         if a.get("level") == "critical" and a.get("code") == "promo":
             return {
@@ -484,6 +484,21 @@ def _do_this_next(
                 "params": {},
                 "alternatives": ["Turn on autopay for minimums"],
                 "priority": "fiscal",
+            }
+
+    # Uncategorized only — one next action before soft wealth / import reminder
+    if books and books.get("primary_action") == "review":
+        uncat = int(books.get("uncategorized_count") or 0)
+        if uncat > 0:
+            return {
+                "title": books.get("title") or f"{uncat} charge{'s' if uncat != 1 else ''} to sort",
+                "reason": books.get("reason")
+                or "Uncategorized charges make tax and reports fuzzy.",
+                "action": "review",
+                "button_label": books.get("button_label") or "Sort charges",
+                "params": {},
+                "alternatives": ["Import bank file", "Open Full books → Transactions"],
+                "priority": "books",
             }
 
     action = head.get("action") or "hold"

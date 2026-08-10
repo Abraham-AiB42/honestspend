@@ -36,9 +36,23 @@ def test_parse_skips_headers():
     assert rows == []
 
 
-def test_credit_pdf_payment_does_not_inflate_owed(tmp_path: Path):
-    """PDF credit import: PAYMENT THANK YOU must reduce owed (same as CSV fix)."""
+def test_parse_bare_payment_line():
+    """Bare PAYMENT payee must not be dropped as a pure total."""
+    text = """
+    Account Activity 2026
+    08/01/2026 AMAZON                        $45.99
+    08/02/2026 PAYMENT                       $100.00
+    """
+    rows = parse_statement_lines(text)
+    payees = [r["payee"].upper() for r in rows]
+    assert any("AMAZON" in p for p in payees)
+    assert any(p.strip() == "PAYMENT" or p.startswith("PAYMENT") for p in payees)
+
+
+def test_credit_pdf_import_payment_reduces_owed(tmp_path: Path, monkeypatch):
+    """End-to-end PDF credit import: charge + bare PAYMENT → owed falls."""
     from financial_os.db import Profile
+    from financial_os.services import statement_pdf
     from financial_os.services.statement_pdf import import_statement_pdf
 
     eng = create_engine(f"sqlite:///{(tmp_path / 'pdf.db').as_posix()}")
@@ -58,21 +72,32 @@ def test_credit_pdf_payment_does_not_inflate_owed(tmp_path: Path):
     s.add(acct)
     s.flush()
 
-    # import_statement_pdf expects bytes/path — exercise normalize via direct helper path:
-    # Build rows the same way PDF would after parse, via import_amounts on simulated flow.
-    from financial_os.services.import_amounts import normalize_credit_import_amount
-    from financial_os.services.account_balance import apply_amount_to_account
-
-    charge = normalize_credit_import_amount(Decimal("45.99"), "AMAZON")
-    pmt = normalize_credit_import_amount(Decimal("100.00"), "PAYMENT THANK YOU")
-    assert charge == Decimal("-45.99")
-    assert pmt == Decimal("100.00")
-    apply_amount_to_account(acct, charge)
-    apply_amount_to_account(acct, pmt)
-    assert acct.current_balance == Decimal("145.99")  # 200+45.99-100
+    text = """Account Activity 2026
+08/01/2026 AMAZON                        $45.99
+08/02/2026 PAYMENT                       $100.00
+"""
+    monkeypatch.setattr(
+        statement_pdf,
+        "extract_pdf_text",
+        lambda _fo: (text, 1),
+    )
+    result = import_statement_pdf(
+        s,
+        account_id=acct.id,
+        file_obj=b"%PDF-fake",
+        filename="stmt.pdf",
+        auto_categorize=False,
+        amount_sign="bank",
+    )
+    assert result.transactions_created == 2
+    by_payee = {t.payee.upper(): float(t.amount) for t in s.query(Transaction).all()}
+    assert any("AMAZON" in k for k in by_payee)
+    assert any(k.strip() == "PAYMENT" or k.startswith("PAYMENT") for k in by_payee)
+    assert any(v == 100.0 for v in by_payee.values())
+    s.refresh(acct)
+    # 200 + 45.99 - 100 = 145.99
+    assert acct.current_balance == Decimal("145.99")
     s.close()
-    # silence unused import if linters complain about import_statement_pdf
-    assert import_statement_pdf is not None
 
 
 def test_import_via_csv_inbox_still_works(tmp_path: Path, monkeypatch):

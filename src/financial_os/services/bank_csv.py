@@ -412,8 +412,8 @@ def import_bank_csv(
 
             if amount_sign == "invert":
                 amount = -amount
-            elif amount_sign == "bank" and acct.kind == "credit":
-                # Charges → negative spend; payments → positive (reduce owed). See import_amounts.
+            # Credit: charges → negative; payments/refunds → positive (after optional invert)
+            if acct.kind == "credit" and amount_sign in ("bank", "invert"):
                 from financial_os.services.import_amounts import normalize_credit_import_amount
 
                 amount = normalize_credit_import_amount(amount, payee)

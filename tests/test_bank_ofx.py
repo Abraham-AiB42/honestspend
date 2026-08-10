@@ -79,6 +79,90 @@ def test_preview_ofx():
     assert prev["ledger_balance"] == "2554.33"
 
 
+SAMPLE_CREDIT_OFX = """OFXHEADER:100
+DATA:OFXSGML
+VERSION:102
+SECURITY:NONE
+ENCODING:USASCII
+CHARSET:1252
+COMPRESSION:NONE
+OLDFILEUID:NONE
+NEWFILEUID:NONE
+
+<OFX>
+<CREDITCARDMSGSRSV1>
+<CCSTMTTRNRS>
+<CCSTMTRS>
+<CCACCTFROM>
+<ACCTID>4111111111111111
+</CCACCTFROM>
+<BANKTRANLIST>
+<STMTTRN>
+<TRNTYPE>DEBIT
+<DTPOSTED>20260801
+<TRNAMT>45.99
+<FITID>cc20260801001
+<NAME>AMAZON
+</STMTTRN>
+<STMTTRN>
+<TRNTYPE>CREDIT
+<DTPOSTED>20260805
+<TRNAMT>-100.00
+<FITID>cc20260805002
+<NAME>PAYMENT THANK YOU
+</STMTTRN>
+</BANKTRANLIST>
+<LEDGERBAL>
+<BALAMT>145.99
+<DTASOF>20260805
+</LEDGERBAL>
+</CCSTMTRS>
+</CCSTMTTRNRS>
+</CREDITCARDMSGSRSV1>
+</OFX>
+"""
+
+
+def test_credit_ofx_normalizer_payment(tmp_path: Path, monkeypatch):
+    """Credit OFX: positive charge + negative payment → correct ledger signs and balance."""
+    from financial_os.db import Profile
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    init_db(engine)
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    seed_all(s)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Visa OFX",
+        current_balance=Decimal("200"),
+        credit_limit=Decimal("1000"),
+        is_cash_for_ifpp=False,
+    )
+    s.add(acct)
+    s.flush()
+    r = import_ofx(
+        s,
+        account_id=acct.id,
+        file_obj=SAMPLE_CREDIT_OFX.encode("utf-8"),
+        filename="card.ofx",
+        auto_categorize=False,
+    )
+    assert r.transactions_created == 2
+    by_payee = {t.payee.upper(): float(t.amount) for t in s.query(Transaction).all()}
+    assert any("AMAZON" in k and by_payee[k] == -45.99 for k in by_payee)
+    assert any("PAYMENT" in k and by_payee[k] == 100.0 for k in by_payee)
+    s.refresh(acct)
+    # 200 + 45.99 - 100 = 145.99
+    assert acct.current_balance == Decimal("145.99")
+    s.close()
+
+
 def test_import_ofx_and_dedupe(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()

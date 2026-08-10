@@ -79,6 +79,40 @@ def test_home_do_this_next_books_vs_bank(client: TestClient):
     assert Decimal(str(trust.json().get("books_balance"))) == Decimal("7500.00")
 
 
+def test_home_do_this_next_sort_when_uncat_only(client: TestClient, tmp_path, monkeypatch):
+    """When books primary is review (no drift), Do this next elevates Sort charges."""
+    from datetime import date
+    from financial_os.db import Account, Profile, Transaction
+
+    client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
+    # Use API session DB: post an uncategorized txn via account
+    accts = client.get("/api/accounts").json()
+    cash = next(a for a in accts if a.get("is_cash_for_ifpp") or a.get("kind") == "checking")
+    # Direct DB insert on the app's engine
+    import financial_os.api.app as app_mod
+
+    with app_mod.SessionLocal() as s:
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        s.add(
+            Transaction(
+                profile_id=personal.id,
+                account_id=cash["id"],
+                txn_date=date.today(),
+                amount=Decimal("-12.34"),
+                payee="UNCATEGORIZED CAFE",
+                category_id=None,
+                status="cleared",
+            )
+        )
+        s.commit()
+    home = client.get("/api/home/simple").json()
+    books = home.get("books_brief") or {}
+    assert books.get("primary_action") == "review"
+    assert int(books.get("uncategorized_count") or 0) >= 1
+    next_a = home.get("do_this_next") or {}
+    assert next_a.get("action") == "review"
+
+
 def test_wealth_tips_when_safe_surplus(client: TestClient):
     client.post("/api/onboarding/quick-setup", json={"cash_balance": 10000})
     # add child for 529 tip

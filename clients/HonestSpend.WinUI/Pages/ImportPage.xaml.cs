@@ -19,6 +19,7 @@ public sealed partial class ImportPage : Page
     private StorageFile? _xlsxFile;
     private string? _inboxPath;
     private int? _setBooksAccountId;
+    private bool _requireEndingBal;
 
     public ImportPage()
     {
@@ -415,6 +416,7 @@ public sealed partial class ImportPage : Page
         GoHomeBtn.Visibility = Visibility.Collapsed;
         GoHomeBtn.Content = "Home";
         _setBooksAccountId = null;
+        _requireEndingBal = false;
     }
 
     private void ShowNextSteps(JsonElement res)
@@ -447,6 +449,7 @@ public sealed partial class ImportPage : Page
             {
                 if (int.TryParse(JsonUi.Str(st, "account_id"), out var eaid))
                     _setBooksAccountId = eaid;
+                _requireEndingBal = true;
                 EndingBalanceBox.Focus(FocusState.Programmatic);
                 SetBooksFromBankBtn.Content = "Save ending bal + set Safe to spend";
                 SetBooksFromBankBtn.Visibility = Visibility.Visible;
@@ -477,17 +480,24 @@ public sealed partial class ImportPage : Page
                 throw new InvalidOperationException("Pick the account that received the import.");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            // Optional: user typed ending bal first (bal-less CSV/PDF path)
+            // Bal-less import: require ending bal before trust (no failed API round-trip)
+            decimal? typedBal = null;
             if (!string.IsNullOrWhiteSpace(EndingBalanceBox.Text))
             {
                 var balText = EndingBalanceBox.Text.Trim().Replace("$", "").Replace(",", "");
                 if (decimal.TryParse(balText, System.Globalization.NumberStyles.Number,
                         System.Globalization.CultureInfo.InvariantCulture, out var parsed)
                     || decimal.TryParse(balText, out parsed))
-                {
-                    await api.SetInstitutionBalanceAsync(accountId.Value, parsed, markReconciled: false);
-                }
+                    typedBal = parsed;
             }
+            if (_requireEndingBal && typedBal is null)
+            {
+                EndingBalanceBox.Focus(FocusState.Programmatic);
+                throw new InvalidOperationException(
+                    "Enter the bank ending balance first (from your statement or online banking).");
+            }
+            if (typedBal is decimal balToSet)
+                await api.SetInstitutionBalanceAsync(accountId.Value, balToSet, markReconciled: false);
             var res = await api.ReconcileTrustAsync(accountId.Value, "institution");
             ResultText.Text =
                 (ResultText.Text ?? "") +

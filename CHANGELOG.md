@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.23 — Credit refunds · payment heuristics · OFX/PDF parity · CTA guards
+
+- **Refunds/statement credits** stay positive (reduce owed); payment false positives tightened (protection / late payment / pymt)
+- **PDF**: bare `PAYMENT` rows kept; real import test charge+payment
+- **OFX credit** uses same normalizer as CSV/PDF
+- **Import**: `enter_ending_bal` requires typed ending bal before trust
+- **Home**: Do this next elevates Sort when uncat-only; promo `account_id` via JsonUi.Int
+- Credit normalizer also runs after amount_sign invert
+
 ## 1.0.22 — Credit payment signs · month-close honesty · Plaid tests
 
 - **Credit CSV/PDF**: payments (PAYMENT/AUTOPAY/THANK YOU) stay positive; charges flip; no more inflated owed on pay-downs

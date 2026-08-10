@@ -156,8 +156,8 @@ def parse_statement_lines(
             mid = _AMOUNT_RE.sub("", mid).strip(" -·|\t")
         if len(mid) < 2:
             continue
-        # skip pure totals
-        if mid.lower() in ("total", "subtotal", "balance", "payment"):
+        # skip pure totals (keep bare "PAYMENT" — real pay-down rows on many statements)
+        if mid.lower() in ("total", "subtotal", "balance"):
             continue
 
         key = f"{txn_date.isoformat()}|{mid[:40].lower()}|{amt}"
@@ -256,8 +256,8 @@ def import_statement_pdf(
         payee = r["payee"]
         if amount_sign == "invert":
             amt = -amt
-        elif amount_sign == "bank" and acct.kind == "credit":
-            # Charges → negative; payments (THANK YOU / PAYMENT) → positive
+        if acct.kind == "credit" and amount_sign in ("bank", "invert"):
+            # Charges → negative; payments/refunds → positive
             from financial_os.services.import_amounts import normalize_credit_import_amount
 
             amt = normalize_credit_import_amount(amt, payee)

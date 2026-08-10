@@ -313,10 +313,14 @@ def import_ofx(
 
     for r in rows:
         amt = r["amount"]
+        payee = r["payee"]
         if amount_sign == "invert":
             amt = -amt
-        # OFX credit-card convention varies; charges often negative already in bank OFX
-        payee = r["payee"]
+        # Credit: same normalizer as CSV/PDF (payments/refunds positive, charges negative)
+        if acct.kind == "credit" and amount_sign in ("bank", "invert"):
+            from financial_os.services.import_amounts import normalize_credit_import_amount
+
+            amt = normalize_credit_import_amount(amt, payee)
         d = r["txn_date"]
         fitid = (r.get("fitid") or "").strip()
         if fitid:

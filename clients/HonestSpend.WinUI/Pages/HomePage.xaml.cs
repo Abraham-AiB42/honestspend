@@ -241,8 +241,9 @@ public sealed partial class HomePage : Page
                 PromoReason.Text = JsonUi.Str(promo, "reason");
                 PromoBtn.Content = JsonUi.Str(promo, "button_label", "Create set-aside");
                 PromoMsg.Text = "";
-                if (promo.TryGetProperty("account_id", out var paid) && paid.ValueKind == JsonValueKind.Number)
-                    _promoAccountId = paid.GetInt32();
+                var paid = JsonUi.Int(promo, "account_id", 0);
+                if (paid > 0)
+                    _promoAccountId = paid;
             }
             else
             {
@@ -370,10 +371,13 @@ public sealed partial class HomePage : Page
                             if (!done && _ritualNextAction == "hold")
                             {
                                 _ritualNextAction = JsonUi.Str(st, "action", "hold");
-                                // Parity with month-close: capture account_id for one-tap set_books
-                                var raid = JsonUi.Int(st, "account_id", 0);
-                                if (raid > 0)
-                                    _booksAccountId = raid;
+                                // Only fill when books_brief/do_this left account_id empty
+                                if (_booksAccountId is null)
+                                {
+                                    var raid = JsonUi.Int(st, "account_id", 0);
+                                    if (raid > 0)
+                                        _booksAccountId = raid;
+                                }
                             }
                         }
                     }
