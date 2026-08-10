@@ -322,11 +322,14 @@ def _enrich_ritual(
             step["detail"] = sample or f"{n} waiting in Sort charges."
             step["count"] = n
 
-    # Bank health step (Plaid reauth / stale)
+    # Bank health step (Plaid reauth / stale / missing bal)
+    missing_bal = int(books.get("plaid_cash_missing_bank_bal") or 0) > 0
     bank_done = not (
-        books.get("plaid_needs_reauth") or (books.get("plaid_stale") and books.get("plaid_linked"))
+        books.get("plaid_needs_reauth")
+        or (books.get("plaid_stale") and books.get("plaid_linked"))
+        or missing_bal
     )
-    if books.get("plaid_linked") or books.get("plaid_needs_reauth"):
+    if books.get("plaid_linked") or books.get("plaid_needs_reauth") or missing_bal:
         if books.get("plaid_needs_reauth"):
             bank_title, bank_detail, bank_action = (
                 "Re-connect bank",
@@ -338,6 +341,13 @@ def _enrich_ritual(
             bank_title, bank_detail, bank_action = (
                 "Refresh bank sync",
                 "A linked bank has not synced in 3+ days.",
+                "plaid",
+            )
+            bank_done = False
+        elif missing_bal:
+            bank_title, bank_detail, bank_action = (
+                "Linked cash needs bank bal",
+                "Plaid did not return a current balance — sync again or import CSV/OFX.",
                 "plaid",
             )
             bank_done = False

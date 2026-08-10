@@ -148,6 +148,23 @@ def build_import_brief(
             secondary_action = "review"
             secondary_label = f"Sort {uncat} charge{'s' if uncat != 1 else ''}"
             reason += f" Then sort {uncat} uncategorized charge{'s' if uncat != 1 else ''}."
+    elif plaid_cash_missing_bal > 0:
+        # Honesty: linked cash without bank bal ranks above Sort charges
+        attention = "action"
+        title = (
+            f"{plaid_cash_missing_bal} linked cash account(s) need bank bal"
+            if plaid_cash_missing_bal > 1
+            else "Linked cash needs bank bal"
+        )
+        reason = (
+            "Plaid did not return a current balance for linked cash — sync again "
+            "or import CSV/OFX so Safe to spend has bank truth."
+        )
+        primary_action = "plaid"
+        button = "Open banks"
+        if uncat > 0:
+            secondary_action = "review"
+            secondary_label = f"Sort {uncat} charge{'s' if uncat != 1 else ''}"
     elif uncat > 0:
         attention = "action"
         title = f"{uncat} charge{'s' if uncat != 1 else ''} to sort"
@@ -164,20 +181,6 @@ def build_import_brief(
         attention = "watch"
         title = "Bank sync is stale"
         reason = "A linked bank has not synced in 3+ days. Sync or re-link."
-        primary_action = "plaid"
-        button = "Open banks"
-    elif plaid_cash_missing_bal > 0:
-        # Linked cash never got balances.current — Safe to spend may be books-only
-        attention = "watch"
-        title = (
-            f"{plaid_cash_missing_bal} linked cash account(s) need bank bal"
-            if plaid_cash_missing_bal > 1
-            else "Linked cash needs bank bal"
-        )
-        reason = (
-            "Plaid did not return a current balance for linked cash — sync again "
-            "or import CSV/OFX so Safe to spend has bank truth."
-        )
         primary_action = "plaid"
         button = "Open banks"
     elif recent_count > 0 and recent_uncat == 0:

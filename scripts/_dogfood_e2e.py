@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sys
 import tempfile
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -124,15 +125,14 @@ else:
             f"/api/reconcile/{cash['id']}/trust",
             json={"trust": "institution"},
         )
-        if trust.status_code == 200:
-            bal = trust.json().get("books_balance")
-            if str(bal) in ("6000", "6000.0", "6000.00"):
+        if trust.status_code != 200:
+            bad("trust institution", f"HTTP {trust.status_code}")
+        else:
+            bal = Decimal(str(trust.json().get("books_balance") or "0"))
+            if bal == Decimal("6000.00") or bal == Decimal("6000"):
                 ok("trust institution", f"books={bal}")
             else:
-                # books may include txn delta first — still honest if matches institution
-                ok("trust institution", f"books={bal}")
-        else:
-            bad("trust institution", f"HTTP {trust.status_code}")
+                bad("trust institution books", f"expected 6000.00 got {bal}")
         home2 = must("home after trust", c.get("/api/home/simple"))
         bb = home2.get("books_brief") or {}
         if bb.get("primary_action") != "set_books_from_bank":

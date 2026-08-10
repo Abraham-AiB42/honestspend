@@ -20,8 +20,9 @@ public sealed partial class ImportPage : Page
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private bool _requireEndingBal;
-    /// <summary>Remaining bal-less accounts after the active enter_ending_bal CTA.</summary>
+    /// <summary>Remaining honesty CTAs after the active button (set_books then enter).</summary>
     private readonly List<(int AccountId, string Label)> _enterEndingQueue = new();
+    private readonly List<(int AccountId, string Label)> _setBooksQueue = new();
 
     public ImportPage()
     {
@@ -325,33 +326,39 @@ public sealed partial class ImportPage : Page
         return bal;
     }
 
+    private static bool FileSetInstitutionBalance(JsonElement res)
+    {
+        if (res.TryGetProperty("institution_balance_set", out var ibs)
+            && ibs.ValueKind == JsonValueKind.True)
+            return true;
+        var end = Prop(res, "ending_balance");
+        var ledger = Prop(res, "ledger_balance");
+        return (!string.IsNullOrEmpty(end) && end is not ("?" or "—"))
+            || (!string.IsNullOrEmpty(ledger) && ledger is not ("?" or "—"));
+    }
+
     /// <summary>
-    /// After OFX/PDF import: apply typed ending bal when the file did not set bank bal,
-    /// then trust bank → Safe to spend (same as “Save ending bal + set Safe to spend”).
-    /// Returns true when bank was trusted from typed bal (skip stale enter_ending_bal CTA).
+    /// Open-rarely rule: if import set bank bal (file or typed), trust → Safe to spend once.
+    /// Returns true when trust completed (skip set_books / enter CTAs; keep Sort).
     /// </summary>
-    private async Task<bool> ApplyTypedEndingBalIfNeededAsync(
+    private async Task<bool> CompleteBankHonestyAfterImportAsync(
         LedgerApiClient api, int accountId, JsonElement res, List<string> lines)
     {
+        if (FileSetInstitutionBalance(res))
+        {
+            var trust = await api.ReconcileTrustAsync(accountId, "institution");
+            lines.Add(
+                $"Safe to spend updated · books ${JsonUi.Str(trust, "books_balance")} (trusted bank from file).");
+            return true;
+        }
         var typed = ParseOptionalEndingBalanceOrThrow();
         if (typed is null)
             return false;
-        var fileSetInst =
-            (res.TryGetProperty("institution_balance_set", out var ibs)
-             && ibs.ValueKind == JsonValueKind.True)
-            || (!string.IsNullOrEmpty(Prop(res, "ending_balance"))
-                && Prop(res, "ending_balance") != "?"
-                && Prop(res, "ending_balance") != "—");
-        if (fileSetInst)
-        {
-            lines.Add("Typed ending bal ignored — file already set bank ending balance.");
-            return false;
-        }
         await api.SetInstitutionBalanceAsync(accountId, typed.Value, markReconciled: false);
-        var trust = await api.ReconcileTrustAsync(accountId, "institution");
+        var trust2 = await api.ReconcileTrustAsync(accountId, "institution");
         lines.Add(
             $"Bank ending bal ${typed.Value:0.00} (typed) · Safe to spend updated · books " +
-            $"${JsonUi.Str(trust, "books_balance")} (trusted bank).");
+            $"${JsonUi.Str(trust2, "books_balance")} (trusted bank).");
         return true;
     }
 
@@ -506,6 +513,7 @@ public sealed partial class ImportPage : Page
         _setBooksAccountId = null;
         _requireEndingBal = false;
         _enterEndingQueue.Clear();
+        _setBooksQueue.Clear();
     }
 
     private void ShowNextSteps(
@@ -517,9 +525,7 @@ public sealed partial class ImportPage : Page
         if (!res.TryGetProperty("next_steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
             return;
 
-        var hasSetBooks = false;
-        int? setBooksAid = null;
-        var setBooksLabel = "Set Safe to spend from bank";
+        var setBooksItems = new List<(int? AccountId, string Label)>();
         var enterItems = new List<(int? AccountId, string Label)>();
         var showSort = false;
         var showHome = false;
@@ -530,12 +536,11 @@ public sealed partial class ImportPage : Page
             var action = JsonUi.Str(st, "action");
             if (action == "set_books_from_bank" && !skipSetBooksFromBank)
             {
-                hasSetBooks = true;
-                setBooksLabel = string.IsNullOrEmpty(JsonUi.Str(st, "label"))
-                    ? setBooksLabel
+                int? aid = int.TryParse(JsonUi.Str(st, "account_id"), out var id) ? id : null;
+                var lab = string.IsNullOrEmpty(JsonUi.Str(st, "label"))
+                    ? "Set Safe to spend from bank"
                     : JsonUi.Str(st, "label");
-                if (int.TryParse(JsonUi.Str(st, "account_id"), out var aid))
-                    setBooksAid = aid;
+                setBooksItems.Add((aid, lab));
             }
             else if (action == "review")
                 showSort = true;
@@ -557,32 +562,21 @@ public sealed partial class ImportPage : Page
         var show = false;
 
         // Honesty priority: set_books (bank bal already known) wins over enter_ending_bal
-        if (hasSetBooks)
+        if (setBooksItems.Count > 0)
         {
-            if (setBooksAid is int sa)
+            ActivateSetBooks(setBooksItems[0].AccountId, setBooksItems[0].Label);
+            for (var i = 1; i < setBooksItems.Count; i++)
             {
-                _setBooksAccountId = sa;
-                SelectAccountById(sa);
+                if (setBooksItems[i].AccountId is int qid)
+                    _setBooksQueue.Add((qid, setBooksItems[i].Label));
             }
-            else if (AccountBox.SelectedItem is ComboBoxItem { Tag: int selected })
-                _setBooksAccountId = selected;
-            _requireEndingBal = false;
-            SetBooksFromBankBtn.Content = setBooksLabel;
-            SetBooksFromBankBtn.Visibility = Visibility.Visible;
-            show = true;
-            // Queue other bal-less accounts for after set_books succeeds (do not steal button now)
             foreach (var ent in enterItems)
             {
                 if (ent.AccountId is int qid)
                     _enterEndingQueue.Add((qid, ent.Label));
             }
-            if (_enterEndingQueue.Count > 0)
-            {
-                ResultText.Text =
-                    (ResultText.Text ?? "") +
-                    "\nAlso need ending bal: " +
-                    string.Join("; ", _enterEndingQueue.Select(e => e.Label));
-            }
+            AppendAlsoNeedNote();
+            show = true;
         }
         else if (enterItems.Count > 0)
         {
@@ -592,13 +586,7 @@ public sealed partial class ImportPage : Page
                 if (enterItems[i].AccountId is int qid)
                     _enterEndingQueue.Add((qid, enterItems[i].Label));
             }
-            if (_enterEndingQueue.Count > 0)
-            {
-                ResultText.Text =
-                    (ResultText.Text ?? "") +
-                    "\nAlso need ending bal: " +
-                    string.Join("; ", _enterEndingQueue.Select(e => e.Label));
-            }
+            AppendAlsoNeedNote();
             show = true;
         }
 
@@ -615,6 +603,35 @@ public sealed partial class ImportPage : Page
         }
 
         NextStepsPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AppendAlsoNeedNote()
+    {
+        var rest = new List<string>();
+        rest.AddRange(_setBooksQueue.Select(e => e.Label));
+        rest.AddRange(_enterEndingQueue.Select(e => e.Label));
+        if (rest.Count == 0)
+            return;
+        ResultText.Text =
+            (ResultText.Text ?? "") +
+            "\nAlso need: " +
+            string.Join("; ", rest);
+    }
+
+    private void ActivateSetBooks(int? accountId, string label)
+    {
+        if (accountId is int sa)
+        {
+            _setBooksAccountId = sa;
+            SelectAccountById(sa);
+        }
+        else if (AccountBox.SelectedItem is ComboBoxItem { Tag: int selected })
+            _setBooksAccountId = selected;
+        _requireEndingBal = false;
+        SetBooksFromBankBtn.Content = string.IsNullOrEmpty(label) || label == "—"
+            ? "Set Safe to spend from bank"
+            : label;
+        SetBooksFromBankBtn.Visibility = Visibility.Visible;
     }
 
     private void ActivateEnterEndingBal(int? accountId, string label)
@@ -635,6 +652,19 @@ public sealed partial class ImportPage : Page
         SetBooksFromBankBtn.Visibility = Visibility.Visible;
     }
 
+    /// <summary>Advance next set_books account after a successful trust.</summary>
+    private bool TryActivateNextSetBooks()
+    {
+        if (_setBooksQueue.Count == 0)
+            return false;
+        var (id, label) = _setBooksQueue[0];
+        _setBooksQueue.RemoveAt(0);
+        ActivateSetBooks(id, label);
+        AppendAlsoNeedNote();
+        NextStepsPanel.Visibility = Visibility.Visible;
+        return true;
+    }
+
     /// <summary>Advance to next bal-less account after a successful save+trust.</summary>
     private bool TryActivateNextEnterEndingBal()
     {
@@ -643,13 +673,7 @@ public sealed partial class ImportPage : Page
         var (id, label) = _enterEndingQueue[0];
         _enterEndingQueue.RemoveAt(0);
         ActivateEnterEndingBal(id, label);
-        if (_enterEndingQueue.Count > 0)
-        {
-            ResultText.Text =
-                (ResultText.Text ?? "") +
-                "\nAlso need ending bal: " +
-                string.Join("; ", _enterEndingQueue.Select(e => e.Label));
-        }
+        AppendAlsoNeedNote();
         NextStepsPanel.Visibility = Visibility.Visible;
         return true;
     }
@@ -680,13 +704,14 @@ public sealed partial class ImportPage : Page
                 await api.SetInstitutionBalanceAsync(accountId.Value, typedBal.Value, markReconciled: false);
             }
             // set_books-only: trust existing institution_balance — do not re-apply typed box
-            // (avoids stale preview numbers overwriting file bank truth)
 
             var res = await api.ReconcileTrustAsync(accountId.Value, "institution");
             ResultText.Text =
                 (ResultText.Text ?? "") +
                 $"\nSafe to spend updated · books ${Prop(res, "books_balance")} (trusted bank).";
 
+            if (TryActivateNextSetBooks())
+                return;
             if (TryActivateNextEnterEndingBal())
                 return;
 
@@ -776,11 +801,10 @@ public sealed partial class ImportPage : Page
                             ? " · set for Reconcile"
                             : ""));
                 }
-                var typedTrusted = await ApplyTypedEndingBalIfNeededAsync(api, accountId, ofxRes, lines);
-                AppendNextStepLines(lines, ofxRes);
+                var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, ofxRes, lines);
+                AppendNextStepLines(lines, ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
                 ResultText.Text = string.Join("\n", lines);
-                // Keep Sort/home; skip stale enter_ending_bal after typed trust
-                ShowNextSteps(ofxRes, skipEnterEndingBal: typedTrusted, skipSetBooksFromBank: typedTrusted);
+                ShowNextSteps(ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
                 return;
             }
             if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
@@ -809,15 +833,6 @@ public sealed partial class ImportPage : Page
                         ? ""
                         : $" · books drift ${Prop(res, "drift")}"));
             }
-            // Typed override = user bank truth → one-tap trust (OFX/PDF parity)
-            var csvTrusted = false;
-            if (instBal is not null)
-            {
-                var trust = await api.ReconcileTrustAsync(accountId, "institution");
-                csvLines.Add(
-                    $"Safe to spend updated · books ${Prop(trust, "books_balance")} (trusted bank).");
-                csvTrusted = true;
-            }
             if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
             {
                 var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);
@@ -825,7 +840,9 @@ public sealed partial class ImportPage : Page
                 if (!string.IsNullOrEmpty(joined))
                     csvLines.Add("Errors: " + joined);
             }
-            AppendNextStepLines(csvLines, res);
+            // File bal (column/override) or typed-only → one-tap trust (same rule as OFX/PDF)
+            var csvTrusted = await CompleteBankHonestyAfterImportAsync(api, accountId, res, csvLines);
+            AppendNextStepLines(csvLines, res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
             ResultText.Text = string.Join("\n", csvLines);
             ShowNextSteps(res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
         }
@@ -881,10 +898,10 @@ public sealed partial class ImportPage : Page
                 if (!string.IsNullOrEmpty(joined))
                     pdfLines.Add("Errors: " + joined);
             }
-            var typedTrusted = await ApplyTypedEndingBalIfNeededAsync(api, accountId, res, pdfLines);
-            AppendNextStepLines(pdfLines, res);
+            var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, res, pdfLines);
+            AppendNextStepLines(pdfLines, res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
             ResultText.Text = string.Join("\n", pdfLines);
-            ShowNextSteps(res, skipEnterEndingBal: typedTrusted, skipSetBooksFromBank: typedTrusted);
+            ShowNextSteps(res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
         }
         catch (Exception ex)
         {
@@ -893,12 +910,25 @@ public sealed partial class ImportPage : Page
         }
     }
 
-    private static void AppendNextStepLines(List<string> lines, JsonElement res)
+    private static void AppendNextStepLines(
+        List<string> lines,
+        JsonElement res,
+        bool skipEnterEndingBal = false,
+        bool skipSetBooksFromBank = false)
     {
         if (!res.TryGetProperty("next_steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
             return;
         foreach (var step in steps.EnumerateArray())
+        {
+            var action = JsonUi.Str(step, "action");
+            if (skipSetBooksFromBank && action == "set_books_from_bank")
+                continue;
+            if (skipEnterEndingBal && action == "enter_ending_bal")
+                continue;
+            if (action is "hold" or "home")
+                continue;
             lines.Add($"→ {JsonUi.Str(step, "label")}: {JsonUi.Str(step, "detail")}");
+        }
     }
 
     private async void ImportXlsx_Click(object sender, RoutedEventArgs e)

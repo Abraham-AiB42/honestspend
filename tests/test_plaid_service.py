@@ -144,6 +144,35 @@ def test_sync_accounts_missing_current_counted(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_sync_accounts_create_missing_current_not_ifpp_cash(tmp_path: Path, monkeypatch):
+    """First link without balances.current must not invent $0 cash for Safe to spend."""
+    from financial_os.config import settings
+
+    monkeypatch.setattr(settings, "plaid_client_id", "cid")
+    monkeypatch.setattr(settings, "plaid_secret", "sec")
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    item = _item(s, personal.id)
+    accounts_payload = {
+        "accounts": [
+            {
+                "account_id": "plaid-new-miss",
+                "name": "Checking",
+                "type": "depository",
+                "subtype": "checking",
+                "balances": {},
+            }
+        ]
+    }
+    with patch.object(plaid_service, "_post", return_value=accounts_payload):
+        out, missing = plaid_service._sync_accounts(s, item)
+    assert missing == 1
+    acct = out[0]
+    assert acct.institution_balance is None
+    assert acct.is_cash_for_ifpp is False
+    s.close()
+
+
 def test_upsert_plaid_txn_does_not_change_balance(tmp_path: Path, monkeypatch):
     from financial_os.config import settings
 

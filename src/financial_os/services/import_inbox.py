@@ -394,6 +394,11 @@ def process_inbox(
                         pass
                     if acct.institution_balance is None and acct.id not in need_ending_accounts:
                         need_ending_accounts.append(acct.id)
+                # Flush before archive so a late failure doesn't orphan the file
+                try:
+                    session.flush()
+                except Exception:
+                    pass
                 dest = archive_dir() / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{path.name}"
                 shutil.move(str(path), str(dest))
                 entry["archived_to"] = str(dest)
@@ -448,6 +453,31 @@ def process_inbox(
             institution_balance=inst_bal,
             source="inbox",
         )
+        # Multi-account: extra set_books for other drifted cash (worst already primary)
+        have_set = {
+            st.get("account_id")
+            for st in next_steps
+            if st.get("action") == "set_books_from_bank"
+        }
+        for aid, pack in sorted(drift_by_acct.items(), key=lambda kv: -kv[1][0]):
+            if str(aid) in have_set:
+                continue
+            _, dval, books_b, inst_b = pack
+            arow = session.get(Account, aid)
+            nick = (arow.nickname if arow else None) or f"Account {aid}"
+            nick = nick[:40]
+            next_steps.append(
+                {
+                    "action": "set_books_from_bank",
+                    "label": f"Set Safe to spend from bank · {nick}",
+                    "detail": (
+                        f"Books ${books_b or '?'} vs bank ${inst_b} "
+                        f"(Δ ${dval.quantize(Decimal('0.01'))}). One tap updates Safe to spend."
+                    ),
+                    "account_id": str(aid),
+                }
+            )
+            have_set.add(str(aid))
         # Multi-account: extra enter_ending_bal CTAs for other bal-less successes
         have_enter = {
             st.get("account_id")

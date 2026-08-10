@@ -143,6 +143,9 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
                 # Plaid balances are bank truth for linked accounts (snapshot, not txn deltas)
                 existing.current_balance = bal
                 existing.institution_balance = bal
+                if kind in ("checking", "savings", "cash"):
+                    # Promote to IFPP cash once we have a real snapshot
+                    existing.is_cash_for_ifpp = True
             else:
                 missing_current += 1
             if kind == "credit":
@@ -155,7 +158,7 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
                         str(current)
                     )
                 existing.is_cash_for_ifpp = False
-            else:
+            elif current is not None:
                 existing.is_cash_for_ifpp = kind in ("checking", "savings", "cash")
             existing.plaid_item_pk = item.id
             out.append(existing)
@@ -163,7 +166,9 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
 
         if current is None:
             missing_current += 1
-        bal0 = Decimal(str(current or 0))
+        # Never invent $0 cash for IFPP when Plaid omits balances.current
+        bal0 = Decimal(str(current)) if current is not None else Decimal("0")
+        is_cash = kind in ("checking", "savings") and current is not None
         avail0: Decimal | None = None
         if kind == "credit":
             if available is not None:
@@ -180,7 +185,7 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
             institution_balance=bal0 if current is not None else None,
             credit_limit=Decimal(str(limit)) if limit is not None else None,
             available_credit=avail0,
-            is_cash_for_ifpp=kind in ("checking", "savings"),
+            is_cash_for_ifpp=is_cash,
             plaid_item_pk=item.id,
             plaid_account_id=plaid_aid,
             external_id=f"plaid:{plaid_aid}",

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.31 — Plaid create honesty · unified trust · multi set_books
+
+- **Plaid create**: missing `balances.current` → not IFPP cash (no phantom $0 Safe to spend)
+- **Import**: one rule — file set bank bal **or** typed bal → trust Safe to spend (CSV/OFX/PDF)
+- **Inbox**: multi-account set_books CTAs (not only enter); flush before archive
+- **books_brief / ritual**: missing linked cash bal ranks above Sort; bank_ok incomplete
+- **WinUI**: set_books queue after multi-cash inbox; filter ResultText after trust
+- **Dogfood**: hard assert books == 6000 after trust
+
 ## 1.0.30 — Dogfood honesty path · Plaid missing bal signal
 
 - **Dogfood E2E**: CSV import ending bal → set_books CTA → trust → books_brief clear
