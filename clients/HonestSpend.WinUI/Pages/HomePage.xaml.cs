@@ -223,105 +223,131 @@ public sealed partial class HomePage : Page
                 PromoCard.Visibility = Visibility.Collapsed;
             }
 
-            // Month-close (H1-B)
+            // Month-close (H1-B) — hide entirely when period closed (open-rarely)
             _monthCloseAction = "hold";
             _monthCloseAccountId = null;
             if (_home.TryGetProperty("month_close", out var mc) && mc.ValueKind == JsonValueKind.Object)
             {
-                MonthCloseSubtitle.Text = JsonUi.Str(mc, "subtitle");
-                MonthCloseProgress.Text = JsonUi.Str(mc, "progress_label");
-                var mLines = new List<string>();
-                if (mc.TryGetProperty("steps", out var ms) && ms.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var st in ms.EnumerateArray())
-                    {
-                        var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
-                        var opt = st.TryGetProperty("optional", out var o) && o.ValueKind == JsonValueKind.True;
-                        mLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")}" + (opt ? " (optional)" : ""));
-                        if (!done && _monthCloseAction == "hold" && !opt)
-                        {
-                            _monthCloseAction = JsonUi.Str(st, "action", "hold");
-                            if (st.TryGetProperty("account_id", out var maid) && maid.ValueKind == JsonValueKind.Number)
-                                _monthCloseAccountId = maid.GetInt32();
-                        }
-                    }
-                }
-                MonthCloseList.ItemsSource = mLines;
-                var allDone = mc.TryGetProperty("all_done", out var mad) && mad.ValueKind == JsonValueKind.True;
                 var closed = mc.TryGetProperty("closed_this_period", out var cl) && cl.ValueKind == JsonValueKind.True;
+                var allDone = mc.TryGetProperty("all_done", out var mad) && mad.ValueKind == JsonValueKind.True;
                 var canMark = mc.TryGetProperty("can_mark_closed", out var cm) && cm.ValueKind == JsonValueKind.True;
                 if (closed)
                 {
-                    // Quiet open-rarely: one status line, hide step list + buttons
-                    MonthCloseList.Visibility = Visibility.Collapsed;
-                    MonthCloseBtn.Visibility = Visibility.Collapsed;
-                    MarkMonthClosedBtn.Visibility = Visibility.Collapsed;
-                }
-                else if (canMark || allDone)
-                {
-                    MonthCloseList.Visibility = Visibility.Visible;
-                    MonthCloseBtn.Visibility = Visibility.Collapsed;
-                    MarkMonthClosedBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
-                        ? "Mark month closed"
-                        : JsonUi.Str(mc, "button_label");
-                    MarkMonthClosedBtn.Visibility = Visibility.Visible;
+                    MonthCloseCard.Visibility = Visibility.Collapsed;
                 }
                 else
                 {
-                    MonthCloseList.Visibility = Visibility.Visible;
-                    MonthCloseBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
-                        ? "Do next close step"
-                        : JsonUi.Str(mc, "button_label");
-                    MonthCloseBtn.Visibility = Visibility.Visible;
-                    MarkMonthClosedBtn.Visibility = Visibility.Collapsed;
+                    MonthCloseCard.Visibility = Visibility.Visible;
+                    MonthCloseSubtitle.Text = JsonUi.Str(mc, "subtitle");
+                    MonthCloseProgress.Text = JsonUi.Str(mc, "progress_label");
+                    var mLines = new List<string>();
+                    if (mc.TryGetProperty("steps", out var ms) && ms.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var st in ms.EnumerateArray())
+                        {
+                            var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
+                            var opt = st.TryGetProperty("optional", out var o) && o.ValueKind == JsonValueKind.True;
+                            mLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")}" + (opt ? " (optional)" : ""));
+                            if (!done && _monthCloseAction == "hold" && !opt)
+                            {
+                                _monthCloseAction = JsonUi.Str(st, "action", "hold");
+                                if (st.TryGetProperty("account_id", out var maid) && maid.ValueKind == JsonValueKind.Number)
+                                    _monthCloseAccountId = maid.GetInt32();
+                            }
+                        }
+                    }
+                    MonthCloseList.ItemsSource = mLines;
+                    if (canMark || allDone)
+                    {
+                        MonthCloseList.Visibility = Visibility.Visible;
+                        MonthCloseBtn.Visibility = Visibility.Collapsed;
+                        MarkMonthClosedBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
+                            ? "Mark month closed"
+                            : JsonUi.Str(mc, "button_label");
+                        MarkMonthClosedBtn.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        MonthCloseList.Visibility = Visibility.Visible;
+                        MonthCloseBtn.Content = string.IsNullOrEmpty(JsonUi.Str(mc, "button_label"))
+                            ? "Do next close step"
+                            : JsonUi.Str(mc, "button_label");
+                        MonthCloseBtn.Visibility = Visibility.Visible;
+                        MarkMonthClosedBtn.Visibility = Visibility.Collapsed;
+                    }
                 }
             }
+            else
+            {
+                MonthCloseCard.Visibility = Visibility.Collapsed;
+            }
 
-            // Tax year prep (H2-B)
+            // Tax year prep (H2-B) — hide when checklist complete
             _taxYearAction = "hold";
             if (_home.TryGetProperty("tax_year", out var ty) && ty.ValueKind == JsonValueKind.Object)
             {
-                TaxYearTitle.Text = JsonUi.Str(ty, "title");
-                TaxYearSubtitle.Text = JsonUi.Str(ty, "subtitle");
-                TaxYearProgress.Text = JsonUi.Str(ty, "progress_label");
-                var tLines = new List<string>();
-                if (ty.TryGetProperty("steps", out var ts) && ts.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var st in ts.EnumerateArray())
-                    {
-                        var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
-                        var opt = st.TryGetProperty("optional", out var o) && o.ValueKind == JsonValueKind.True;
-                        tLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")}" + (opt ? " (optional)" : ""));
-                        if (!done && _taxYearAction == "hold" && !opt)
-                            _taxYearAction = JsonUi.Str(st, "action", "hold");
-                    }
-                }
-                TaxYearList.ItemsSource = tLines;
                 var tDone = ty.TryGetProperty("all_done", out var tad) && tad.ValueKind == JsonValueKind.True;
-                TaxYearBtn.Visibility = tDone ? Visibility.Collapsed : Visibility.Visible;
+                if (tDone)
+                {
+                    TaxYearCard.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    TaxYearCard.Visibility = Visibility.Visible;
+                    TaxYearTitle.Text = JsonUi.Str(ty, "title");
+                    TaxYearSubtitle.Text = JsonUi.Str(ty, "subtitle");
+                    TaxYearProgress.Text = JsonUi.Str(ty, "progress_label");
+                    var tLines = new List<string>();
+                    if (ty.TryGetProperty("steps", out var ts) && ts.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var st in ts.EnumerateArray())
+                        {
+                            var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
+                            var opt = st.TryGetProperty("optional", out var o) && o.ValueKind == JsonValueKind.True;
+                            tLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")}" + (opt ? " (optional)" : ""));
+                            if (!done && _taxYearAction == "hold" && !opt)
+                                _taxYearAction = JsonUi.Str(st, "action", "hold");
+                        }
+                    }
+                    TaxYearList.ItemsSource = tLines;
+                    TaxYearBtn.Visibility = Visibility.Visible;
+                }
+            }
+            else
+            {
+                TaxYearCard.Visibility = Visibility.Collapsed;
             }
 
-            // 3-minute open-rarely ritual
+            // 3-minute open-rarely ritual — compact when all clear
             _ritualNextAction = "hold";
             if (_home.TryGetProperty("three_minute_check", out var ritual) && ritual.ValueKind == JsonValueKind.Object)
             {
+                var allDone = ritual.TryGetProperty("all_done", out var ad) && ad.ValueKind == JsonValueKind.True;
                 RitualSubtitle.Text = JsonUi.Str(ritual, "subtitle", "Open rarely — tick these and close.");
                 RitualProgress.Text = JsonUi.Str(ritual, "progress_label", "");
-                var rLines = new List<string>();
-                if (ritual.TryGetProperty("steps", out var rs) && rs.ValueKind == JsonValueKind.Array)
+                if (allDone)
                 {
-                    foreach (var st in rs.EnumerateArray())
-                    {
-                        var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
-                        rLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")} — {JsonUi.Str(st, "detail")}");
-                        if (!done && _ritualNextAction == "hold")
-                            _ritualNextAction = JsonUi.Str(st, "action", "hold");
-                    }
+                    RitualList.Visibility = Visibility.Collapsed;
+                    RitualNextBtn.Visibility = Visibility.Collapsed;
                 }
-                RitualList.ItemsSource = rLines;
-                var allDone = ritual.TryGetProperty("all_done", out var ad) && ad.ValueKind == JsonValueKind.True;
-                RitualNextBtn.Visibility = allDone ? Visibility.Collapsed : Visibility.Visible;
-                RitualNextBtn.Content = allDone ? "All clear" : "Do next open item";
+                else
+                {
+                    RitualList.Visibility = Visibility.Visible;
+                    var rLines = new List<string>();
+                    if (ritual.TryGetProperty("steps", out var rs) && rs.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var st in rs.EnumerateArray())
+                        {
+                            var done = st.TryGetProperty("done", out var d) && d.ValueKind == JsonValueKind.True;
+                            rLines.Add($"{(done ? "✓" : "○")} {JsonUi.Str(st, "title")} — {JsonUi.Str(st, "detail")}");
+                            if (!done && _ritualNextAction == "hold")
+                                _ritualNextAction = JsonUi.Str(st, "action", "hold");
+                        }
+                    }
+                    RitualList.ItemsSource = rLines;
+                    RitualNextBtn.Visibility = Visibility.Visible;
+                    RitualNextBtn.Content = "Do next open item";
+                }
             }
 
             var wealth = new List<string>();

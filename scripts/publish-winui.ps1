@@ -24,12 +24,14 @@ if (-not (Test-Path $Proj)) {
 Write-Host "Publishing HonestSpend.WinUI ($Configuration, win-x64) → $Out"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 
+# Explicit PublishTrimmed=false — WinUI self-contained + trim is fragile (NETSDK1102).
 dotnet publish $Proj `
     -c $Configuration `
     -p:Platform=x64 `
     -p:RuntimeIdentifier=win-x64 `
     -p:SelfContained=true `
     -p:PublishReadyToRun=true `
+    -p:PublishTrimmed=false `
     -o $Out
 
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

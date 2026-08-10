@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.18 — Open-rarely Home · reliable Release publish
+
+- Home: hide **month-close** when period closed; hide **tax year** when complete; compact **3-min ritual** when all clear
+- WinUI **PublishTrimmed=false** (Release packaging no longer hits NETSDK1102)
+- package-release / CI publish pass `-p:PublishTrimmed=false`; install notes updated for 1.0.x
+
 ## 1.0.17 — Month-close honesty gate · CSV txn-id dedupe · quieter Home
 
 - Month-close reconcile: after first bank bal, all cash IFPP accounts need ending bal; drift blocks close

@@ -45,29 +45,29 @@ if (-not $SkipEngine) {
 
 # 4) Install notes
 $notes = @"
-HonestSpend — Windows package (v0.7 Simple mode)
-================================================
+HonestSpend — Windows package (1.0.x)
+=====================================
 
 ONE-CLICK USE
 1. Unzip this folder anywhere (keep engine\ next to the EXE)
 2. Run HonestSpend.WinUI.exe
 3. 2-minute Get started → Safe to spend on Home
-4. Optional: Add → Link bank, or Import CSV
+4. Import CSV/OFX (or optional BYOK bank link)
 
-DAILY
+DAILY (open rarely)
 - Simple mode (default): Home · Add · Can I buy? · Sort charges
-- 3-minute check on Home when you open the app rarely
-- Full books toggle in the top bar when you need ledgers/tax
+- Import → Set Safe to spend from bank when ending bal differs
+- Close the month when the checklist is clear
+- Full books toggle for ledgers / tax / reconcile depth
 
 ENGINE
-- .\engine\ is auto-detected (no Python install required for end users
-  if this package was built with package-release.ps1)
+- .\engine\ is auto-detected (no separate Python install if packaged here)
 - If Home says offline: Settings → Start engine
 
 DATA
 - %USERPROFILE%\.financial-os  (or Settings → data folder / OneDrive)
 
-Docs: INSTALL.md · SIMPLE_MODE.md · RELEASE_0.7.0.md in this folder or source tree.
+Docs: INSTALL.md · CLIENT_FIRST.md · CHANGELOG.md
 
 Built: $(Get-Date -Format o)
 "@
