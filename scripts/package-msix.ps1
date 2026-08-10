@@ -41,6 +41,14 @@ if (-not (Test-Path $Proj)) {
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 New-Item -ItemType Directory -Force -Path $CertDir | Out-Null
 
+# Drop previous package folders so Partner Center uploads don't mix old identities
+if (Test-Path $OutDir) {
+    Get-ChildItem $OutDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        Write-Host "Removing old package output: $($_.Name)" -ForegroundColor DarkGray
+        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Host "=== HonestSpend MSIX package ($Configuration) ===" -ForegroundColor Cyan
 
 # Optional self-signed cert for local sideload (NOT for Store submission)

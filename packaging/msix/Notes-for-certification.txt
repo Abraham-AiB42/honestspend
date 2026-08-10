@@ -24,4 +24,5 @@ CSV or enter cash balance manually.
 VERSION
 -------
 Keep Package.appxmanifest Identity Version in sync with pyproject / financial_os version
-(e.g. 1.0.31.0 for feature tag 1.0.31).
+(e.g. 1.0.32.0). Identity Name/Publisher must match Partner Center Product identity.
+Device family: Windows.Desktop only — uncheck Xbox and other families in the submission.

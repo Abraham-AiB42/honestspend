@@ -16,3 +16,8 @@ build/
 **/obj/
 *.user
 *.suo
+
+# Staged into WinUI project only during package-msix (do not commit)
+clients/HonestSpend.WinUI/engine-portable.zip
+packaging/msix/*.pfx
+packaging/msix/*.cer

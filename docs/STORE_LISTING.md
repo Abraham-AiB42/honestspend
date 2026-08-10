@@ -43,7 +43,7 @@ Payroll, e-file tax filing, or replacing a bank’s own website.
 
 ## What’s new
 
-Point at CHANGELOG for the version you submit (e.g. 1.0.31).
+Point at CHANGELOG for the version you submit (e.g. 1.0.32).
 
 ## Keywords (suggestions)
 
