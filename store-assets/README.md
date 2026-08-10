@@ -37,16 +37,14 @@ Regenerate:
 
 ## Logo
 
-Folder: **`logo/`**
+Folder: **`logo/`** — transparent PNGs only (see `logo/README.md`).
 
 | File | Use |
 |------|-----|
-| `honestspend-mark.svg` | Master vector |
-| `honestspend-mark-512.png` | Clean H mark (code-rendered) |
-| `StoreLogo-300.png` | Partner Center square logo |
-| `StoreLogo-512.png` | High-res square |
-| `StoreLogo.png` | Same as 300 — also copied to WinUI `Assets\StoreLogo.png` |
-| `honestspend-icon-source.jpg` | Alternate AI concept (optional) |
+| `icon-300x300.png` | Partner Center square logo (mark only) |
+| `icon-150x150.png` / `icon-71x71.png` | Smaller tiles |
+| `full-logo-*.png` | Mark + wordmark when a larger lockup is needed |
+| `StoreLogo.png` | App package (same as icon-300) |
 
 ## Package
 

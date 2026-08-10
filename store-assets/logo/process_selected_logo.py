@@ -1,13 +1,19 @@
-"""Crop white void from gkIiu logo and fit into Windows square sizes (no stretch)."""
+"""Crop white void from source logo; export transparent square sizes only.
+
+Usage:
+  python store-assets/logo/process_selected_logo.py [path-to-source.jpg]
+Default source: %USERPROFILE%\\Downloads\\gkIiu.jpg
+"""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from PIL import Image
 
-SRC = Path(r"C:\Users\abrah\Downloads\gkIiu.jpg")
-OUT = Path(__file__).resolve().parent / "selected"
 ROOT = Path(__file__).resolve().parents[2]
+OUT = Path(__file__).resolve().parent
+DEFAULT_SRC = Path.home() / "Downloads" / "gkIiu.jpg"
 
 
 def remove_near_white(im: Image.Image, thr: int = 245) -> Image.Image:
@@ -23,7 +29,6 @@ def remove_near_white(im: Image.Image, thr: int = 245) -> Image.Image:
 
 
 def fit_square(img: Image.Image, size: int, pad_ratio: float = 0.08) -> Image.Image:
-    """Scale content to fit inside size x size with transparent padding (never stretch)."""
     canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     max_content = int(size * (1 - 2 * pad_ratio))
     iw, ih = img.size
@@ -37,18 +42,11 @@ def fit_square(img: Image.Image, size: int, pad_ratio: float = 0.08) -> Image.Im
     return canvas
 
 
-def with_white_bg(img: Image.Image) -> Image.Image:
-    bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
-    bg.alpha_composite(img)
-    return bg.convert("RGB")
-
-
 def content_row_blocks(img: Image.Image) -> list[tuple[int, int]]:
     w, h = img.size
-    rows = []
-    for y in range(h):
-        opaque = sum(1 for x in range(w) if img.getpixel((x, y))[3] > 20)
-        rows.append(opaque)
+    rows = [
+        sum(1 for x in range(w) if img.getpixel((x, y))[3] > 20) for y in range(h)
+    ]
     blocks: list[tuple[int, int]] = []
     in_content = False
     start = 0
@@ -66,18 +64,18 @@ def content_row_blocks(img: Image.Image) -> list[tuple[int, int]]:
 
 
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
-    im = remove_near_white(Image.open(SRC))
+    src = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SRC
+    if not src.is_file():
+        raise SystemExit(f"Source not found: {src}")
+
+    im = remove_near_white(Image.open(src))
     bbox = im.getbbox()
     if not bbox:
-        raise SystemExit("no content found after white removal")
-    print("content bbox:", bbox)
+        raise SystemExit("no content after white removal")
     full = im.crop(bbox)
     full.save(OUT / "full-logo-cropped-transparent.png")
 
-    # Icon = first vertical content block (mark above wordmark)
     blocks = content_row_blocks(full)
-    print("row blocks:", blocks)
     cw, ch = full.size
     if len(blocks) >= 2:
         y0, y1 = blocks[0]
@@ -90,38 +88,16 @@ def main() -> None:
         if ib:
             icon = icon.crop(ib)
     icon.save(OUT / "icon-cropped-transparent.png")
-    print("icon size:", icon.size, "full size:", full.size)
 
-    # Full logo (icon + wordmark) — fits letterboxed in square
     for size in (300, 150, 71):
-        sq = fit_square(full, size, pad_ratio=0.06)
-        sq.save(OUT / f"full-logo-{size}x{size}.png")
-        with_white_bg(sq).save(OUT / f"full-logo-whitebg-{size}x{size}.png")
-
-    # Icon-only (recommended for Store square + package tiles)
+        fit_square(full, size, 0.06).save(OUT / f"full-logo-{size}x{size}.png")
     for size in (300, 150, 71, 44):
-        sq = fit_square(icon, size, pad_ratio=0.10)
-        sq.save(OUT / f"icon-{size}x{size}.png")
-        if size in (300, 150, 71):
-            with_white_bg(sq).save(OUT / f"icon-whitebg-{size}x{size}.png")
+        fit_square(icon, size, 0.10).save(OUT / f"icon-{size}x{size}.png")
 
-    # Primary Store / app package assets (icon, white bg, 300)
-    primary300 = with_white_bg(fit_square(icon, 300, pad_ratio=0.10))
-    primary300.save(OUT / "StoreLogo-300.png")
-    primary300.save(OUT / "logo-300x300.png")
-    with_white_bg(fit_square(icon, 150, pad_ratio=0.10)).save(OUT / "logo-150x150.png")
-    with_white_bg(fit_square(icon, 71, pad_ratio=0.10)).save(OUT / "logo-71x71.png")
-
-    # Copy into logo folder + WinUI Assets
-    primary300.save(ROOT / "store-assets" / "logo" / "StoreLogo-300.png")
-    primary300.save(ROOT / "store-assets" / "logo" / "StoreLogo.png")
-    primary300.save(ROOT / "clients" / "HonestSpend.WinUI" / "Assets" / "StoreLogo.png")
-    with_white_bg(fit_square(icon, 512, pad_ratio=0.10)).save(
-        ROOT / "store-assets" / "logo" / "StoreLogo-512.png"
-    )
-
-    print("DONE")
-    print("Primary 300x300 (icon, white void removed):", OUT / "logo-300x300.png")
+    store = fit_square(icon, 300, 0.10)
+    store.save(OUT / "StoreLogo.png")
+    store.save(ROOT / "clients" / "HonestSpend.WinUI" / "Assets" / "StoreLogo.png")
+    print("Transparent logos written to", OUT)
 
 
 if __name__ == "__main__":
