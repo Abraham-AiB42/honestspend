@@ -10,7 +10,10 @@ from financial_os.config import settings
 from financial_os.db import Account, Transaction, init_db
 from financial_os.seed import seed_all
 from financial_os.services.onboarding import apply_first_run
-from financial_os.services.statement_pdf import parse_statement_lines
+from financial_os.services.statement_pdf import (
+    parse_statement_ending_balance,
+    parse_statement_lines,
+)
 
 
 def test_parse_statement_lines_basic():
@@ -34,6 +37,22 @@ def test_parse_skips_headers():
     text = "Previous Balance $1,234.56\nCredit Limit $5,000.00\n"
     rows = parse_statement_lines(text)
     assert rows == []
+
+
+def test_parse_statement_ending_balance_prefers_new():
+    text = """
+    Previous Balance $1,000.00
+    Minimum Payment Due $35.00
+    Ending Balance $850.00
+    New Balance $842.15
+    Credit Limit $5,000.00
+    """
+    bal, src = parse_statement_ending_balance(text)
+    assert bal == Decimal("842.15")
+    assert src == "new_balance"
+    # Previous must not win
+    bal2, _ = parse_statement_ending_balance("Previous Balance $9,999.00\n")
+    assert bal2 is None
 
 
 def test_parse_bare_payment_line():
@@ -97,6 +116,94 @@ def test_credit_pdf_import_payment_reduces_owed(tmp_path: Path, monkeypatch):
     s.refresh(acct)
     # 200 + 45.99 - 100 = 145.99
     assert acct.current_balance == Decimal("145.99")
+    s.close()
+
+
+def test_pdf_import_sets_institution_from_new_balance(tmp_path: Path, monkeypatch):
+    """New Balance line → institution_balance + set_books next_step when drifted."""
+    from financial_os.db import Profile
+    from financial_os.services import statement_pdf
+    from financial_os.services.statement_pdf import import_statement_pdf
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 'pdf2.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    seed_all(s)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("1000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+
+    text = """Account Activity 2026
+08/01/2026 COFFEE SHOP                   -$4.50
+New Balance $995.50
+"""
+    monkeypatch.setattr(statement_pdf, "extract_pdf_text", lambda _fo: (text, 1))
+    result = import_statement_pdf(
+        s,
+        account_id=acct.id,
+        file_obj=b"%PDF-fake",
+        filename="stmt.pdf",
+        auto_categorize=False,
+        amount_sign="bank",
+    )
+    assert result.transactions_created == 1
+    assert result.institution_balance_set is True
+    assert result.ending_balance == "995.50"
+    assert result.balance_source == "new_balance"
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("995.50")
+    # books after -$4.50 import = 995.50 → drift ~0
+    assert result.drift is not None
+    assert abs(Decimal(result.drift)) < Decimal("0.01")
+    s.close()
+
+
+def test_pdf_import_new_balance_with_drift_next_step(tmp_path: Path, monkeypatch):
+    from financial_os.db import Profile
+    from financial_os.services import statement_pdf
+    from financial_os.services.statement_pdf import import_statement_pdf
+
+    eng = create_engine(f"sqlite:///{(tmp_path / 'pdf3.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    seed_all(s)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("500"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(acct)
+    s.flush()
+    # No matching txn amount; New Balance still anchors bank truth
+    text = """Account Activity 2026
+08/01/2026 MYSTERY                       -$10.00
+New Balance $900.00
+"""
+    monkeypatch.setattr(statement_pdf, "extract_pdf_text", lambda _fo: (text, 1))
+    result = import_statement_pdf(
+        s,
+        account_id=acct.id,
+        file_obj=b"%PDF-fake",
+        filename="stmt.pdf",
+        auto_categorize=False,
+    )
+    assert result.institution_balance_set is True
+    s.refresh(acct)
+    assert acct.institution_balance == Decimal("900.00")
+    # books 500-10=490 vs bank 900 → set_books CTA
+    assert any(st.get("action") == "set_books_from_bank" for st in result.next_steps)
     s.close()
 
 

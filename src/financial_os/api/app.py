@@ -2509,6 +2509,11 @@ async def import_statement_pdf_upload(
         "sample": result.sample,
         "raw_text_chars": result.raw_text_chars,
         "next_steps": result.next_steps,
+        "ending_balance": result.ending_balance,
+        "institution_balance_set": result.institution_balance_set,
+        "books_balance": result.books_balance,
+        "drift": result.drift,
+        "balance_source": result.balance_source,
     }
 
 

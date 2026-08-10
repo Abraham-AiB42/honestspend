@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.24 — PDF New Balance → bank bal · fee id polish
+
+- **PDF**: parse **New Balance / Ending / Closing** into `institution_balance` (CSV/OFX parity)
+- Post-PDF next_steps get real drift / set_books / hold when bal matches
+- API + preview expose ending_balance / balance_source
+- Home fee items: `transaction_id` via `JsonUi.Int` (string|number)
+
 ## 1.0.23 — Credit refunds · payment heuristics · OFX/PDF parity · CTA guards
 
 - **Refunds/statement credits** stay positive (reduce owed); payment false positives tightened (protection / late payment / pymt)

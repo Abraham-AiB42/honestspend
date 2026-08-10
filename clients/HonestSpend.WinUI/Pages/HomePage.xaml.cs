@@ -198,8 +198,9 @@ public sealed partial class HomePage : Page
                 {
                     foreach (var it in fi.EnumerateArray())
                     {
-                        if (it.TryGetProperty("transaction_id", out var tid) && tid.ValueKind == JsonValueKind.Number)
-                            _feeItems.Add((tid.GetInt32(), JsonUi.Str(it, "label", JsonUi.Str(it, "payee"))));
+                        var tid = JsonUi.Int(it, "transaction_id", 0);
+                        if (tid > 0)
+                            _feeItems.Add((tid, JsonUi.Str(it, "label", JsonUi.Str(it, "payee"))));
                     }
                 }
                 ShowFeeItem();

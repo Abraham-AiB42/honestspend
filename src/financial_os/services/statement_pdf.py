@@ -44,6 +44,11 @@ class PdfImportResult:
     sample: list[dict[str, Any]] = field(default_factory=list)
     raw_text_chars: int = 0
     next_steps: list[dict[str, Any]] = field(default_factory=list)
+    ending_balance: str | None = None
+    institution_balance_set: bool = False
+    books_balance: str | None = None
+    drift: str | None = None
+    balance_source: str | None = None  # new_balance | ending | none
 
 
 def extract_pdf_text(file_obj: BinaryIO | bytes | Path | str) -> tuple[str, int]:
@@ -175,14 +180,76 @@ def parse_statement_lines(
     return rows
 
 
+# Statement summary lines (not txn rows) — prefer most authoritative label
+_ENDING_BAL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"(?i)\bnew\s+balance\b"), "new_balance"),
+    (re.compile(r"(?i)\bclosing\s+balance\b"), "closing"),
+    (re.compile(r"(?i)\bending\s+balance\b"), "ending"),
+    (re.compile(r"(?i)\bstatement\s+balance\b"), "statement"),
+    (re.compile(r"(?i)\bcurrent\s+balance\b"), "current"),
+]
+
+
+def parse_statement_ending_balance(text: str) -> tuple[Decimal | None, str | None]:
+    """Extract statement ending / new balance from summary lines (not txn rows).
+
+    Returns (balance, source_label) or (None, None). Prefers New Balance over
+    Ending/Closing when multiple matches exist.
+    """
+    best: Decimal | None = None
+    best_src: str | None = None
+    best_rank = 999
+    for line in text.splitlines():
+        line_c = " ".join(line.split())
+        if len(line_c) < 8:
+            continue
+        low = line_c.lower()
+        # Skip previous / min / payment-due lines (not ending bal)
+        if any(
+            x in low
+            for x in (
+                "previous balance",
+                "past due",
+                "minimum payment",
+                "payment due",
+                "credit limit",
+                "available credit",
+            )
+        ):
+            continue
+        rank = None
+        src = None
+        for i, (pat, label) in enumerate(_ENDING_BAL_PATTERNS):
+            if pat.search(line_c):
+                rank = i
+                src = label
+                break
+        if rank is None:
+            continue
+        amounts = list(_AMOUNT_RE.finditer(line_c))
+        if not amounts:
+            continue
+        amt = _parse_amount(amounts[-1].group(1))
+        if amt is None:
+            continue
+        if rank < best_rank:
+            best_rank = rank
+            best = abs(amt)  # summary bals are usually absolute; credit may show positive owed
+            best_src = src
+    return best, best_src
+
+
 def preview_statement_pdf(file_obj: BinaryIO | bytes | Path | str) -> dict[str, Any]:
     text, pages = extract_pdf_text(file_obj)
     rows = parse_statement_lines(text)
+    ending, bal_src = parse_statement_ending_balance(text)
     return {
-        "ok": bool(rows) or pages > 0,
+        "ok": bool(rows) or pages > 0 or ending is not None,
         "pages": pages,
         "raw_text_chars": len(text),
         "candidates": len(rows),
+        "ending_balance": str(ending) if ending is not None else None,
+        "balance_source": bal_src,
         "sample": [
             {
                 "txn_date": r["txn_date"].isoformat(),
@@ -193,7 +260,7 @@ def preview_statement_pdf(file_obj: BinaryIO | bytes | Path | str) -> dict[str, 
         ],
         "hint": (
             "Text PDF only — if sample is empty, export CSV from the bank instead."
-            if not rows
+            if not rows and ending is None
             else "Review sample before import; amounts may need Invert signs."
         ),
     }
@@ -291,12 +358,32 @@ def import_statement_pdf(
                 result.errors.append(str(e))
 
     session.flush()
-    if result.transactions_created:
+
+    # New Balance / Ending Balance → institution_balance (CSV/OFX parity)
+    drift: Decimal | None = None
+    ending, bal_src = parse_statement_ending_balance(text)
+    if ending is not None:
+        from financial_os.services.reconcile import set_institution_balance
+
+        set_institution_balance(session, account_id, ending, mark_reconciled=False)
+        result.institution_balance_set = True
+        result.ending_balance = str(ending)
+        result.balance_source = bal_src
+        session.refresh(acct)
+        books = Decimal(str(acct.current_balance or 0))
+        result.books_balance = str(books)
+        drift = (books - ending).quantize(Decimal("0.01"))
+        result.drift = str(drift)
+    else:
+        result.books_balance = str(acct.current_balance or 0)
+        result.balance_source = "none"
+
+    if result.transactions_created or result.institution_balance_set:
         try:
             mark_import_activity(session)
         except Exception:
             pass
-        if auto_categorize:
+        if auto_categorize and result.transactions_created:
             applied = categorize_uncategorized(
                 session,
                 profile_id=acct.profile_id,
@@ -315,7 +402,9 @@ def import_statement_pdf(
         account_id=account_id,
         created=result.transactions_created,
         categorized=result.categorized,
-        books_balance=str(acct.current_balance or 0),
+        drift=drift,
+        books_balance=result.books_balance,
+        institution_balance=result.ending_balance if result.institution_balance_set else None,
         source="PDF",
     )
     return result
