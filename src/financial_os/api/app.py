@@ -249,6 +249,8 @@ class AccountIn(BaseModel):
     opened_date: date | None = None
     priority_rank: int = 100
     apy: Decimal | None = None  # cash/savings yield e.g. 0.06
+    payment_option: str | None = None  # minimum | fixed | statement | interest_saving
+    payment_fixed_amount: Decimal | None = None
 
 
 class AccountPatch(BaseModel):
@@ -273,6 +275,8 @@ class AccountPatch(BaseModel):
     priority_rank: int | None = None
     apy: Decimal | None = None
     institution_balance: Decimal | None = None
+    payment_option: str | None = None
+    payment_fixed_amount: Decimal | None = None
 
 
 class AccountOut(AccountIn):
@@ -913,6 +917,62 @@ def setup_cash_account_create(body: SetupCashAccountIn, db: Session = Depends(ge
             current_balance=body.current_balance,
             profile_id=body.profile_id,
             make_primary=body.make_primary,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/setup/discover")
+def setup_discover(
+    profile_id: int | None = None,
+    lookback_days: int = 90,
+    db: Session = Depends(get_db),
+):
+    """Skim cash outflows for cards, loans, bills, recurring investments."""
+    from financial_os.services.setup_discover import discover_liabilities
+
+    return discover_liabilities(db, profile_id=profile_id, lookback_days=lookback_days)
+
+
+class SetupDiscoverApplyIn(BaseModel):
+    accepted: list[dict] = []
+    profile_id: int | None = None
+
+
+@app.post("/api/setup/discover/apply")
+def setup_discover_apply(body: SetupDiscoverApplyIn, db: Session = Depends(get_db)):
+    """Create credit/loan accounts and bills from confirmed discoveries."""
+    from financial_os.services.setup_discover import apply_discoveries
+
+    try:
+        return apply_discoveries(
+            db,
+            accepted=body.accepted or [],
+            profile_id=body.profile_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+class PaymentOptionIn(BaseModel):
+    payment_option: str  # minimum | fixed | statement | interest_saving
+    payment_fixed_amount: Decimal | None = None
+
+
+@app.post("/api/accounts/{account_id}/payment-option")
+def account_payment_option(
+    account_id: int,
+    body: PaymentOptionIn,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.setup_discover import set_account_payment_option
+
+    try:
+        return set_account_payment_option(
+            db,
+            account_id,
+            payment_option=body.payment_option,
+            payment_fixed_amount=body.payment_fixed_amount,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

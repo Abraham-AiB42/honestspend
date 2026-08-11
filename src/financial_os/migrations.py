@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -273,6 +273,28 @@ def _mig_14_setup_wizard(conn) -> None:
         pass
 
 
+def _mig_15_payment_option(conn) -> None:
+    """Credit/loan payment strategy for setup + IFPP."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN payment_option VARCHAR(32)",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN payment_fixed_amount NUMERIC(14,2)",
+    )
+    # Default existing credit cards toward interest-saving (product north star)
+    try:
+        conn.execute(
+            text(
+                "UPDATE accounts SET payment_option = 'interest_saving' "
+                "WHERE kind = 'credit' AND (payment_option IS NULL OR payment_option = '')"
+            )
+        )
+    except Exception:
+        pass
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -289,6 +311,7 @@ MIGRATIONS: dict[int, Callable] = {
     12: _mig_12_month_close,
     13: _mig_13_budgets,
     14: _mig_14_setup_wizard,
+    15: _mig_15_payment_option,
 }
 
 

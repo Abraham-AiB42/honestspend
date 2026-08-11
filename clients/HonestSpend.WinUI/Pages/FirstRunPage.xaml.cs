@@ -37,6 +37,9 @@ public sealed partial class FirstRunPage : Page
     private NumberBox? _cashOpenBal;
     private ComboBox? _bankGuideBox;
 
+    // Discover proposals: id -> (selected, payment_option)
+    private readonly Dictionary<string, (bool Selected, string? PaymentOpt, JsonElement Raw)> _discoverItems = new();
+
     private TextBox? _cashName;
     private TextBox? _inst;
     private NumberBox? _cashBal;
@@ -224,18 +227,20 @@ public sealed partial class FirstRunPage : Page
             _ = RenderCashLoopAsync();
             return;
         }
+        if (_phase == "discover")
+        {
+            _ = RenderDiscoverAsync();
+            return;
+        }
+        if (_phase == "liabilities")
+        {
+            RenderLiabilitiesHint();
+            return;
+        }
 
         // Later PR placeholders
         var (title, hint, nextLabel) = _phase switch
         {
-            "discover" => (
-                "Find cards & bills",
-                "We'll skim debits for card payments, loans, and recurring investments. Coming soon.",
-                "Continue"),
-            "liabilities" => (
-                "Set up debts",
-                "Cards get payment options: minimum, fixed, statement, interest-saving. Coming soon.",
-                "Continue"),
             "recurring" => (
                 "Recurring bills",
                 "Accept detected bills and recurring investments. Coming soon.",
@@ -984,6 +989,12 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
+            if (_phase == "discover")
+            {
+                await DiscoverApplyAndAdvanceAsync();
+                return;
+            }
+
             // plaid_link + later placeholders: advance server state
             using (var api = new LedgerApiClient())
             {
@@ -1155,6 +1166,184 @@ public sealed partial class FirstRunPage : Page
         else
         {
             _cashUi = "hub";
+        }
+        Render();
+    }
+
+    private async Task RenderDiscoverAsync()
+    {
+        QuestionText.Text = "Cards, loans & bills from your cash history";
+        HintText.Text =
+            "We skimmed payments from checking/savings. Confirm what to create. " +
+            "Cards need a payment plan; investments become recurring debits.";
+        NextBtn.Content = "Create selected & continue";
+        _discoverItems.Clear();
+
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var disc = await api.GetSetupDiscoverAsync();
+            Fields.Children.Add(new TextBlock
+            {
+                Text = JsonUi.Str(disc, "message"),
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.85,
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+
+            if (!disc.TryGetProperty("proposals", out var props) || props.ValueKind != JsonValueKind.Array
+                || props.GetArrayLength() == 0)
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = "Nothing clear yet — import more cash history, or continue and add bills later.",
+                    TextWrapping = TextWrapping.Wrap,
+                });
+                NextBtn.Content = "Continue without adding";
+                return;
+            }
+
+            foreach (var p in props.EnumerateArray())
+            {
+                var id = JsonUi.Str(p, "id");
+                if (string.IsNullOrEmpty(id) || id == "—")
+                    id = Guid.NewGuid().ToString("N");
+                var selected = !(p.TryGetProperty("selected", out var sel) && sel.ValueKind == JsonValueKind.False);
+                var payDef = JsonUi.Str(p, "default_payment_option", "interest_saving");
+                if (payDef == "—") payDef = "interest_saving";
+                _discoverItems[id] = (selected, payDef, p);
+
+                var type = JsonUi.Str(p, "type");
+                var panel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 10) };
+                var cb = new CheckBox
+                {
+                    Content =
+                        $"{JsonUi.Str(p, "name")} · {type} · ${JsonUi.Str(p, "median_amount")} · " +
+                        $"{JsonUi.Str(p, "cadence")} ({JsonUi.Int(p, "occurrences", 0)}×)",
+                    IsChecked = selected,
+                    Tag = id,
+                };
+                cb.Checked += (_, _) =>
+                {
+                    if (cb.Tag is string tid && _discoverItems.TryGetValue(tid, out var cur))
+                        _discoverItems[tid] = (true, cur.PaymentOpt, cur.Raw);
+                };
+                cb.Unchecked += (_, _) =>
+                {
+                    if (cb.Tag is string tid && _discoverItems.TryGetValue(tid, out var cur))
+                        _discoverItems[tid] = (false, cur.PaymentOpt, cur.Raw);
+                };
+                panel.Children.Add(cb);
+                panel.Children.Add(new TextBlock
+                {
+                    Text = JsonUi.Str(p, "reason"),
+                    Opacity = 0.7,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(28, 0, 0, 0),
+                });
+
+                if (type is "credit" or "loan")
+                {
+                    var payBox = new ComboBox
+                    {
+                        Header = "Payment plan",
+                        Tag = id,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        MinWidth = 220,
+                        Margin = new Thickness(28, 0, 0, 0),
+                    };
+                    void addPay(string tag, string label, bool on)
+                    {
+                        var it = new ComboBoxItem { Content = label, Tag = tag };
+                        payBox.Items.Add(it);
+                        if (on) payBox.SelectedItem = it;
+                    }
+                    addPay("interest_saving", "Interest-saving (recommended)", payDef == "interest_saving");
+                    addPay("statement", "Statement balance", payDef == "statement");
+                    addPay("fixed", "Fixed payment", payDef == "fixed");
+                    addPay("minimum", "Minimum payment", payDef == "minimum");
+                    if (payBox.SelectedItem is null && payBox.Items.Count > 0)
+                        payBox.SelectedIndex = 0;
+                    payBox.SelectionChanged += (_, _) =>
+                    {
+                        if (payBox.Tag is string tid && payBox.SelectedItem is ComboBoxItem ci
+                            && ci.Tag is string opt && _discoverItems.TryGetValue(tid, out var cur))
+                            _discoverItems[tid] = (cur.Selected, opt, cur.Raw);
+                    };
+                    panel.Children.Add(payBox);
+                }
+
+                Fields.Children.Add(panel);
+            }
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private void RenderLiabilitiesHint()
+    {
+        QuestionText.Text = "Debts & payment plans";
+        HintText.Text =
+            "Accounts you accepted are created. You can change payment plans anytime under Accounts. " +
+            "Next reviews remaining recurring suggestions.";
+        NextBtn.Content = "Continue";
+        Fields.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Text =
+                "Payment options:\n" +
+                "• Interest-saving — prioritize full promo / interest-free path (default)\n" +
+                "• Statement balance — pay the statement each cycle\n" +
+                "• Fixed — set a fixed dollar payment\n" +
+                "• Minimum — min only (APR risk warning later)",
+        });
+    }
+
+    private async Task DiscoverApplyAndAdvanceAsync()
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+
+        var accepted = new List<Dictionary<string, object?>>();
+        foreach (var kv in _discoverItems)
+        {
+            var (sel, payOpt, raw) = kv.Value;
+            if (!sel) continue;
+            var type = JsonUi.Str(raw, "type");
+            var row = new Dictionary<string, object?>
+            {
+                ["type"] = type,
+                ["name"] = JsonUi.Str(raw, "name"),
+                ["median_amount"] = JsonUi.Str(raw, "median_amount", "0"),
+                ["cadence"] = JsonUi.Str(raw, "cadence", "monthly"),
+                ["suggested_next_date"] = JsonUi.Str(raw, "suggested_next_date"),
+                ["selected"] = true,
+            };
+            if (type is "credit" or "loan")
+                row["payment_option"] = payOpt ?? "interest_saving";
+            accepted.Add(row);
+        }
+
+        if (accepted.Count > 0)
+        {
+            var res = await api.ApplySetupDiscoverAsync(new { accepted });
+            MsgText.Text = JsonUi.Str(res, "message");
+            InfoBar.Title = "Created";
+            InfoBar.Message = MsgText.Text;
+            InfoBar.IsOpen = true;
+        }
+
+        var st = await api.SetupAdvanceAsync("next");
+        ApplyState(st);
+        // Skip empty liabilities intermediate if we already applied
+        if (_phase == "liabilities")
+        {
+            st = await api.SetupAdvanceAsync("next");
+            ApplyState(st);
         }
         Render();
     }

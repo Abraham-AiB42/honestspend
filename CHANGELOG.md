@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.42 — Setup discover liabilities (PR4)
+
+- **Schema v15**: `payment_option` + `payment_fixed_amount` on accounts (minimum / fixed / statement / interest_saving)
+- **`GET /api/setup/discover`** — skim cash outflows for cards, loans, bills, recurring investments
+- **`POST /api/setup/discover/apply`** — create accounts + scheduled payments/debits from confirmations
+- **`POST /api/accounts/{id}/payment-option`** — set card/loan payment plan
+- **Wizard**: Discover checklist with payment plan dropdowns; investments → recurring budget debits
+- Default card plan: **interest_saving** (IFPP north star)
+
 ## 1.0.41 — Setup CSV cash loop (PR3)
 
 - **`GET /api/setup/cash`** — cash accounts + import status + bank guides

@@ -139,6 +139,11 @@ class Account(Base):
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Autopay desk: none | min | statement | promo_sink
     autopay_policy: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # User payment strategy for credit/loans (setup + Can I buy / IFPP):
+    # minimum | fixed | statement | interest_saving
+    payment_option: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # When payment_option=fixed, planned payment amount
+    payment_fixed_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="accounts")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
