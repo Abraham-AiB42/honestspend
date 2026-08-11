@@ -516,6 +516,16 @@ public sealed class LedgerApiClient : IDisposable
             new { create_transaction = createTransaction },
             ct);
 
+    /// <summary>
+    /// Create linked net + employer-tax expense schedules for a business payroll day.
+    /// Body: profile_id, name, pay_date, cadence, net_payroll, employer_tax, cash_account_id.
+    /// </summary>
+    public Task<JsonElement> CreatePayrollPackageAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/payroll-packages", body, ct);
+
+    public Task<JsonElement> GetEntityPnlAsync(int profileId, int year, CancellationToken ct = default)
+        => GetJsonAsync($"api/reports/entity-pnl?profile_id={profileId}&year={year}", ct);
+
     public Task<JsonElement> GetDebtPlanAsync(string strategy = "avalanche", decimal extra = 0, CancellationToken ct = default)
         => PostJsonAsync("api/debt/plan", new
         {

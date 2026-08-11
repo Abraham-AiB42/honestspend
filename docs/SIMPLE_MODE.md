@@ -9,8 +9,8 @@
 | **Home** | Safe to spend · status · Do this next · **Coming up** · wealth basics |
 | **Home · Coming up** | Short cash-side list until **N calendar days (7–14)** or the **next 1–2 paydays** (auto when income known). Empty: “Nothing scheduled in this window — add a bill or paycheck in Add” |
 | **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
-| **Home · Coming up** | Bills + paychecks until next payday(s) or next 7–14 days (Settings). Totals cover the **full window**; list shows top rows. Cash-side only (Card payment on checking yes; Netflix on card no). **Owner draw** counts as outflow (never a payday); **payroll day** shows net + employer tax when both are scheduled |
-| **Add** | Wizards: cash, savings, card, loan, bill, income, business, child (business: optional payroll day; bill: pay from · owner draw · amount steps — see [BUSINESS_ENTITY.md](./BUSINESS_ENTITY.md)) |
+| **Home · Coming up** | Bills + paychecks until next payday(s) or next 7–14 days (Settings). Totals cover the **full window**; list shows top rows. Cash-side only (Card payment on checking yes; Netflix on card no). **Owner draw** counts as outflow (never a payday). If a payroll package created two schedules (net + employer tax), both appear on pay day |
+| **Add** | Wizards: cash, savings, card, loan, bill, income, business, child (bill: pay from · owner draw · amount steps — see [BUSINESS_ENTITY.md](./BUSINESS_ENTITY.md); payroll package is API / Full books — not a Simple Add step yet) |
 | **Get started** | First-run wizard (~2 min) |
 | **Can I buy?** | Pre-purchase check |
 | **Sort charges** | Plain review queue (accept categories) |
