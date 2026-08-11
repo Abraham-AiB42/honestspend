@@ -19,4 +19,8 @@ Task 1.4: complete (1ec48d0, tests 20 pass)
 Task 1.4: complete (30b60e3)
 Phase 1 Engine tasks complete
 
-Task 2.1: complete (fix(ui): plain weekday risk day on Home; WinUI Debug x64 green)
+Task 2.1: complete (3241751, WinUI Debug x64 green)
+
+Task 2.1: complete (3241751)
+
+Task 2.2: complete (68e1c30, WinUI Debug x64 green)

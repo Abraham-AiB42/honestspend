@@ -26,6 +26,9 @@ public sealed partial class HomePage : Page
     private int _feeIdx;
     private readonly List<JsonElement> _recurringItems = new();
     private int _recurringIdx;
+    /// <summary>Coming up list expanded to full window (via /api/coming-up limit=50).</summary>
+    private bool _comingUpExpanded;
+    private int _comingUpFullCount;
 
     public HomePage()
     {
@@ -1187,112 +1190,190 @@ public sealed partial class HomePage : Page
     /// Coming up strip from home/simple <c>coming_up</c> (no extra round-trip).
     /// Rows: weekday · name · money; inflows prefixed with +.
     /// Outflows fill ComingUpPayPick for mark-paid.
+    /// Resets expand state (refresh path).
     /// </summary>
     private void ApplyComingUp(JsonElement home)
     {
+        _comingUpExpanded = false;
+        _comingUpFullCount = 0;
         try
         {
             if (!home.TryGetProperty("coming_up", out var cu) || cu.ValueKind != JsonValueKind.Object)
             {
                 ComingUpCard.Visibility = Visibility.Collapsed;
                 ComingUpPayPanel.Visibility = Visibility.Collapsed;
+                ComingUpShowAllBtn.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            ComingUpCard.Visibility = Visibility.Visible;
-
-            var subtitle = "";
-            if (cu.TryGetProperty("window", out var win) && win.ValueKind == JsonValueKind.Object)
-                subtitle = JsonUi.Str(win, "label", "");
-            if (string.IsNullOrEmpty(subtitle) || subtitle == "—")
-                subtitle = "";
-            ComingUpSubtitle.Text = subtitle;
-            ComingUpSubtitle.Visibility = string.IsNullOrEmpty(subtitle)
-                ? Visibility.Collapsed
-                : Visibility.Visible;
-
-            var lines = new List<string>();
-            ComingUpPayPick.Items.Clear();
-            if (cu.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var it in items.EnumerateArray())
-                {
-                    var weekday = JsonUi.Str(it, "weekday", "");
-                    var name = JsonUi.Str(it, "name", "");
-                    var direction = JsonUi.Str(it, "direction", "out");
-                    var money = FormatComingUpMoney(it, direction);
-                    if (string.IsNullOrEmpty(weekday) || weekday == "—")
-                        weekday = "?";
-                    if (string.IsNullOrEmpty(name) || name == "—")
-                        name = "Item";
-                    lines.Add($"{weekday} · {name} · {money}");
-
-                    // Mark paid: outflows only, need scheduled_id
-                    if (direction != "out")
-                        continue;
-                    var sid = JsonUi.Int(it, "scheduled_id", 0);
-                    if (sid <= 0)
-                        continue;
-                    ComingUpPayPick.Items.Add(new ComboBoxItem
-                    {
-                        Content = $"{weekday} · {name} · {money}",
-                        Tag = sid,
-                    });
-                }
-            }
-
-            if (ComingUpPayPick.Items.Count > 0)
-            {
-                ComingUpPayPick.SelectedIndex = 0;
-                ComingUpPayPanel.Visibility = Visibility.Visible;
-            }
-            else
-            {
-                ComingUpPayPanel.Visibility = Visibility.Collapsed;
-            }
-
-            if (lines.Count == 0)
-            {
-                ComingUpList.ItemsSource = null;
-                ComingUpList.Visibility = Visibility.Collapsed;
-                var hint = JsonUi.Str(cu, "empty_hint", "");
-                if (string.IsNullOrEmpty(hint) || hint == "—")
-                    hint = "Nothing scheduled in this window — add a bill or paycheck in Add";
-                ComingUpEmpty.Text = hint;
-                ComingUpEmpty.Visibility = Visibility.Visible;
-                ComingUpTotals.Text = "";
-                ComingUpTotals.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                ComingUpList.ItemsSource = lines;
-                ComingUpList.Visibility = Visibility.Visible;
-                ComingUpEmpty.Text = "";
-                ComingUpEmpty.Visibility = Visibility.Collapsed;
-
-                var outAbs = ParseMoneyAbs(cu, "outflow_total");
-                var inAbs = ParseMoneyAbs(cu, "inflow_total");
-                var parts = new List<string>();
-                if (outAbs > 0)
-                    parts.Add($"Out {outAbs.ToString("C", CultureInfo.CurrentCulture)}");
-                if (inAbs > 0)
-                    parts.Add($"In +{inAbs.ToString("C", CultureInfo.CurrentCulture)}");
-                // Totals are for the full window; list may be truncated
-                var truncated = cu.TryGetProperty("truncated", out var tr) && tr.ValueKind == JsonValueKind.True;
-                var fullCount = JsonUi.Int(cu, "count", lines.Count);
-                var shown = JsonUi.Int(cu, "shown_count", lines.Count);
-                if (truncated && fullCount > shown)
-                    parts.Add($"showing {shown} of {fullCount}");
-                ComingUpTotals.Text = parts.Count > 0 ? string.Join(" · ", parts) : "";
-                ComingUpTotals.Visibility = string.IsNullOrEmpty(ComingUpTotals.Text)
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
-            }
+            BindComingUp(cu, expanded: false);
         }
         catch
         {
             ComingUpCard.Visibility = Visibility.Collapsed;
             ComingUpPayPanel.Visibility = Visibility.Collapsed;
+            ComingUpShowAllBtn.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
+    /// Bind Coming up list + mark-paid picker from a <c>coming_up</c> JSON object.
+    /// When truncated and not expanded, shows <b>Show all (N)</b>; when expanded, <b>Show less</b>.
+    /// </summary>
+    private void BindComingUp(JsonElement cu, bool expanded)
+    {
+        ComingUpCard.Visibility = Visibility.Visible;
+
+        var subtitle = "";
+        if (cu.TryGetProperty("window", out var win) && win.ValueKind == JsonValueKind.Object)
+            subtitle = JsonUi.Str(win, "label", "");
+        if (string.IsNullOrEmpty(subtitle) || subtitle == "—")
+            subtitle = "";
+        ComingUpSubtitle.Text = subtitle;
+        ComingUpSubtitle.Visibility = string.IsNullOrEmpty(subtitle)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+        var lines = new List<string>();
+        ComingUpPayPick.Items.Clear();
+        if (cu.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var it in items.EnumerateArray())
+            {
+                var weekday = JsonUi.Str(it, "weekday", "");
+                var name = JsonUi.Str(it, "name", "");
+                var direction = JsonUi.Str(it, "direction", "out");
+                var money = FormatComingUpMoney(it, direction);
+                if (string.IsNullOrEmpty(weekday) || weekday == "—")
+                    weekday = "?";
+                if (string.IsNullOrEmpty(name) || name == "—")
+                    name = "Item";
+                lines.Add($"{weekday} · {name} · {money}");
+
+                // Mark paid: outflows only, need scheduled_id (includes expanded rows)
+                if (direction != "out")
+                    continue;
+                var sid = JsonUi.Int(it, "scheduled_id", 0);
+                if (sid <= 0)
+                    continue;
+                ComingUpPayPick.Items.Add(new ComboBoxItem
+                {
+                    Content = $"{weekday} · {name} · {money}",
+                    Tag = sid,
+                });
+            }
+        }
+
+        if (ComingUpPayPick.Items.Count > 0)
+        {
+            ComingUpPayPick.SelectedIndex = 0;
+            ComingUpPayPanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ComingUpPayPanel.Visibility = Visibility.Collapsed;
+        }
+
+        var truncated = cu.TryGetProperty("truncated", out var tr) && tr.ValueKind == JsonValueKind.True;
+        var fullCount = JsonUi.Int(cu, "count", lines.Count);
+        var shown = JsonUi.Int(cu, "shown_count", lines.Count);
+        if (fullCount > 0)
+            _comingUpFullCount = fullCount;
+
+        if (lines.Count == 0)
+        {
+            ComingUpList.ItemsSource = null;
+            ComingUpList.Visibility = Visibility.Collapsed;
+            var hint = JsonUi.Str(cu, "empty_hint", "");
+            if (string.IsNullOrEmpty(hint) || hint == "—")
+                hint = "Nothing scheduled in this window — add a bill or paycheck in Add";
+            ComingUpEmpty.Text = hint;
+            ComingUpEmpty.Visibility = Visibility.Visible;
+            ComingUpTotals.Text = "";
+            ComingUpTotals.Visibility = Visibility.Collapsed;
+            ComingUpShowAllBtn.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            ComingUpList.ItemsSource = lines;
+            ComingUpList.Visibility = Visibility.Visible;
+            ComingUpEmpty.Text = "";
+            ComingUpEmpty.Visibility = Visibility.Collapsed;
+
+            var outAbs = ParseMoneyAbs(cu, "outflow_total");
+            var inAbs = ParseMoneyAbs(cu, "inflow_total");
+            var parts = new List<string>();
+            if (outAbs > 0)
+                parts.Add($"Out {outAbs.ToString("C", CultureInfo.CurrentCulture)}");
+            if (inAbs > 0)
+                parts.Add($"In +{inAbs.ToString("C", CultureInfo.CurrentCulture)}");
+            // Totals are for the full window; hide "showing" when expanded
+            if (!expanded && truncated && fullCount > shown)
+                parts.Add($"showing {shown} of {fullCount}");
+            ComingUpTotals.Text = parts.Count > 0 ? string.Join(" · ", parts) : "";
+            ComingUpTotals.Visibility = string.IsNullOrEmpty(ComingUpTotals.Text)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+            // Show all (N) when embedded list is truncated; Show less when expanded
+            if (expanded)
+            {
+                ComingUpShowAllBtn.Content = "Show less";
+                ComingUpShowAllBtn.Visibility = Visibility.Visible;
+            }
+            else if (truncated && fullCount > shown)
+            {
+                ComingUpShowAllBtn.Content = $"Show all ({fullCount})";
+                ComingUpShowAllBtn.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ComingUpShowAllBtn.Visibility = Visibility.Collapsed;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Expand Coming up to full window items (API limit=50) or collapse back to home strip.
+    /// </summary>
+    private async void ComingUpShowAll_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_comingUpExpanded)
+            {
+                // Collapse: re-bind embedded home/simple list
+                if (_home.ValueKind == JsonValueKind.Object
+                    && _home.TryGetProperty("coming_up", out var cu)
+                    && cu.ValueKind == JsonValueKind.Object)
+                {
+                    _comingUpExpanded = false;
+                    BindComingUp(cu, expanded: false);
+                }
+                else
+                {
+                    ApplyComingUp(_home);
+                }
+                return;
+            }
+
+            ComingUpShowAllBtn.IsEnabled = false;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            // API caps at 50; request full window so mark-paid covers every cash outflow
+            var limit = _comingUpFullCount > 0 ? Math.Min(Math.Max(_comingUpFullCount, 8), 50) : 50;
+            var full = await api.GetComingUpAsync(limit: limit);
+            _comingUpExpanded = true;
+            BindComingUp(full, expanded: true);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = "Could not load full Coming up list: " + ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            ComingUpShowAllBtn.IsEnabled = true;
         }
     }
 
