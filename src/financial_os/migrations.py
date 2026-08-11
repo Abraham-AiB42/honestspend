@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -347,6 +347,29 @@ def _mig_17_statement_cycles(conn) -> None:
     )
 
 
+def _mig_18_promo_installment_lines(conn) -> None:
+    """ISB-class promo installment lines for statement payment carve-outs."""
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS promo_installment_lines ("
+            "id INTEGER PRIMARY KEY,"
+            "account_id INTEGER NOT NULL,"
+            "name VARCHAR(128) NOT NULL,"
+            "principal_remaining NUMERIC(14,2) NOT NULL DEFAULT 0,"
+            "monthly_payment NUMERIC(14,2) NOT NULL DEFAULT 0,"
+            "start_date DATE NOT NULL,"
+            "end_date DATE,"
+            "active BOOLEAN NOT NULL DEFAULT 1,"
+            "source VARCHAR(32) DEFAULT 'user')"
+        )
+    )
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_promo_installment_lines_account "
+        "ON promo_installment_lines(account_id)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -366,6 +389,7 @@ MIGRATIONS: dict[int, Callable] = {
     15: _mig_15_payment_option,
     16: _mig_16_account_safety_buffer,
     17: _mig_17_statement_cycles,
+    18: _mig_18_promo_installment_lines,
 }
 
 

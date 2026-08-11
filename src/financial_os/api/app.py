@@ -23,6 +23,7 @@ from financial_os.db import (
     CategoryRule,
     PlaidItem,
     Profile,
+    PromoInstallmentLine,
     ScheduledItem,
     Transaction,
 )
@@ -1810,6 +1811,92 @@ def recompute_account_cycle(account_id: int, db: Session = Depends(get_db)):
         raise HTTPException(400, "Recompute cycle applies to credit accounts only")
     db.refresh(row)
     return _recompute_api_dict(result, row)
+
+
+# --- Promo installment lines (ISB-class carve-outs) ---
+
+
+class PromoLineIn(BaseModel):
+    """Create a promo / installment plan line on a credit account."""
+
+    name: str
+    principal_remaining: Decimal
+    monthly_payment: Decimal
+    start_date: date
+    end_date: date | None = None
+    source: str | None = "user"
+    active: bool | None = True
+
+
+@app.get("/api/accounts/{account_id}/promo-lines")
+def list_account_promo_lines(account_id: int, db: Session = Depends(get_db)):
+    """List promo installment lines for an account."""
+    from financial_os.services.promo_installments import line_to_dict, list_promo_lines
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    lines = list_promo_lines(db, account_id)
+    return {
+        "account_id": account_id,
+        "count": len(lines),
+        "items": [line_to_dict(ln) for ln in lines],
+    }
+
+
+@app.post("/api/accounts/{account_id}/promo-lines")
+def create_account_promo_line(
+    account_id: int,
+    body: PromoLineIn,
+    db: Session = Depends(get_db),
+):
+    """Create a promo installment line (ISB-class) on a credit account."""
+    from financial_os.services.promo_installments import create_promo_line, line_to_dict
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    if (row.kind or "") != "credit":
+        raise HTTPException(400, "Promo lines apply to credit accounts only")
+    if body.principal_remaining is not None and body.principal_remaining < 0:
+        raise HTTPException(400, "principal_remaining must be >= 0")
+    if body.monthly_payment is not None and body.monthly_payment < 0:
+        raise HTTPException(400, "monthly_payment must be >= 0")
+
+    line = create_promo_line(
+        db,
+        account_id,
+        name=body.name,
+        principal_remaining=body.principal_remaining,
+        monthly_payment=body.monthly_payment,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        source=(body.source or "user"),
+        active=True if body.active is None else bool(body.active),
+    )
+    return line_to_dict(line)
+
+
+@app.post("/api/accounts/{account_id}/promo-lines/{line_id}/roll")
+def roll_account_promo_line(
+    account_id: int,
+    line_id: int,
+    db: Session = Depends(get_db),
+):
+    """Apply one month of installment against a single promo line."""
+    from financial_os.services.promo_installments import line_to_dict, roll_line
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    line = db.get(PromoInstallmentLine, line_id)
+    if not line or line.account_id != account_id:
+        raise HTTPException(404, "Promo line not found")
+    try:
+        rolled = roll_line(db, line_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return line_to_dict(rolled)
 
 
 @app.get("/api/transactions", response_model=list[TransactionOut])

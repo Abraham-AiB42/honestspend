@@ -192,6 +192,27 @@ class StatementCycle(Base):
     )  # projected|import|plaid|user
 
 
+class PromoInstallmentLine(Base):
+    """ISB-class promo / installment plan carve-out on a credit account.
+
+    principal_remaining + monthly_payment feed statement payment math:
+    statement pay = max(0, balance - sum(principal)) + sum(monthly_due).
+    source: user | import | statement | isb
+    """
+
+    __tablename__ = "promo_installment_lines"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    principal_remaining: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    monthly_payment: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    source: Mapped[str] = mapped_column(String(32), default="user")  # user|import|statement|isb
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 

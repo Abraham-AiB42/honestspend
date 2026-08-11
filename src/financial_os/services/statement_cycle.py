@@ -1,7 +1,7 @@
 """Statement cycle windows, projected statement balance, and next payment math.
 
 Pure date/payment helpers plus `project_card_payment` reading Account.
-Promo installment lines (Task 6) are stubbed as zero remaining/due for now.
+Promo installment lines reduce statement balance and add monthly_due to payment.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from financial_os.db import Account
 from financial_os.engine.ifpp import next_due_date
+from financial_os.services.promo_installments import open_promo_totals
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -100,17 +101,6 @@ def compute_next_payment(
     return ZERO
 
 
-def _promo_totals_stub(
-    session: Session,
-    account_id: int,
-    *,
-    as_of: date,
-) -> tuple[Decimal, Decimal]:
-    """(principal_remaining, monthly_due). Task 6 will sum PromoInstallmentLine rows."""
-    _ = (session, account_id, as_of)
-    return ZERO, ZERO
-
-
 def project_card_payment(
     session: Session,
     account_id: int,
@@ -120,7 +110,7 @@ def project_card_payment(
     """Project open-cycle statement and next payment for a credit account.
 
     Returns statement_balance, next_payment, next_due, last_close, next_close,
-    funding_account_id, policy.
+    funding_account_id, policy, promo_remaining, promo_due.
     """
     as_of = as_of or date.today()
     acct = session.get(Account, account_id)
@@ -139,7 +129,7 @@ def project_card_payment(
 
     policy = (acct.autopay_policy or "none").lower().strip()
     bal = _d(acct.current_balance)
-    promo_remaining, promo_due = _promo_totals_stub(session, account_id, as_of=as_of)
+    promo_remaining, promo_due = open_promo_totals(session, account_id, as_of=as_of)
 
     statement_balance = _q(max(ZERO, bal - promo_remaining))
     next_payment = compute_next_payment(
@@ -161,4 +151,6 @@ def project_card_payment(
         "next_close": next_close,
         "funding_account_id": acct.payment_funding_account_id,
         "policy": policy,
+        "promo_remaining": promo_remaining,
+        "promo_due": promo_due,
     }
