@@ -61,15 +61,21 @@ def open_promo_totals(
     *,
     as_of: date,
 ) -> tuple[Decimal, Decimal]:
-    """Sum open promo lines: (principal_remaining, monthly_due)."""
+    """Sum open promo lines: (principal_remaining, monthly_due).
+
+    monthly_due per line is min(principal_remaining, monthly_payment) so a
+    partial final installment is not overstated.
+    """
     lines = list_promo_lines(session, account_id, active_only=True)
     principal = ZERO
     monthly = ZERO
     for line in lines:
         if not _line_open(line, as_of):
             continue
-        principal += _d(line.principal_remaining)
-        monthly += _d(line.monthly_payment)
+        rem = _d(line.principal_remaining)
+        pay = _d(line.monthly_payment)
+        principal += rem
+        monthly += min(rem, pay)
     return _q(principal), _q(monthly)
 
 
@@ -104,15 +110,25 @@ def roll_line(
     *,
     as_of: date | None = None,
 ) -> PromoInstallmentLine:
-    """Roll a single promo line (same math as apply_month_roll for one row)."""
+    """Roll a single promo line (same math as apply_month_roll for one row).
+
+    Raises ValueError if the line is not found or not open for as_of
+    (future start / past end / inactive) so callers can return a clear error.
+    """
     as_of = as_of or date.today()
     line = session.get(PromoInstallmentLine, line_id)
     if not line:
         raise ValueError(f"Promo line {line_id} not found")
     if not line.active:
         return line
+    if not _line_open(line, as_of):
+        raise ValueError(
+            f"Promo line {line_id} is not open for {as_of.isoformat()} "
+            "(not yet started or past end_date)"
+        )
     principal = _d(line.principal_remaining)
     monthly = _d(line.monthly_payment)
+    # Pay min(principal, monthly) so we never go negative
     new_principal = max(ZERO, principal - monthly)
     line.principal_remaining = _q(new_principal)
     if line.principal_remaining <= ZERO:

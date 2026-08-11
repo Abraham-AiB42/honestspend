@@ -1851,6 +1851,7 @@ def create_account_promo_line(
     db: Session = Depends(get_db),
 ):
     """Create a promo installment line (ISB-class) on a credit account."""
+    from financial_os.services.autopay import recompute_card_payment_schedule
     from financial_os.services.promo_installments import create_promo_line, line_to_dict
 
     row = db.get(Account, account_id)
@@ -1874,6 +1875,7 @@ def create_account_promo_line(
         source=(body.source or "user"),
         active=True if body.active is None else bool(body.active),
     )
+    recompute_card_payment_schedule(db, account_id)
     return line_to_dict(line)
 
 
@@ -1884,6 +1886,7 @@ def roll_account_promo_line(
     db: Session = Depends(get_db),
 ):
     """Apply one month of installment against a single promo line."""
+    from financial_os.services.autopay import recompute_card_payment_schedule
     from financial_os.services.promo_installments import line_to_dict, roll_line
 
     row = db.get(Account, account_id)
@@ -1895,7 +1898,11 @@ def roll_account_promo_line(
     try:
         rolled = roll_line(db, line_id)
     except ValueError as e:
-        raise HTTPException(404, str(e)) from e
+        msg = str(e)
+        if "not open" in msg:
+            raise HTTPException(400, msg) from e
+        raise HTTPException(404, msg) from e
+    recompute_card_payment_schedule(db, account_id)
     return line_to_dict(rolled)
 
 

@@ -212,6 +212,97 @@ def test_future_start_excluded_from_open_totals(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_partial_final_installment_caps_monthly_due(tmp_path: Path, monkeypatch):
+    """monthly_due = min(principal_remaining, monthly_payment) on last stub."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Card",
+        current_balance=Decimal("1000"),
+        autopay_policy="statement",
+    )
+    s.add(card)
+    s.flush()
+    create_promo_line(
+        s,
+        card.id,
+        name="Almost done",
+        principal_remaining=Decimal("40.00"),
+        monthly_payment=Decimal("68.65"),
+        start_date=date(2026, 1, 1),
+    )
+    s.commit()
+    rem, due = open_promo_totals(s, card.id, as_of=date(2026, 9, 15))
+    assert rem == Decimal("40.00")
+    assert due == Decimal("40.00")  # capped, not 68.65
+
+    proj = project_card_payment(s, card.id, as_of=date(2026, 9, 15))
+    assert proj["promo_due"] == Decimal("40.00")
+    # statement = 1000 - 40 = 960; pay = 960 + 40 = 1000
+    assert proj["statement_balance"] == Decimal("960.00")
+    assert proj["next_payment"] == Decimal("1000.00")
+    s.close()
+
+
+def test_apply_month_roll_skips_not_yet_open(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Card",
+        current_balance=Decimal("500"),
+        autopay_policy="statement",
+    )
+    s.add(card)
+    s.flush()
+    line = create_promo_line(
+        s,
+        card.id,
+        name="Future",
+        principal_remaining=Decimal("200"),
+        monthly_payment=Decimal("20"),
+        start_date=date(2027, 1, 1),
+    )
+    s.commit()
+    apply_month_roll(s, card.id, as_of=date(2026, 9, 15))
+    s.commit()
+    s.refresh(line)
+    assert line.principal_remaining == Decimal("200.00")
+    assert line.active is True
+    s.close()
+
+
+def test_roll_line_errors_when_not_open(tmp_path: Path, monkeypatch):
+    from financial_os.services.promo_installments import roll_line
+
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Card",
+        current_balance=Decimal("500"),
+        autopay_policy="statement",
+    )
+    s.add(card)
+    s.flush()
+    line = create_promo_line(
+        s,
+        card.id,
+        name="Future",
+        principal_remaining=Decimal("200"),
+        monthly_payment=Decimal("20"),
+        start_date=date(2027, 1, 1),
+    )
+    s.commit()
+    with pytest.raises(ValueError, match="not open"):
+        roll_line(s, line.id, as_of=date(2026, 9, 15))
+    s.close()
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     data = tmp_path / "data"
@@ -303,3 +394,60 @@ def test_api_promo_line_not_found(client: TestClient):
     card_id = _seed_credit(app_mod)
     r = client.post(f"/api/accounts/{card_id}/promo-lines/999999/roll")
     assert r.status_code == 404
+
+
+def test_api_promo_create_and_roll_recomputes_cache(client: TestClient):
+    """POST create/roll should refresh next_payment_amount_cached via recompute."""
+    import financial_os.api.app as app_mod
+
+    card_id = _seed_credit(app_mod)
+
+    r = client.post(
+        f"/api/accounts/{card_id}/promo-lines",
+        json={
+            "name": "ISB appliance",
+            "principal_remaining": "823.78",
+            "monthly_payment": "68.65",
+            "start_date": "2020-01-01",
+            "source": "isb",
+        },
+    )
+    assert r.status_code == 200, r.text
+    line_id = r.json()["id"]
+
+    with app_mod.SessionLocal() as s:
+        card = s.get(Account, card_id)
+        assert card.next_payment_amount_cached is not None
+        # statement carve-out + promo due: (5000 - 823.78) + 68.65 = 4244.87
+        assert card.next_payment_amount_cached == Decimal("4244.87")
+        assert card.statement_balance_cached == Decimal("4176.22")
+
+    r = client.post(f"/api/accounts/{card_id}/promo-lines/{line_id}/roll")
+    assert r.status_code == 200, r.text
+    assert Decimal(r.json()["principal_remaining"]) == Decimal("755.13")
+
+    with app_mod.SessionLocal() as s:
+        card = s.get(Account, card_id)
+        # (5000 - 755.13) + 68.65 = 4313.52
+        assert card.next_payment_amount_cached == Decimal("4313.52")
+        assert card.statement_balance_cached == Decimal("4244.87")
+
+
+def test_api_roll_not_open_returns_400(client: TestClient):
+    import financial_os.api.app as app_mod
+
+    card_id = _seed_credit(app_mod)
+    r = client.post(
+        f"/api/accounts/{card_id}/promo-lines",
+        json={
+            "name": "Future plan",
+            "principal_remaining": "200",
+            "monthly_payment": "20",
+            "start_date": "2099-01-01",
+        },
+    )
+    assert r.status_code == 200, r.text
+    line_id = r.json()["id"]
+    r = client.post(f"/api/accounts/{card_id}/promo-lines/{line_id}/roll")
+    assert r.status_code == 400
+    assert "not open" in r.json()["detail"].lower()
