@@ -495,6 +495,25 @@ class MarkPaidIn(BaseModel):
     as_of: date | None = None
 
 
+class PayrollPackageIn(BaseModel):
+    """Thin payroll day: net + employer tax as two expense schedules."""
+
+    profile_id: int
+    name: str  # e.g. "Biweekly payroll"
+    pay_date: date
+    cadence: str = "biweekly"  # biweekly | semimonthly | monthly | weekly
+    net_payroll: Decimal  # positive magnitude; stored negative
+    employer_tax: Decimal  # positive magnitude; stored negative
+    cash_account_id: int
+    series_label: str | None = None
+
+
+class PayrollPackageOut(BaseModel):
+    package_id: str
+    net_id: int
+    tax_id: int
+
+
 class SettingsIn(BaseModel):
     ifpp_mode: str = "conservative"
     safety_buffer: Decimal = Decimal("1000")
@@ -2430,6 +2449,31 @@ def delete_scheduled(item_id: int, db: Session = Depends(get_db)):
     """Alias for end — recurring items are ended, not hard-deleted."""
     end_scheduled(item_id, ScheduledEndIn(reason="Ended via delete"), db)
     return {"ok": True, "ended": True}
+
+
+@app.post("/api/payroll-packages", response_model=PayrollPackageOut)
+def create_payroll_package_api(body: PayrollPackageIn, db: Session = Depends(get_db)):
+    """Create net + employer-tax expense schedules linked by package_id in notes."""
+    from financial_os.services.payroll_package import create_payroll_package
+
+    try:
+        result = create_payroll_package(
+            db,
+            profile_id=body.profile_id,
+            name=body.name,
+            pay_date=body.pay_date,
+            cadence=body.cadence,
+            net_payroll=body.net_payroll,
+            employer_tax=body.employer_tax,
+            cash_account_id=body.cash_account_id,
+            series_label=body.series_label,
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "profile not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
+    return result
 
 
 @app.get("/api/settings", response_model=SettingsOut)

@@ -62,6 +62,7 @@ WRITE_CAPS = {
     "/api/accounts": "write_accounts",
     "/api/transactions": "write_txns",
     "/api/scheduled": "write_txns",
+    "/api/payroll-packages": "write_txns",
     "/api/intermix": "intermix",
     "/api/categorize": "categorize",
     "/api/rules": "categorize",
