@@ -61,6 +61,17 @@
                 </StackPanel>
             </Border>
 
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock FontWeight="SemiBold" Text="Entity year P&amp;L" />
+                    <TextBlock x:Name="PnlTitle" Opacity="0.9" TextWrapping="Wrap" />
+                    <TextBlock x:Name="PnlTotals" Opacity="0.9" TextWrapping="Wrap" />
+                    <ItemsControl x:Name="PnlCats" />
+                </StackPanel>
+            </Border>
+
             <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="True" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

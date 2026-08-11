@@ -3101,6 +3101,22 @@ def reports_cashflow(
     return cashflow_by_entity(db, days=days)
 
 
+@app.get("/api/reports/entity-pnl")
+def reports_entity_pnl(
+    profile_id: int = Query(...),
+    year: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Entity year P&L (income / payroll / taxes / draws / expenses) from ledger."""
+    from financial_os.services.entity_pnl import build_entity_pnl
+
+    y = year or date.today().year
+    try:
+        return build_entity_pnl(db, profile_id, y)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+
+
 @app.get("/api/reports/debt")
 def reports_debt(
     profile_id: Optional[int] = None,
