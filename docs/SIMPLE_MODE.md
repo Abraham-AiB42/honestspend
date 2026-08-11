@@ -31,11 +31,12 @@ See [STATEMENT_CYCLES.md](./STATEMENT_CYCLES.md).
 
 | Rule | Detail |
 |------|--------|
-| **Base** | Same post-budget-reserve cash as **Safe to spend** (not pre-budget runway cash) |
-| **Math** | `soft = max(0, Safe − Coming up outflow total)`; never shown above Safe (`cap_at` = Safe) |
-| **Useful when** | Coming up still has cash outflows → soft sits **below** Safe and teaches “after those bills” |
-| **WinUI hide** | When soft **equals** Safe (no remaining window outflows / same $), Home **hides** the soft line so two identical numbers do not compete |
-| **Labels** | Plain English window end (“Until payday…”, “Safe until Fri Mar 6…”) — no “horizon”, no IFPP |
+| **Base** | Runway cash after buffer/tax vault, **minus budget reserve** — **not** Safe itself (Safe already reserved schedule bills over the horizon) |
+| **Math** | `soft_start = runway_start − budget_reserve`; `soft = max(0, soft_start − Coming up outflow total)`; never above Safe (`cap_at` = Safe) |
+| **Why not Safe − outflows** | That **double-counts** window bills already inside Safe — soft would understate residual |
+| **Useful when** | Soft sits **below** Safe (window bills or buffer path differs) and teaches “after bills in this Coming up window” |
+| **WinUI hide** | When soft **equals** Safe (same $), Home **hides** the soft line so two identical numbers do not compete |
+| **Labels** | Plain English window end (“Until payday…”, “Until Fri Mar 6…”) — no “horizon”, no IFPP |
 
 Soft is secondary; **Safe to spend** stays the only primary cash number.
 
@@ -61,7 +62,7 @@ Plain list on Simple Home: bills, card cash payments, and optional paychecks thr
 | Active schedules on **cash** (checking/savings) in the window | Schedules on **credit** accounts (e.g. Netflix on the card) — same skip as Safe to spend |
 | **`Card payment · {nickname}`** on the pay-from checking account | Engine jargon (“horizon”, IFPP, “runway”, “busy days”) |
 | **Safe to spend** as the only primary cash number | Competing “runway starts $X” on the risk line |
-| **Soft until** = left after Coming up bills **(same post-reserve cash as Safe)**; capped at Safe | Soft from pre-budget runway only, or soft &gt; Safe |
+| **Soft until** = runway − budgets − Coming up outflows (once), capped at Safe | Soft = Safe − outflows again (double-count); soft &gt; Safe |
 | **Next risk day** from the same engine path as Safe | Overwriting risk with a second runway call / engineer “IFPP” in UI copy |
 | **Import matches bills** (CSV/OFX/Plaid/PDF, high confidence) → advance schedule | Bank paid Rent but Coming up still reserves it |
 | **Mark paid never-neg confirm** on Home (and Full Bills) when warn mode | Silent 409 with no way to finish a real payment |
@@ -92,7 +93,7 @@ Sort by date, then larger |amount|. Simple shows top **8** rows.
 |-------|-----|
 | IFPP | Safe to spend |
 | IFPP next risk day | **Next risk day** |
-| Soft until / Safe until (jargon-free meaning) | **Left after Coming up bills (same cash as Safe)** |
+| Soft until / Safe until (jargon-free meaning) | **Left after Coming up bills in this window** (cash after buffer, tax vault, and budgets — not Safe minus those bills twice) |
 | entity / group | This money / All money |
 | profile | Who |
 | never_negative_enforcement | Protect checking |

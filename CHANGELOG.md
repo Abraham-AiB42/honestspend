@@ -3,7 +3,7 @@
 ## Unreleased
 
 - **Trust bar (full review follow-through)**:
-  - Home: STS primary; soft until = post-reserve base **left after Coming up bills (same cash as Safe)**; capped at Safe (hidden when same $ as STS); “Until …” plain labels (no “horizon”); risk line = **Next risk day** only
+  - Home: STS primary; soft until = **runway − budgets − Coming up outflows once** (not Safe minus bills again); capped at Safe (hidden when same $); “Until …” plain labels; risk line = **Next risk day** only
   - Full **Bills · Mark paid** (same match / never-neg confirm as Home Coming up)
   - Mark paid: match-before-post; `require_match_txn_id` + savepoint auto-advance (no create-on-miss); card side skips already-paired payments; WinUI 409 never-neg confirm dialog
   - Post-import bill advance: CSV/OFX/**Plaid**/**PDF**; Import UI shows advanced count + non-fatal `schedule_advance_error`

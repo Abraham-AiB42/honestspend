@@ -138,7 +138,7 @@ Live payment math still uses books + promo lines; freezes are history, not a day
 
 ### Cash runway API
 
-`GET /api/cash-runway` — day-by-day cash after buffer/tax vault for the Safe horizon (default ~45d); available for Full/tools. Card bills on credit accounts are **not** double-counted; cash `Card payment · …` schedules **are**. Home risk line shows **Next risk day** only (same engine path as Safe to spend; no busy-day strip on Home). Simple Home soft until is **left after Coming up bills (same post-reserve cash as Safe)** and may hide when equal to Safe — see [SIMPLE_MODE.md](./SIMPLE_MODE.md).
+`GET /api/cash-runway` — day-by-day cash after buffer/tax vault for the Safe horizon (default ~45d); available for Full/tools. Card bills on credit accounts are **not** double-counted; cash `Card payment · …` schedules **are**. Home risk line shows **Next risk day** only (same engine path as Safe to spend; no busy-day strip on Home). Simple Home soft until = **runway − budgets − Coming up window outflows (once)**, capped at Safe — never “Safe minus those bills again” (that double-counts). May hide when equal to Safe — see [SIMPLE_MODE.md](./SIMPLE_MODE.md).
 
 ### Rewards pick
 
