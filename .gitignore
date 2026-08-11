@@ -23,3 +23,6 @@ packaging/msix/*.pfx
 packaging/msix/*.cer
 
 winui.path
+
+# Agent SDD scratch (briefs/reports/ledgers) — plans live under docs/superpowers/
+.superpowers/
