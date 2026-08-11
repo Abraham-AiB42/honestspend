@@ -240,6 +240,9 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> PutRewardsRatesAsync(int accountId, object rates, CancellationToken ct = default)
         => PutJsonAsync($"api/accounts/{accountId}/rewards-rates", new { rates }, ct);
 
+    public Task<JsonElement> GetRewardsRatesAsync(int accountId, CancellationToken ct = default)
+        => GetJsonAsync($"api/accounts/{accountId}/rewards-rates", ct);
+
     public Task<JsonElement> CreatePromoSinkBillAsync(int accountId, CancellationToken ct = default)
         => PostJsonAsync($"api/promo-clock/{accountId}/sink-bill", new { }, ct);
 
@@ -485,6 +488,19 @@ public sealed class LedgerApiClient : IDisposable
 
     public Task<JsonElement> EndScheduledAsync(int id, string? reason = null, CancellationToken ct = default)
         => PostJsonAsync($"api/scheduled/{id}/end", new { reason }, ct);
+
+    /// <summary>
+    /// Mark one scheduled expense occurrence paid (optional cleared txn + advance next_date).
+    /// Only valid for outflows / expense schedules.
+    /// </summary>
+    public Task<JsonElement> MarkSchedulePaidAsync(
+        int id,
+        bool createTransaction = true,
+        CancellationToken ct = default)
+        => PostJsonAsync(
+            $"api/scheduled/{id}/mark-paid",
+            new { create_transaction = createTransaction },
+            ct);
 
     public Task<JsonElement> GetDebtPlanAsync(string strategy = "avalanche", decimal extra = 0, CancellationToken ct = default)
         => PostJsonAsync("api/debt/plan", new
