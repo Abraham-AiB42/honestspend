@@ -162,6 +162,8 @@ class Account(Base):
     next_payment_date_cached: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # When cash card payment is scheduled: on_due | on_close | day_before_close
     payment_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # JSON map of category → rewards percent points, e.g. {"gas":5,"general":1}
+    rewards_rates_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="accounts")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")

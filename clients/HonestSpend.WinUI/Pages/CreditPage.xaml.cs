@@ -440,10 +440,109 @@ public sealed partial class CreditPage : Page
             SelectIntTag(CycleFundingBox, fundId);
 
             await LoadPromoLinesAsync(api, id);
+            await LoadFreezeHistoryAsync(api, id);
         }
         catch (Exception ex)
         {
             CycleMsg.Text = "Could not load card cycle: " + ex.Message;
+        }
+    }
+
+    private async Task LoadFreezeHistoryAsync(LedgerApiClient api, int accountId)
+    {
+        try
+        {
+            var hist = await api.GetStatementCyclesAsync(accountId);
+            var rows = new List<string>();
+            if (hist.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var it in arr.EnumerateArray())
+                {
+                    var end = JsonUi.Str(it, "cycle_end");
+                    var act = JsonUi.Money(it, "actual_balance");
+                    var proj = JsonUi.Money(it, "projected_balance");
+                    var var = JsonUi.Money(it, "variance");
+                    rows.Add($"Close {end} · actual {act} · projected {proj} · variance {var}");
+                }
+            }
+            FreezeHistoryList.ItemsSource = rows.Count > 0
+                ? rows
+                : new List<string> { "No frozen statements yet." };
+        }
+        catch
+        {
+            FreezeHistoryList.ItemsSource = new List<string> { "Statement history unavailable." };
+        }
+    }
+
+    private async void FreezeStatement_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int id)
+                throw new InvalidOperationException("Pick a card.");
+            var amt = double.IsNaN(FreezeActualBox.Value) ? 0m : (decimal)FreezeActualBox.Value;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.FreezeStatementCycleAsync(id, new
+            {
+                actual_balance = amt,
+                source = "user",
+            });
+            FreezeMsg.Text =
+                $"Frozen close {JsonUi.Str(res, "cycle_end")} · actual {JsonUi.Money(res, "actual_balance")} · " +
+                $"projected {JsonUi.Money(res, "projected_balance")} · variance {JsonUi.Money(res, "variance")}";
+            await LoadFreezeHistoryAsync(api, id);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void RewardsPick_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var cat = "general";
+            if (RewardsCategoryBox.SelectedItem is ComboBoxItem { Tag: string t })
+                cat = t;
+            var amt = double.IsNaN(RewardsAmountBox.Value) ? 0m : (decimal)RewardsAmountBox.Value;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.PickRewardsCardAsync(cat, amt > 0 ? amt : null);
+            if (res.TryGetProperty("best", out var best) && best.ValueKind == JsonValueKind.Object)
+            {
+                RewardsPickMsg.Text =
+                    $"Best for {JsonUi.Str(res, "category")}: {JsonUi.Str(best, "name")} · " +
+                    $"{JsonUi.Str(best, "rate_percent")}% rewards" +
+                    (best.TryGetProperty("fits_amount", out var fit) && fit.ValueKind == JsonValueKind.False
+                        ? " · may not fit amount (limit)"
+                        : "");
+            }
+            else
+            {
+                RewardsPickMsg.Text = "No credit cards ranked.";
+            }
+            var list = new List<string>();
+            if (res.TryGetProperty("cards", out var cards) && cards.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in cards.EnumerateArray())
+                {
+                    list.Add(
+                        $"{JsonUi.Str(c, "name")} · {JsonUi.Str(c, "rate_percent")}% · " +
+                        $"avail {JsonUi.Money(c, "available_credit")} · util {JsonUi.Str(c, "utilization_pct")}%");
+                }
+            }
+            RewardsPickList.ItemsSource = list;
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
         }
     }
 

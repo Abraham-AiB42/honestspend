@@ -97,6 +97,25 @@ public sealed partial class HomePage : Page
             RiskLine.Text = string.IsNullOrEmpty(risk) || risk == "—"
                 ? "No near-term cash crunch day"
                 : $"{UiCopy.NextRisk}: {risk}";
+            try
+            {
+                var runway = await api.GetCashRunwayAsync(45);
+                var firstRed = JsonUi.Str(runway, "first_red_day", "");
+                var start = JsonUi.Money(runway, "starting_cash");
+                var hi = 0;
+                if (runway.TryGetProperty("highlight_days", out var hd) && hd.ValueKind == JsonValueKind.Array)
+                    hi = hd.GetArrayLength();
+                if (!string.IsNullOrEmpty(firstRed) && firstRed != "—")
+                    RiskLine.Text =
+                        $"{UiCopy.NextRisk}: {firstRed} · runway starts {start} · {hi} busy days in view";
+                else
+                    RiskLine.Text =
+                        $"Cash runway clear ({JsonUi.Int(runway, "horizon_days", 45)}d) · starts {start}";
+            }
+            catch
+            {
+                /* optional strip */
+            }
 
             var pend = JsonUi.Str(_home, "pending_warning", "");
             PendingLine.Text = (string.IsNullOrEmpty(pend) || pend == "—") ? "" : pend;
@@ -120,7 +139,11 @@ public sealed partial class HomePage : Page
                 {
                     var aid = JsonUi.Int(nparams, "account_id", 0);
                     if (aid > 0)
+                    {
                         _booksAccountId = aid;
+                        if (_nextAction is "promo_sink" or "promo_balloon")
+                            _promoAccountId = aid;
+                    }
                 }
                 var disc = JsonUi.Str(next, "disclaimer", "");
                 NextDisclaimer.Text = string.IsNullOrEmpty(disc) || disc == "—" ? "" : disc;
@@ -141,7 +164,18 @@ public sealed partial class HomePage : Page
             if (_home.TryGetProperty("alerts", out var al) && al.ValueKind == JsonValueKind.Array)
             {
                 foreach (var a in al.EnumerateArray())
-                    alerts.Add($"[{JsonUi.Str(a, "level")}] {JsonUi.Str(a, "title")}");
+                {
+                    var level = JsonUi.Str(a, "level");
+                    var urgency = level switch
+                    {
+                        "critical" => "Urgent",
+                        "warn" => "Heads-up",
+                        "info" => "Note",
+                        _ => "",
+                    };
+                    var title = JsonUi.Str(a, "title");
+                    alerts.Add(string.IsNullOrEmpty(urgency) ? title : $"{urgency} · {title}");
+                }
             }
             if (alerts.Count == 0) alerts.Add("All clear — no action queue.");
             AlertList.ItemsSource = alerts;
@@ -243,8 +277,8 @@ public sealed partial class HomePage : Page
                 RecurringCard.Visibility = Visibility.Collapsed;
             }
 
-            // Promo set-aside (H1-C3)
-            _promoAccountId = null;
+            // Promo set-aside (H1-C3) — do not wipe account id set from do_this_next
+            var promoIdFromNext = _promoAccountId;
             if (_home.TryGetProperty("promo_brief", out var promo) && promo.ValueKind == JsonValueKind.Object
                 && promo.TryGetProperty("needs_attention", out var pna) && pna.ValueKind == JsonValueKind.True)
             {
@@ -256,10 +290,15 @@ public sealed partial class HomePage : Page
                 var paid = JsonUi.Int(promo, "account_id", 0);
                 if (paid > 0)
                     _promoAccountId = paid;
+                else if (promoIdFromNext is int keep)
+                    _promoAccountId = keep;
             }
             else
             {
                 PromoCard.Visibility = Visibility.Collapsed;
+                // Keep do_this_next / month-close promo account for one-tap CTA
+                if (promoIdFromNext is int keep)
+                    _promoAccountId = keep;
             }
 
             // Month-close (H1-B) — hide entirely when period closed (open-rarely)
@@ -438,13 +477,128 @@ public sealed partial class HomePage : Page
             StatusText.Text = string.IsNullOrEmpty(asOf) || asOf == "—"
                 ? $"Ready · {view}"
                 : $"Ready · {view} · {asOf}";
+
+            ApplySimpleHomeDensity(_home, status);
         }
         catch (Exception ex)
         {
             StatusText.Text = "Error";
-            ErrorBar.Message = ex.Message;
+            ErrorBar.Message = FriendlyLoadError(ex);
             ErrorBar.IsOpen = true;
         }
+    }
+
+    /// <summary>When clear: keep Safe + Do this next + one ritual; collapse the wall of cards.</summary>
+    private void ApplySimpleHomeDensity(JsonElement home, string status)
+    {
+        if (!AppState.SimpleMode)
+            return;
+
+        var clear = status is "safe" or "ok" or "clear";
+        var nextAct = _nextAction ?? "hold";
+        var nextIsQuiet = nextAct is "hold" or "park_yield"
+            || nextAct.StartsWith("wealth_", StringComparison.OrdinalIgnoreCase);
+
+        if (status is "danger" or "watch")
+        {
+            PowerToolsPanel.Visibility = Visibility.Visible;
+            return;
+        }
+
+        PowerToolsPanel.Visibility = Visibility.Collapsed;
+
+        if (!(clear && nextIsQuiet))
+            return;
+
+        // Open-rarely quiet day: hide secondary cards unless they have real work
+        try
+        {
+            // Budgets: hide when empty / no reserve signal
+            if (BudgetCard is not null
+                && (BudgetSummaryList.ItemsSource is null
+                    || (BudgetSummaryList.ItemsSource is System.Collections.ICollection c && c.Count == 0)))
+                BudgetCard.Visibility = Visibility.Collapsed;
+
+            if (BooksCard.Visibility == Visibility.Visible
+                && string.IsNullOrEmpty(BooksTitle.Text))
+                BooksCard.Visibility = Visibility.Collapsed;
+
+            if (FeeCard.Visibility == Visibility.Visible
+                && string.IsNullOrEmpty(FeeTitle.Text))
+                FeeCard.Visibility = Visibility.Collapsed;
+
+            if (RecurringCard.Visibility == Visibility.Visible
+                && (_recurringItems?.Count ?? 0) == 0)
+                RecurringCard.Visibility = Visibility.Collapsed;
+
+            if (PromoCard.Visibility == Visibility.Visible
+                && string.IsNullOrEmpty(PromoTitle.Text))
+                PromoCard.Visibility = Visibility.Collapsed;
+
+            // Month close / tax year: hide when already complete or not needing attention
+            if (home.TryGetProperty("month_close", out var mc) && mc.ValueKind == JsonValueKind.Object)
+            {
+                var closed = mc.TryGetProperty("closed_this_period", out var cl) && cl.ValueKind == JsonValueKind.True;
+                var needs = mc.TryGetProperty("needs_attention", out var na) && na.ValueKind == JsonValueKind.True;
+                if (closed || !needs)
+                    MonthCloseCard.Visibility = Visibility.Collapsed;
+            }
+
+            if (home.TryGetProperty("tax_year", out var ty) && ty.ValueKind == JsonValueKind.Object)
+            {
+                var tNeeds = ty.TryGetProperty("needs_attention", out var tna) && tna.ValueKind == JsonValueKind.True;
+                if (!tNeeds)
+                    TaxYearCard.Visibility = Visibility.Collapsed;
+            }
+
+            // Ritual: collapse when all done
+            if (home.TryGetProperty("three_minute_check", out var r) && r.ValueKind == JsonValueKind.Object)
+            {
+                var allDone = r.TryGetProperty("all_done", out var ad) && ad.ValueKind == JsonValueKind.True;
+                if (allDone)
+                    RitualCard.Visibility = Visibility.Collapsed;
+            }
+
+            // Wealth only when do_this_next is wealth (already primary)
+            if (!nextAct.StartsWith("wealth_", StringComparison.OrdinalIgnoreCase)
+                && WealthCard is not null)
+                WealthCard.Visibility = Visibility.Collapsed;
+        }
+        catch
+        {
+            /* controls may vary */
+        }
+    }
+
+    private void ShowSuccess(string title, string message)
+    {
+        SuccessBar.Title = title;
+        SuccessBar.Message = message;
+        SuccessBar.Severity = InfoBarSeverity.Success;
+        SuccessBar.IsOpen = true;
+        try { SuccessBar.StartBringIntoView(); } catch { /* ignore */ }
+    }
+
+    private static string FriendlyLoadError(Exception ex)
+    {
+        var m = ex.Message ?? "";
+        if (m.Contains("refused", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("actively refused", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("Failed to connect", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("No connection", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("423", StringComparison.OrdinalIgnoreCase)
+            || m.Contains("unavailable", StringComparison.OrdinalIgnoreCase))
+            return "Couldn't refresh Safe to spend — open Settings to start the engine, then Refresh.";
+        if (m.Length > 160) return m[..157] + "…";
+        return m;
+    }
+
+    private void NavigateApp(string tag)
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic(tag);
+        else
+            Frame?.Navigate(typeof(HomePage));
     }
 
     private async Task RefreshLicenseBannerAsync(LedgerApiClient api)
@@ -655,7 +809,7 @@ public sealed partial class HomePage : Page
         if (view == "all_money")
         {
             BudgetScopeNote.Text =
-                $"All money: ${reserve} reserved across entities. Cards below are this entity only.";
+                $"All money: ${reserve} reserved across every money pile. Budget cards below are for the selected Who only.";
             BudgetScopeNote.Visibility = Visibility.Visible;
         }
         else
@@ -780,19 +934,20 @@ public sealed partial class HomePage : Page
         {
             if (_booksAccountId is not int aid)
             {
-                Frame?.Navigate(typeof(ImportPage));
+                NavigateApp("import");
                 return;
             }
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.ReconcileTrustAsync(aid, "institution");
-            PromoMsg.Text =
-                $"Safe to spend updated · books ${JsonUi.Str(res, "books_balance")} (trusted bank).";
+            var msg =
+                $"Safe to spend now matches bank · books ${JsonUi.Str(res, "books_balance")}.";
             await RefreshAsync();
+            ShowSuccess("Books trusted", msg);
         }
         catch (Exception ex)
         {
-            ErrorBar.Message = ex.Message;
+            ErrorBar.Message = FriendlyLoadError(ex);
             ErrorBar.IsOpen = true;
         }
     }
@@ -884,9 +1039,14 @@ public sealed partial class HomePage : Page
             return;
         }
         var s = _recurringItems[_recurringIdx];
+        var pays = JsonUi.Str(s, "pays_from", "cash");
+        var acct = JsonUi.Str(s, "suggested_account_name", "");
+        var acctBit = string.IsNullOrEmpty(acct) || acct == "—"
+            ? ""
+            : pays == "card" ? $" · card {acct}" : $" · {acct}";
         RecurringItemLabel.Text =
             $"{_recurringIdx + 1}/{_recurringItems.Count}: {JsonUi.Str(s, "name")} · " +
-            $"${JsonUi.Str(s, "amount_abs")}/{JsonUi.Str(s, "cadence")}";
+            $"${JsonUi.Str(s, "amount_abs")}/{JsonUi.Str(s, "cadence")}{acctBit}";
     }
 
     private async void RecurringAccept_Click(object sender, RoutedEventArgs e)
@@ -899,6 +1059,9 @@ public sealed partial class HomePage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var nextRaw = JsonUi.Str(s, "suggested_next_date", "");
+            var aid = JsonUi.Int(s, "suggested_account_id", 0);
+            if (aid <= 0)
+                aid = JsonUi.Int(s, "account_id", 0);
             var body = new Dictionary<string, object?>
             {
                 ["name"] = JsonUi.Str(s, "name"),
@@ -906,9 +1069,11 @@ public sealed partial class HomePage : Page
                 ["cadence"] = JsonUi.Str(s, "cadence", "monthly"),
                 ["next_date"] = string.IsNullOrEmpty(nextRaw) || nextRaw == "—" ? null : nextRaw,
                 ["profile_id"] = AppState.SelectedProfileId,
+                ["account_id"] = aid > 0 ? aid : null,
             };
             var res = await api.AcceptRecurringAsync(body);
-            RecurringMsg.Text = $"Added · {JsonUi.Str(res, "name")} · {JsonUi.Str(res, "cadence")}";
+            var where = aid > 0 && JsonUi.Str(s, "pays_from") == "card" ? " on card" : "";
+            RecurringMsg.Text = $"Added{where} · {JsonUi.Str(res, "name")} · {JsonUi.Str(res, "cadence")}";
             _recurringIdx++;
             if (_recurringIdx >= _recurringItems.Count)
                 await RefreshAsync();
@@ -947,13 +1112,14 @@ public sealed partial class HomePage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.CreatePromoSinkBillAsync(id);
-            PromoMsg.Text =
+            var msg =
                 $"Set-aside ready · {JsonUi.Str(res, "name")} · ${JsonUi.Str(res, "monthly_sink")}/mo";
             await RefreshAsync();
+            ShowSuccess("0% set-aside", msg);
         }
         catch (Exception ex)
         {
-            ErrorBar.Message = ex.Message;
+            ErrorBar.Message = FriendlyLoadError(ex);
             ErrorBar.IsOpen = true;
         }
     }
@@ -963,7 +1129,7 @@ public sealed partial class HomePage : Page
         switch (_monthCloseAction)
         {
             case "review":
-                Frame?.Navigate(typeof(ReviewPage));
+                NavigateApp("review");
                 break;
             case "fees":
                 _nextAction = "fees";
@@ -976,10 +1142,10 @@ public sealed partial class HomePage : Page
                     await Promo_Click_Core(pid);
                 }
                 else
-                    Frame?.Navigate(typeof(CreditPage));
+                    NavigateApp("credit");
                 break;
             case "fund_tax_vault":
-                Frame?.Navigate(typeof(TaxVaultPage));
+                NavigateApp("taxvault");
                 break;
             case "set_books_from_bank":
                 if (_monthCloseAccountId is int mca)
@@ -988,10 +1154,10 @@ public sealed partial class HomePage : Page
                 break;
             case "reconcile":
             case "import":
-                Frame?.Navigate(typeof(ImportPage));
+                NavigateApp("import");
                 break;
             case "backup":
-                Frame?.Navigate(typeof(DataPage));
+                NavigateApp("data");
                 break;
             case "mark_closed":
                 await MarkMonthClosed_Click_Core();
@@ -1005,9 +1171,9 @@ public sealed partial class HomePage : Page
     private void BooksSecondary_Click(object sender, RoutedEventArgs e)
     {
         if (_booksSecondaryAction is "review")
-            Frame?.Navigate(typeof(ReviewPage));
+            NavigateApp("review");
         else if (_booksSecondaryAction is "import")
-            Frame?.Navigate(typeof(ImportPage));
+            NavigateApp("import");
         else
             Frame?.Navigate(typeof(ReviewPage));
     }
@@ -1022,12 +1188,13 @@ public sealed partial class HomePage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.MarkMonthClosedAsync();
-            PromoMsg.Text = JsonUi.Str(res, "message", "Month marked closed.");
+            var msg = JsonUi.Str(res, "message", "Month marked closed.");
             await RefreshAsync();
+            ShowSuccess("Month closed", msg);
         }
         catch (Exception ex)
         {
-            ErrorBar.Message = ex.Message;
+            ErrorBar.Message = FriendlyLoadError(ex);
             ErrorBar.IsOpen = true;
         }
     }
@@ -1038,12 +1205,15 @@ public sealed partial class HomePage : Page
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            await api.CreatePromoSinkBillAsync(accountId);
+            var res = await api.CreatePromoSinkBillAsync(accountId);
+            var msg =
+                $"Set-aside ready · {JsonUi.Str(res, "name")} · ${JsonUi.Str(res, "monthly_sink")}/mo";
             await RefreshAsync();
+            ShowSuccess("0% set-aside", msg);
         }
         catch (Exception ex)
         {
-            ErrorBar.Message = ex.Message;
+            ErrorBar.Message = FriendlyLoadError(ex);
             ErrorBar.IsOpen = true;
         }
     }
@@ -1077,36 +1247,53 @@ public sealed partial class HomePage : Page
                 break;
             case "fees":
             case "stop_fees":
-                // Fee candidates live on Full books; Review still useful — show brief text
-                BriefText.Text =
-                    NextReason.Text
-                    + "\n\nTip: Full books → Import history or re-scan after Sort charges. "
-                    + "Confirm fee-like payees so they stop hitting Safe to spend.";
-                Frame?.Navigate(typeof(ReviewPage));
+                // Prefer fee card on Home when present; else Sort charges
+                if (FeeCard is not null && FeeCard.Visibility == Visibility.Visible)
+                {
+                    FeeCard.StartBringIntoView();
+                    BriefText.Text = NextReason.Text
+                        + "\n\nConfirm fee-like charges so they stop hitting Safe to spend.";
+                }
+                else
+                    NavigateApp("review");
                 break;
             case "plaid":
-                Frame?.Navigate(typeof(PlaidPage));
+                NavigateApp("plaid");
                 break;
             case "import":
-                Frame?.Navigate(typeof(ImportPage));
+                NavigateApp("import");
                 break;
             case "set_books_from_bank":
                 await TrustBooksFromBankAsync();
                 break;
             case "promo_sink":
             case "promo_balloon":
-                Frame?.Navigate(typeof(CreditPage));
+                if (_promoAccountId is int promoId)
+                    await Promo_Click_Core(promoId);
+                else if (_home.TryGetProperty("do_this_next", out var pn)
+                         && pn.ValueKind == JsonValueKind.Object
+                         && pn.TryGetProperty("params", out var pp)
+                         && pp.ValueKind == JsonValueKind.Object)
+                {
+                    var aid = JsonUi.Int(pp, "account_id", 0);
+                    if (aid > 0)
+                        await Promo_Click_Core(aid);
+                    else
+                        NavigateApp("credit");
+                }
+                else
+                    NavigateApp("credit");
                 break;
             case "review":
             case "uncategorized":
-                Frame?.Navigate(typeof(ReviewPage));
+                NavigateApp("review");
                 break;
             case "ledger":
             case "pending_txns":
-                Frame?.Navigate(typeof(LedgerPage));
+                NavigateApp("ledger");
                 break;
             case "attack_apr":
-                Frame?.Navigate(typeof(CreditPage));
+                NavigateApp("credit");
                 break;
             case "wealth_401k_match":
             case "wealth_ira":
@@ -1116,12 +1303,10 @@ public sealed partial class HomePage : Page
                 break;
             case "fund_tax_vault":
             case "respect_tax_vault":
-                BriefText.Text =
-                    NextReason.Text
-                    + "\n\nTax set-aside keeps Safe to spend honest. Full books → Tax vault to adjust.";
+                NavigateApp("taxvault");
                 break;
             case "top_up_buffer":
-                Frame?.Navigate(typeof(SettingsPage));
+                NavigateApp("settings");
                 break;
             case "add_bill":
                 Frame?.Navigate(typeof(MoneyWizardPage), "bill");

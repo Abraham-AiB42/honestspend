@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -378,6 +378,14 @@ def _mig_19_payment_timing(conn) -> None:
     )
 
 
+def _mig_20_rewards_rates(conn) -> None:
+    """Per-card category rewards rates JSON for pick-a-card."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN rewards_rates_json TEXT",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -399,6 +407,7 @@ MIGRATIONS: dict[int, Callable] = {
     17: _mig_17_statement_cycles,
     18: _mig_18_promo_installment_lines,
     19: _mig_19_payment_timing,
+    20: _mig_20_rewards_rates,
 }
 
 

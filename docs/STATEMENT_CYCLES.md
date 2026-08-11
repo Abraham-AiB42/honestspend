@@ -126,7 +126,21 @@ Each card belongs to a **Who** (entity). Cycle config, promo lines, and cash pay
 
 ### History (`statement_cycles`)
 
-Optional cycle history rows (projected / later import of actual statement). v1 payment math is **live** from books + promo lines; imported actual balances can freeze a closed cycle later.
+Freeze a bank statement actual balance for a close date and compare to projected:
+
+- API: `POST /api/accounts/{id}/statement-cycles/freeze` · `GET …/statement-cycles`
+- UI: Full books Credit → **Freeze bank statement**
+- Variance = actual − projected (honest drift signal)
+
+Live payment math still uses books + promo lines; freezes are history, not a day grid.
+
+### Cash runway day strip
+
+`GET /api/cash-runway` — day-by-day cash after buffer/tax vault for the Safe horizon (default ~45d). Card bills on credit accounts are **not** double-counted; cash `Card payment · …` schedules **are**. Home surfaces first red day + busy-day count.
+
+### Rewards pick
+
+`GET /api/rewards/pick?category=gas&amount=40` ranks cards by category rates (`rewards_rates_json` on the card, e.g. `{"gas":5,"general":1}`). Credit UI: **Best card** chooser. Never overrides Safe to spend / never-neg.
 
 ## Recompute hooks
 

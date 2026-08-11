@@ -183,6 +183,37 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetPromoClockAsync(CancellationToken ct = default)
         => GetJsonAsync("api/promo-clock", ct);
 
+    public Task<JsonElement> GetCashRunwayAsync(int? days = null, CancellationToken ct = default)
+    {
+        var q = "api/cash-runway";
+        var parts = new List<string>();
+        if (days is int d) parts.Add($"days={d}");
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            parts.Add($"profile_id={pid}");
+        if (!string.IsNullOrEmpty(AppState.IfppScope))
+            parts.Add($"scope={AppState.IfppScope}");
+        if (parts.Count > 0) q += "?" + string.Join("&", parts);
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> FreezeStatementCycleAsync(int accountId, object body, CancellationToken ct = default)
+        => PostJsonAsync($"api/accounts/{accountId}/statement-cycles/freeze", body, ct);
+
+    public Task<JsonElement> GetStatementCyclesAsync(int accountId, CancellationToken ct = default)
+        => GetJsonAsync($"api/accounts/{accountId}/statement-cycles", ct);
+
+    public Task<JsonElement> PickRewardsCardAsync(string category, decimal? amount = null, CancellationToken ct = default)
+    {
+        var q = $"api/rewards/pick?category={Uri.EscapeDataString(category)}";
+        if (amount is decimal a) q += $"&amount={a}";
+        if (AppState.SelectedProfileId is int pid && AppState.IfppScope == "entity")
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> PutRewardsRatesAsync(int accountId, object rates, CancellationToken ct = default)
+        => PutJsonAsync($"api/accounts/{accountId}/rewards-rates", new { rates }, ct);
+
     public Task<JsonElement> CreatePromoSinkBillAsync(int accountId, CancellationToken ct = default)
         => PostJsonAsync($"api/promo-clock/{accountId}/sink-bill", new { }, ct);
 

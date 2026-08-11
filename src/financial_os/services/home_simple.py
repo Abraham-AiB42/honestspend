@@ -77,22 +77,28 @@ def build_home_simple(
     if reserve > ZERO:
         why_lines.append(
             f"Budget envelopes reserved: ${reserve.quantize(Decimal('0.01'))} "
-            f"({'all entities' if sc == 'group' else 'this entity'}; max per category)"
+            f"({'all money' if sc == 'group' else 'this money'}; max per category). "
+            f"Bills already in schedules are not double-counted as envelopes when fixed."
         )
     pend_r = det.get("pending_reserved") or "0"
     if pend_r not in ("0", "0.00", None):
-        why_lines.append(f"Pending outflows reserved (strict): ${pend_r}")
+        why_lines.append(
+            f"Pending charges held back so Safe stays honest: ${pend_r}"
+        )
     elif det.get("pending_warning"):
-        why_lines.append(f"Pending (not reserved): {det.get('pending_warning')}")
+        why_lines.append(f"Pending (not held yet): {det.get('pending_warning')}")
     if det.get("best_card_name"):
         why_lines.append(
             f"Best interest-free card float: ${ifpp.card_float_interest_free} "
             f"({det.get('best_card_name')} — not sum of all cards)"
         )
-    if det.get("skipped_card_autopay_schedules"):
+    skipped_n = det.get("skipped_credit_account_schedules") or det.get(
+        "skipped_card_autopay_schedules"
+    )
+    if skipped_n:
         why_lines.append(
-            f"Card autopay schedules excluded from cash runway: "
-            f"{det.get('skipped_card_autopay_schedules')} (card path owns payoff)"
+            f"Bills paid on cards not double-counted in cash "
+            f"({skipped_n} schedule(s) — card path owns those charges)"
         )
     for w in (ifpp.warnings or [])[:4]:
         why_lines.append(w)
@@ -209,21 +215,29 @@ def build_home_simple(
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
-    do_this = _do_this_next(
-        ifpp, desk, alerts, wealth, cash, import_rem=import_rem, books=books
-    )
     plain_alerts = [_plain_alert(a) for a in alerts[:3]]
     fees = build_fee_brief(
         session,
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
-    recurring = detect_recurring(
+    promo = build_promo_brief(
         session,
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
     )
-    promo = build_promo_brief(
+    do_this = _do_this_next(
+        ifpp,
+        desk,
+        alerts,
+        wealth,
+        cash,
+        import_rem=import_rem,
+        books=books,
+        fees=fees,
+        promo=promo,
+    )
+    recurring = detect_recurring(
         session,
         profile_id=pid if sc == "entity" else None,
         as_of=as_of,
@@ -243,8 +257,8 @@ def build_home_simple(
         "safe_to_spend_before_budgets": str(cash_raw.quantize(Decimal("0.01"))),
         "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
         "budget_scope_note": (
-            f"${reserve.quantize(Decimal('0.01'))} reserved across all entities; "
-            "budget cards below are this entity only."
+            f"${reserve.quantize(Decimal('0.01'))} reserved across all money piles; "
+            "budget cards below are for the selected Who only."
             if sc == "group"
             else None
         ),
@@ -259,6 +273,11 @@ def build_home_simple(
         "status_label": status_label,
         "next_risk_day": ifpp.next_red_day.isoformat() if ifpp.next_red_day else None,
         "is_red_now": is_red,
+        "cash_runway_hint": (
+            f"First tight cash day: {ifpp.next_red_day.isoformat()}"
+            if ifpp.next_red_day
+            else "No red cash day in the runway horizon"
+        ),
         "pending_warning": ifpp_d.get("pending_warning"),
         "pending_count": ifpp_d.get("pending_count") or 0,
         "pending_outflows_abs": ifpp_d.get("pending_outflows_abs") or "0",
@@ -549,14 +568,21 @@ def _do_this_next(
     cash: Decimal,
     import_rem: dict[str, Any] | None = None,
     books: dict[str, Any] | None = None,
+    fees: dict[str, Any] | None = None,
+    promo: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     head = desk.get("headline") or {}
 
-    if ifpp.is_red_now or (ifpp.next_red_day and cash <= ZERO):
+    # Safe ≤ 0 or red-now always fiscal first (even without next_red_day)
+    if ifpp.is_red_now or cash <= ZERO or (ifpp.next_red_day and cash <= ZERO):
         return {
             "title": "Protect checking — you're at risk",
             "reason": head.get("reason")
-            or "Checking is negative or safe-to-spend is $0. Fix this before anything else.",
+            or (
+                "Safe to spend is $0 or checking is at risk. Fix this before anything else."
+                if cash <= ZERO
+                else "Checking is negative or safe-to-spend is $0. Fix this before anything else."
+            ),
             "action": "rescue",
             "button_label": "Show ways to stay safe",
             "params": {},
@@ -581,7 +607,45 @@ def _do_this_next(
             "priority": "books",
         }
 
-    # Critical fee / promo (before Sort — fiscal first)
+    # Bank link / re-auth — honesty of Safe depends on bank truth
+    if books and books.get("primary_action") == "plaid":
+        return {
+            "title": books.get("title") or "Bank link needs attention",
+            "reason": books.get("reason")
+            or "Reconnect or refresh your bank so Safe to spend stays honest.",
+            "action": "plaid",
+            "button_label": books.get("button_label") or "Fix bank link",
+            "params": {"account_id": books.get("account_id")},
+            "alternatives": ["Import a bank file instead", "Sort charges if already imported"],
+            "priority": "books",
+        }
+
+    # Fee brief (before Sort) — same priority as digest fee_detected
+    if fees and fees.get("needs_attention"):
+        return {
+            "title": fees.get("title") or "Stop fee leakage",
+            "reason": fees.get("reason") or "Possible bank/card fees found.",
+            "action": "fees",
+            "button_label": fees.get("button_label") or "Review fees",
+            "params": {},
+            "alternatives": ["Turn on autopay for minimums", "Sort charges after fees"],
+            "priority": "fiscal",
+        }
+
+    # Promo brief (before Sort)
+    if promo and promo.get("needs_attention"):
+        return {
+            "title": promo.get("title") or "0% promo needs a set-aside",
+            "reason": promo.get("reason")
+            or "Pay off before promo ends so you never pay APR by accident.",
+            "action": "promo_sink",
+            "button_label": promo.get("button_label") or "Create monthly set-aside",
+            "params": {"account_id": promo.get("account_id")},
+            "alternatives": ["Open Credit & debts for full plan"],
+            "priority": "fiscal",
+        }
+
+    # Critical fee / promo from digest alerts (before Sort — fiscal first)
     for a in alerts:
         if a.get("level") == "critical" and a.get("code") == "promo":
             return {
@@ -604,7 +668,44 @@ def _do_this_next(
                 "priority": "fiscal",
             }
 
-    # Uncategorized only — one next action before soft wealth / import reminder
+    action = head.get("action") or "hold"
+    head_priority = head.get("priority") or "fiscal"
+
+    # Fiscal desk headlines (high-APR, buffer, promo balloon) before pure Sort charges
+    fiscal_before_sort = {
+        "attack_apr",
+        "promo_balloon",
+        "promo_sink",
+        "stop_fees",
+        "top_up_buffer",
+        "protect_checking",
+    }
+    if (
+        not (
+            action
+            in (
+                "hold",
+                "park_yield",
+                "respect_tax_vault",
+                "min_only_cheap_debt",
+                "credit_util",
+            )
+            or head_priority == "optional"
+            or (action == "fund_tax_vault" and head_priority != "fiscal")
+        )
+        and action in fiscal_before_sort
+    ):
+        return {
+            "title": head.get("title") or "Fiscal next step",
+            "reason": head.get("reason") or "Address money risk before bookkeeping polish.",
+            "action": action,
+            "button_label": _button_for_action(action),
+            "params": head.get("params") or {},
+            "alternatives": head.get("alternatives") or ["Sort charges after this"],
+            "priority": "fiscal",
+        }
+
+    # Uncategorized — after books honesty + fees/promo/APR
     if books and books.get("primary_action") == "review":
         uncat = int(books.get("uncategorized_count") or 0)
         if uncat > 0:
@@ -618,9 +719,6 @@ def _do_this_next(
                 "alternatives": ["Import bank file", "Open Full books → Transactions"],
                 "priority": "books",
             }
-
-    action = head.get("action") or "hold"
-    head_priority = head.get("priority") or "fiscal"
     # Soft = optional polish / personal tax nag. Business tax set-aside stays fiscal.
     soft = (
         action

@@ -2355,6 +2355,136 @@ def get_ifpp(
     )
 
 
+@app.get("/api/cash-runway")
+def get_cash_runway(
+    days: Optional[int] = None,
+    as_of: Optional[date] = None,
+    profile_id: Optional[int] = None,
+    scope: Optional[str] = None,
+    mode: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """Day-by-day cash runway strip (default horizon from settings, typically 45d)."""
+    from financial_os.services.cash_runway import build_cash_runway
+
+    return build_cash_runway(
+        db,
+        as_of=as_of,
+        days=days,
+        profile_id=profile_id,
+        scope=scope,
+        mode=mode,
+    )
+
+
+class StatementFreezeIn(BaseModel):
+    actual_balance: Decimal
+    cycle_end: date | None = None
+    due_date: date | None = None
+    cycle_start: date | None = None
+    payment_amount: Decimal | None = None
+    source: str | None = "user"
+
+
+@app.get("/api/accounts/{account_id}/statement-cycles")
+def get_statement_cycles_history(account_id: int, limit: int = 24, db: Session = Depends(get_db)):
+    from financial_os.services.statement_freeze import list_statement_cycles
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    items = list_statement_cycles(db, account_id, limit=limit)
+    return {"account_id": account_id, "count": len(items), "items": items}
+
+
+@app.post("/api/accounts/{account_id}/statement-cycles/freeze")
+def freeze_account_statement_cycle(
+    account_id: int,
+    body: StatementFreezeIn,
+    db: Session = Depends(get_db),
+):
+    """Freeze a statement cycle with the bank's actual balance (vs projected)."""
+    from financial_os.services.statement_freeze import freeze_statement_cycle
+
+    try:
+        return freeze_statement_cycle(
+            db,
+            account_id,
+            actual_balance=body.actual_balance,
+            cycle_end=body.cycle_end,
+            due_date=body.due_date,
+            cycle_start=body.cycle_start,
+            payment_amount=body.payment_amount,
+            source=body.source or "user",
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
+
+
+@app.get("/api/rewards/pick")
+def rewards_pick_card(
+    category: str = "general",
+    amount: Optional[Decimal] = None,
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Which credit card for this spend category (rewards rates + room)."""
+    from financial_os.services.rewards_pick import pick_card_for_category
+
+    return pick_card_for_category(
+        db, category=category, amount=amount, profile_id=profile_id
+    )
+
+
+class RewardsRatesIn(BaseModel):
+    rates: dict[str, Decimal | float | int]
+
+
+@app.put("/api/accounts/{account_id}/rewards-rates")
+def put_account_rewards_rates(
+    account_id: int,
+    body: RewardsRatesIn,
+    db: Session = Depends(get_db),
+):
+    """Set category → percent rewards map on a credit card."""
+    from financial_os.services.rewards_pick import parse_rewards_rates, set_rewards_rates
+
+    try:
+        acct = set_rewards_rates(db, account_id, body.rates or {})
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
+    rates = parse_rewards_rates(acct.rewards_rates_json)
+    return {
+        "account_id": account_id,
+        "name": acct.nickname,
+        "rates": {k: str(v) for k, v in rates.items()},
+        "rewards_program": acct.rewards_program,
+    }
+
+
+@app.get("/api/accounts/{account_id}/rewards-rates")
+def get_account_rewards_rates(account_id: int, db: Session = Depends(get_db)):
+    from financial_os.services.rewards_pick import parse_rewards_rates, rates_for_account
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    rates = rates_for_account(row)
+    return {
+        "account_id": account_id,
+        "name": row.nickname,
+        "rates": {k: str(v) for k, v in rates.items()},
+        "rewards_program": row.rewards_program,
+        "raw_json": row.rewards_rates_json,
+    }
+
+
 class SimulateOutflow(BaseModel):
     on_date: date | None = None  # not named "date" — shadows datetime.date in annotations
     amount: Decimal
