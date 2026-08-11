@@ -1602,6 +1602,204 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     return {"ok": True}
 
 
+# --- Statement cycle projection + settings (register /cycles before /{id}/...) ---
+
+
+def _iso_date(v: date | None) -> str | None:
+    if v is None:
+        return None
+    return v.isoformat() if hasattr(v, "isoformat") else str(v)
+
+
+def _dec_str(v) -> str | None:
+    if v is None:
+        return None
+    return str(v)
+
+
+def _cycle_api_dict(proj: dict, account: Account) -> dict:
+    """Serialize project_card_payment + account cycle config for HTTP JSON."""
+    return {
+        "account_id": account.id,
+        "name": account.nickname,
+        "kind": account.kind,
+        "statement_balance": _dec_str(proj.get("statement_balance")),
+        "next_payment": _dec_str(proj.get("next_payment")),
+        "next_due": _iso_date(proj.get("next_due")),
+        "last_close": _iso_date(proj.get("last_close")),
+        "next_close": _iso_date(proj.get("next_close")),
+        "funding_account_id": proj.get("funding_account_id")
+        or account.payment_funding_account_id,
+        "policy": proj.get("policy") or (account.autopay_policy or "none"),
+        "statement_close_day": account.statement_close_day,
+        "payment_due_day": account.payment_due_day,
+        "autopay_policy": account.autopay_policy,
+        "payment_fixed_amount": _dec_str(account.payment_fixed_amount),
+        "payment_funding_account_id": account.payment_funding_account_id,
+        "cycle_config_source": account.cycle_config_source,
+        "statement_balance_cached": _dec_str(account.statement_balance_cached),
+        "next_payment_amount_cached": _dec_str(account.next_payment_amount_cached),
+        "next_payment_date_cached": _iso_date(account.next_payment_date_cached),
+    }
+
+
+def _recompute_api_dict(result: dict, account: Account | None = None) -> dict:
+    """Serialize recompute_card_payment_schedule result for HTTP."""
+    out = {
+        "ok": result.get("ok", False),
+        "account_id": result.get("account_id"),
+        "statement_balance": _dec_str(result.get("statement_balance")),
+        "next_payment": _dec_str(result.get("next_payment")),
+        "next_due": _iso_date(result.get("next_due")),
+        "last_close": _iso_date(result.get("last_close")),
+        "next_close": _iso_date(result.get("next_close")),
+        "funding_account_id": result.get("funding_account_id"),
+        "policy": result.get("policy"),
+        "schedule": result.get("schedule"),
+        "scheduled_id": result.get("scheduled_id"),
+    }
+    if result.get("skipped"):
+        out["skipped"] = True
+        out["reason"] = result.get("reason")
+    if result.get("error"):
+        out["error"] = result.get("error")
+    if account is not None:
+        out["name"] = account.nickname
+        out["cycle_config_source"] = account.cycle_config_source
+        out["statement_close_day"] = account.statement_close_day
+        out["payment_due_day"] = account.payment_due_day
+        out["autopay_policy"] = account.autopay_policy
+        out["payment_fixed_amount"] = _dec_str(account.payment_fixed_amount)
+        out["payment_funding_account_id"] = account.payment_funding_account_id
+    return out
+
+
+class CycleConfigIn(BaseModel):
+    """User-editable statement cycle / autopay settings for a credit account."""
+
+    statement_close_day: int | None = None
+    payment_due_day: int | None = None
+    autopay_policy: str | None = None
+    payment_funding_account_id: int | None = None
+    payment_fixed_amount: Decimal | None = None
+
+
+@app.get("/api/accounts/cycles")
+def list_account_cycles(
+    profile_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """List statement-cycle projections for non-archived credit accounts."""
+    from financial_os.services.statement_cycle import project_card_payment
+
+    q = db.query(Account).filter(
+        Account.kind == "credit",
+        Account.archived_at.is_(None),
+    )
+    if profile_id is not None:
+        q = q.filter(Account.profile_id == profile_id)
+    items = []
+    for a in q.order_by(Account.id).all():
+        try:
+            proj = project_card_payment(db, a.id)
+        except ValueError:
+            continue
+        items.append(_cycle_api_dict(proj, a))
+    return {"count": len(items), "items": items}
+
+
+@app.get("/api/accounts/{account_id}/cycle")
+def get_account_cycle(account_id: int, db: Session = Depends(get_db)):
+    """Projected open-cycle statement balance and next payment for one account."""
+    from financial_os.services.statement_cycle import project_card_payment
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    try:
+        proj = project_card_payment(db, account_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return _cycle_api_dict(proj, row)
+
+
+@app.put("/api/accounts/{account_id}/cycle-config")
+def put_account_cycle_config(
+    account_id: int,
+    body: CycleConfigIn,
+    db: Session = Depends(get_db),
+):
+    """Update cycle/autopay settings; marks source=user and recomputes payment schedule."""
+    from financial_os.services.autopay import POLICIES, recompute_card_payment_schedule
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    if (row.kind or "") != "credit":
+        raise HTTPException(400, "Cycle config applies to credit accounts only")
+
+    data = body.model_dump(exclude_unset=True)
+    if "autopay_policy" in data and data["autopay_policy"] is not None:
+        policy = str(data["autopay_policy"]).lower().strip()
+        if policy not in POLICIES:
+            raise HTTPException(
+                400, f"autopay_policy must be one of {sorted(POLICIES)}"
+            )
+        data["autopay_policy"] = policy
+
+    if "statement_close_day" in data and data["statement_close_day"] is not None:
+        day = int(data["statement_close_day"])
+        if day < 1 or day > 31:
+            raise HTTPException(400, "statement_close_day must be 1–31")
+        data["statement_close_day"] = day
+
+    if "payment_due_day" in data and data["payment_due_day"] is not None:
+        day = int(data["payment_due_day"])
+        if day < 1 or day > 31:
+            raise HTTPException(400, "payment_due_day must be 1–31")
+        data["payment_due_day"] = day
+
+    if "payment_funding_account_id" in data and data["payment_funding_account_id"] is not None:
+        fund = db.get(Account, int(data["payment_funding_account_id"]))
+        if not fund:
+            raise HTTPException(400, "payment_funding_account_id not found")
+
+    for k, v in data.items():
+        setattr(row, k, v)
+    row.cycle_config_source = "user"
+    db.flush()
+
+    result = recompute_card_payment_schedule(db, account_id)
+    db.refresh(row)
+    out = _recompute_api_dict(result, row)
+    out["ok"] = True
+    # Surface config fields for clients/tests
+    out["cycle_config_source"] = row.cycle_config_source
+    out["statement_close_day"] = row.statement_close_day
+    out["payment_due_day"] = row.payment_due_day
+    out["autopay_policy"] = row.autopay_policy
+    out["payment_fixed_amount"] = _dec_str(row.payment_fixed_amount)
+    out["payment_funding_account_id"] = row.payment_funding_account_id
+    return out
+
+
+@app.post("/api/accounts/{account_id}/recompute-cycle")
+def recompute_account_cycle(account_id: int, db: Session = Depends(get_db)):
+    """Force rebuild of statement projection caches and cash-funded payment schedule."""
+    from financial_os.services.autopay import recompute_card_payment_schedule
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    result = recompute_card_payment_schedule(db, account_id)
+    if not result.get("ok") and result.get("error") == "Account not found":
+        raise HTTPException(404, "Account not found")
+    if result.get("skipped") and result.get("reason") == "not_credit":
+        raise HTTPException(400, "Recompute cycle applies to credit accounts only")
+    db.refresh(row)
+    return _recompute_api_dict(result, row)
+
+
 @app.get("/api/transactions", response_model=list[TransactionOut])
 def list_transactions(
     profile_id: Optional[int] = None,
