@@ -730,6 +730,26 @@ def budgets_accept_suggestion(body: BudgetAcceptSuggestionIn, db: Session = Depe
     return {"id": rule.id, "amount": str(rule.amount), "period": rule.period}
 
 
+class BudgetSeedIn(BaseModel):
+    profile_id: int | None = None
+    max_rules: int = 10
+    only_if_empty: bool = False
+
+
+@app.post("/api/budgets/seed-from-history")
+def budgets_seed_from_history(body: BudgetSeedIn | None = None, db: Session = Depends(get_db)):
+    """Create daily/weekly/monthly plans from top historical spend (Excel-style defaults)."""
+    from financial_os.services.budget_service import seed_from_history
+
+    body = body or BudgetSeedIn()
+    return seed_from_history(
+        db,
+        profile_id=body.profile_id,
+        max_rules=body.max_rules,
+        only_if_empty=body.only_if_empty,
+    )
+
+
 @app.get("/api/budgets/cuts")
 def budgets_cuts_preview(
     profile_id: int | None = None,

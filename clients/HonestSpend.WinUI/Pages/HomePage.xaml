@@ -33,6 +33,13 @@
                     </InfoBar.ActionButton>
                 </InfoBar>
 
+                <InfoBar x:Name="BudgetSeedBar" IsOpen="False" Severity="Informational"
+                         IsClosable="True" Title="Budgets">
+                    <InfoBar.ActionButton>
+                        <Button Content="Seed from history" Click="BudgetSeed_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
                 <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="16" Padding="20">

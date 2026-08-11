@@ -80,6 +80,7 @@ public sealed partial class HomePage : Page
 
             SafeText.Text = Money(_home, "safe_to_spend");
             ApplyBudgetSummary(_home);
+            ApplyBudgetSeedHint(_home);
             var status = JsonUi.Str(_home, "status", "safe");
             StatusLine.Text = JsonUi.Str(_home, "status_label", status);
             StatusLine.Foreground = status switch
@@ -494,6 +495,38 @@ public sealed partial class HomePage : Page
             mw.NavigatePublic("budgets");
         else
             Frame?.Navigate(typeof(BudgetsPage));
+    }
+
+    private void ApplyBudgetSeedHint(JsonElement home)
+    {
+        if (home.TryGetProperty("budget_seed_hint", out var h)
+            && h.ValueKind == JsonValueKind.Object)
+        {
+            BudgetSeedBar.Title = JsonUi.Str(h, "title", "Budgets");
+            BudgetSeedBar.Message = JsonUi.Str(h, "reason");
+            BudgetSeedBar.IsOpen = true;
+        }
+        else
+        {
+            BudgetSeedBar.IsOpen = false;
+        }
+    }
+
+    private async void BudgetSeed_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.SeedBudgetsFromHistoryAsync(AppState.SelectedProfileId, onlyIfEmpty: true);
+            BudgetSeedBar.IsOpen = false;
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private void ApplyBudgetSummary(JsonElement home)

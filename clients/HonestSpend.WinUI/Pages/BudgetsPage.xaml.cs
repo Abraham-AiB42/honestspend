@@ -283,6 +283,28 @@ public sealed partial class BudgetsPage : Page
         }
     }
 
+    private async void SeedHistory_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.SeedBudgetsFromHistoryAsync(AppState.SelectedProfileId, onlyIfEmpty: false);
+            MsgBar.Title = "Seeded";
+            MsgBar.Message = JsonUi.Str(res, "message");
+            MsgBar.Severity = InfoBarSeverity.Success;
+            MsgBar.IsOpen = true;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            MsgBar.Title = "Error";
+            MsgBar.Message = ex.Message;
+            MsgBar.Severity = InfoBarSeverity.Error;
+            MsgBar.IsOpen = true;
+        }
+    }
+
     private async void AcceptSuggestion_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button btn || btn.Tag is not ValueTuple<int, string, string, string> tag)

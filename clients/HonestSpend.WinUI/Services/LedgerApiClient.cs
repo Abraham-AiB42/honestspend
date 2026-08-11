@@ -595,6 +595,21 @@ public sealed class LedgerApiClient : IDisposable
             },
             ct);
 
+    public Task<JsonElement> SeedBudgetsFromHistoryAsync(
+        int? profileId = null,
+        bool onlyIfEmpty = false,
+        int maxRules = 10,
+        CancellationToken ct = default)
+        => PostJsonAsync(
+            "api/budgets/seed-from-history",
+            new
+            {
+                profile_id = profileId ?? AppState.SelectedProfileId,
+                only_if_empty = onlyIfEmpty,
+                max_rules = maxRules,
+            },
+            ct);
+
     public Task<JsonElement> GetLicenseAsync(CancellationToken ct = default)
         => GetJsonAsync("api/license", ct);
 

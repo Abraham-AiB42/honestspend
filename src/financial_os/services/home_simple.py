@@ -52,6 +52,37 @@ def build_home_simple(
     budgets = home_budget_payload(session, profile_id=profile_id, as_of=as_of)
     reserve = budget_reserve_total(session, profile_id=profile_id, as_of=as_of)
     cash = max(ZERO, cash_raw - reserve)
+    # Nudge: history exists but no budgets yet
+    budget_seed_hint = None
+    if not (budgets.get("summary") or []):
+        from financial_os.db import Transaction
+        from sqlalchemy import func
+
+        pid_hint = profile_id
+        if pid_hint is None:
+            from financial_os.db import Profile
+
+            d = session.query(Profile).filter(Profile.is_default.is_(True)).first()
+            pid_hint = d.id if d else None
+        if pid_hint is not None:
+            n_exp = (
+                session.query(func.count(Transaction.id))
+                .filter(
+                    Transaction.profile_id == pid_hint,
+                    Transaction.amount < 0,
+                    Transaction.is_transfer.is_(False),
+                    Transaction.category_id.isnot(None),
+                )
+                .scalar()
+                or 0
+            )
+            if n_exp >= 5:
+                budget_seed_hint = {
+                    "title": "Seed budgets from your spend",
+                    "reason": "You have categorized expenses but no budgets yet. "
+                    "One tap creates daily/weekly/monthly plans from history.",
+                    "action": "seed_budgets",
+                }
     is_red = bool(ifpp.is_red_now)
     alerts = dig.get("alerts") or []
     critical = [a for a in alerts if a.get("level") in ("critical", "warn")]
@@ -156,6 +187,7 @@ def build_home_simple(
         "safe_to_spend_before_budgets": str(cash_raw.quantize(Decimal("0.01"))),
         "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
         "budgets": budgets,
+        "budget_seed_hint": budget_seed_hint,
         "can_charge_no_interest": str(_d(ifpp.card_float_interest_free).quantize(Decimal("0.01"))),
         "total_power": str(
             (cash + _d(ifpp.card_float_interest_free)).quantize(Decimal("0.01"))

@@ -67,7 +67,11 @@
                 Text="Trailing averages: ~90 workdays · 24 weeks · 18 months. Tap Accept to set the plan in one shot." />
             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
                 <Button Content="Refresh suggestions" Click="Suggest_Click" />
+                <Button Content="Seed from spend history" Click="SeedHistory_Click"
+                        Style="{StaticResource AccentButtonStyle}" />
             </StackPanel>
+            <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                Text="Seed creates plans for top categories (food→daily, gas→weekly, rent/util→monthly) from long trailing averages." />
             <StackPanel x:Name="SuggestPanel" Spacing="8" />
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Free cash (cuts)" />

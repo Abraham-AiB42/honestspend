@@ -500,6 +500,144 @@ def suggestions(
     return {"as_of": as_of.isoformat(), "profile_id": pid, "items": items}
 
 
+def _preferred_period_for_category(cat: Category | None) -> str:
+    """Map COA budget_group / name to daily|weekly|monthly (Excel habits)."""
+    if cat is None:
+        return "weekly"
+    bg = (cat.budget_group or "").lower()
+    name = (cat.display_name or "").lower()
+    code = (cat.code or "").lower()
+    if bg in ("food",) or "food" in name or "groc" in name or "dining" in name or "lunch" in name:
+        return "daily"
+    if bg in ("transport",) or "gas" in name or "fuel" in name or "gas" in code:
+        return "weekly"
+    if bg in ("housing", "utilities", "insurance") or any(
+        x in name for x in ("rent", "mortgage", "util", "electric", "water", "internet", "cell", "insur")
+    ):
+        return "monthly"
+    if bg in ("debt", "income", "transfer", "owner"):
+        return "monthly"
+    return "weekly"
+
+
+def seed_from_history(
+    session: Session,
+    *,
+    profile_id: int | None = None,
+    as_of: date | None = None,
+    max_rules: int = 10,
+    min_suggested: Decimal = Decimal("5"),
+    only_if_empty: bool = False,
+) -> dict[str, Any]:
+    """Create budget rules from top historical spend using long trailing averages.
+
+    Skips categories that already have an active rule for the chosen period.
+    If only_if_empty and any active rules exist for the profile, returns without creating.
+    """
+    as_of = as_of or date.today()
+    pid = _resolve_profile_id(session, profile_id)
+    if pid is None:
+        return {"created": [], "count": 0, "skipped": 0, "message": "No profile"}
+
+    existing = list_rules(session, pid)
+    if only_if_empty and existing:
+        return {
+            "created": [],
+            "count": 0,
+            "skipped": len(existing),
+            "message": "Budgets already exist — seed skipped.",
+        }
+
+    settings = _settings(session)
+    mask = int(getattr(settings, "budget_workdays", DEFAULT_WORKDAYS) or DEFAULT_WORKDAYS)
+    week_start = int(getattr(settings, "budget_week_starts_on", DEFAULT_WEEK_START) or 0)
+    ruled = {(r.category_id, r.period) for r in existing}
+
+    lookback_start = as_of - timedelta(days=DAILY_LOOKBACK_DAYS)
+    rows = (
+        session.query(
+            Transaction.category_id,
+            func.coalesce(func.sum(Transaction.amount), 0),
+        )
+        .filter(
+            Transaction.profile_id == pid,
+            Transaction.txn_date >= lookback_start,
+            Transaction.txn_date <= as_of,
+            Transaction.is_transfer.is_(False),
+            Transaction.amount < 0,
+            Transaction.category_id.isnot(None),
+        )
+        .group_by(Transaction.category_id)
+        .order_by(func.sum(Transaction.amount).asc())
+        .limit(20)
+        .all()
+    )
+
+    created: list[dict[str, Any]] = []
+    for cat_id, _raw in rows:
+        if cat_id is None or len(created) >= max_rules:
+            break
+        cid = int(cat_id)
+        cat = session.get(Category, cid)
+        if cat and (cat.budget_group or "").lower() in ("transfer", "income", "review"):
+            continue
+        period = _preferred_period_for_category(cat)
+        if (cid, period) in ruled:
+            continue
+        sug = suggest_for_category(
+            session,
+            profile_id=pid,
+            category_id=cid,
+            period=period,
+            as_of=as_of,
+            active_weekdays=mask,
+            week_starts_on=week_start,
+        )
+        amt = _d(sug.get("suggested_amount"))
+        if amt < min_suggested:
+            continue
+        # Round friendly: daily to nearest dollar, weekly/monthly to nearest 5
+        if period == "daily":
+            amt = max(Decimal("1"), amt.quantize(Decimal("1")))
+        else:
+            amt = max(Decimal("5"), (amt / 5).quantize(Decimal("1")) * 5)
+        rule = create_rule(
+            session,
+            profile_id=pid,
+            category_id=cid,
+            period=period,
+            amount=amt,
+            name=cat.display_name if cat else None,
+            active_weekdays=mask,
+            week_starts_on=week_start,
+            source="accepted_suggestion",
+            notes=f"Seeded from history ({sug.get('window')})",
+        )
+        ruled.add((cid, period))
+        created.append(
+            {
+                "id": rule.id,
+                "category_id": cid,
+                "name": rule.name,
+                "period": period,
+                "amount": str(rule.amount),
+            }
+        )
+
+    session.flush()
+    return {
+        "created": created,
+        "count": len(created),
+        "skipped": 0,
+        "message": (
+            f"Created {len(created)} budget(s) from spend history."
+            if created
+            else "No categories with enough spend history to seed."
+        ),
+        "status": budgets_status(session, profile_id=pid, as_of=as_of),
+    }
+
+
 def create_rule(
     session: Session,
     *,

@@ -226,6 +226,44 @@ def test_home_safe_to_spend_subtracts_reserve(db):
     assert "budgets" in home
 
 
+def test_seed_from_history_creates_rules(db):
+    p = db.query(Profile).first()
+    food = db.query(Category).filter(Category.code == "TEST_FOOD").one()
+    gas = db.query(Category).filter(Category.code == "TEST_GAS").one()
+    acct = db.query(Account).first()
+    # food daily-ish, gas weekly-ish history
+    for i in range(10):
+        db.add(
+            Transaction(
+                profile_id=p.id,
+                account_id=acct.id,
+                category_id=food.id,
+                txn_date=date(2026, 7, 1) + timedelta(days=i),
+                amount=Decimal("-12"),
+                payee="Food",
+            )
+        )
+    for i in range(6):
+        db.add(
+            Transaction(
+                profile_id=p.id,
+                account_id=acct.id,
+                category_id=gas.id,
+                txn_date=date(2026, 7, 1) + timedelta(days=i * 7),
+                amount=Decimal("-45"),
+                payee="Gas",
+            )
+        )
+    db.commit()
+    res = bs.seed_from_history(db, profile_id=p.id, as_of=date(2026, 8, 10), max_rules=5)
+    assert res["count"] >= 1
+    assert any(c["period"] in ("daily", "weekly", "monthly") for c in res["created"])
+    # only_if_empty skips when rules exist
+    res2 = bs.seed_from_history(db, profile_id=p.id, only_if_empty=True)
+    assert res2["count"] == 0
+    assert "already" in res2["message"].lower() or res2["skipped"] >= 0
+
+
 def test_suggestions_include_unbudgeted_top_spend(db):
     p = db.query(Profile).first()
     gas = db.query(Category).filter(Category.code == "TEST_GAS").one()

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.37 — Seed budgets from spend history
+
+- **`POST /api/budgets/seed-from-history`**: create daily/weekly/monthly plans from top categorized spend (food→daily, gas→weekly, rent/util→monthly)
+- **Budgets page**: “Seed from spend history” button
+- **Home**: soft tip when you have categorized expenses but no budgets yet
+- `only_if_empty` mode for safe one-tap onboarding
+
 ## 1.0.36 — Accept budget suggestions + Can I buy? cut re-check
 
 - **Budgets**: one-tap **Accept** suggestion sets plan from long trailing average; auto-load suggestions; unbudgeted top-spend categories get proposals
