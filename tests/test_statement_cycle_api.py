@@ -202,7 +202,33 @@ def test_put_cycle_config_not_credit(client: TestClient):
         f"/api/accounts/{cash_id}/cycle-config",
         json={"autopay_policy": "min", "payment_due_day": 5},
     )
-    assert r.status_code in (400, 404)
+    assert r.status_code == 400
+
+
+def test_put_cycle_config_rejects_credit_as_funding(client: TestClient):
+    """Funding must be cash-like — another credit card is 400."""
+    import financial_os.api.app as app_mod
+
+    card_id, _cash_id = _seed_card_and_cash(app_mod)
+    with app_mod.SessionLocal() as s:
+        personal = s.query(Profile).filter(Profile.slug == "personal").one()
+        other = Account(
+            profile_id=personal.id,
+            kind="credit",
+            nickname="Other card",
+            current_balance=Decimal("100"),
+            credit_limit=Decimal("1000"),
+        )
+        s.add(other)
+        s.commit()
+        other_id = other.id
+
+    r = client.put(
+        f"/api/accounts/{card_id}/cycle-config",
+        json={"payment_funding_account_id": other_id},
+    )
+    assert r.status_code == 400, r.text
+    assert "cash" in r.json().get("detail", "").lower()
 
 
 def test_post_recompute_cycle(client: TestClient):
@@ -224,4 +250,4 @@ def test_post_recompute_cycle(client: TestClient):
 
 def test_post_recompute_cycle_not_found(client: TestClient):
     r = client.post("/api/accounts/999999/recompute-cycle")
-    assert r.status_code in (400, 404)
+    assert r.status_code == 404

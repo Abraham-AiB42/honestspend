@@ -379,6 +379,8 @@ class TransactionPatch(BaseModel):
     payee: str | None = None
     memo: str | None = None
     amount: Decimal | None = None
+    account_id: int | None = None
+    status: str | None = None
     txn_date: date | None = None
     is_transfer: bool | None = None
 
@@ -1763,6 +1765,16 @@ def put_account_cycle_config(
         fund = db.get(Account, int(data["payment_funding_account_id"]))
         if not fund:
             raise HTTPException(400, "payment_funding_account_id not found")
+        if fund.archived_at is not None:
+            raise HTTPException(400, "payment_funding_account_id is archived")
+        # Cash-like only (checking/savings/cash or IFPP cash flag) — not another credit card
+        kind = (fund.kind or "").lower()
+        if not (kind in ("checking", "savings", "cash") or fund.is_cash_for_ifpp):
+            raise HTTPException(
+                400,
+                "payment_funding_account_id must be a cash-like account "
+                "(checking/savings/cash or is_cash_for_ifpp)",
+            )
 
     for k, v in data.items():
         setattr(row, k, v)
@@ -1833,7 +1845,10 @@ def create_transaction(body: TransactionIn, db: Session = Depends(get_db)):
 
     row = Transaction(**data)
     db.add(row)
-    if acct:
+    # Pending must NOT hit books balance — IFPP strict mode reserves pending separately.
+    # Applying both double-counts and makes Safe to spend feel dishonest.
+    status = (body.status or "cleared").lower()
+    if acct and status not in ("pending", "void"):
         from financial_os.services.account_balance import apply_amount_to_account
 
         apply_amount_to_account(acct, body.amount)
@@ -1870,8 +1885,41 @@ def patch_transaction(
         raise HTTPException(400, "Transaction is void — cannot edit")
     data = body.model_dump(exclude_unset=True)
     prev_cat = row.category_id
+    prev_status = (row.status or "cleared").lower()
+    prev_amount = row.amount
+    prev_account_id = row.account_id
     for k, v in data.items():
         setattr(row, k, v)
+    new_status = (row.status or "cleared").lower()
+    new_amount = row.amount
+    new_account_id = row.account_id
+
+    from financial_os.services.account_balance import (
+        apply_amount_to_account,
+        reverse_amount_on_account,
+    )
+
+    # Pending → cleared: apply balance once. Cleared → pending: reverse books apply.
+    if "status" in data and prev_status != new_status:
+        acct = db.get(Account, row.account_id) if row.account_id else None
+        if acct:
+            if prev_status == "pending" and new_status not in ("pending", "void"):
+                apply_amount_to_account(acct, row.amount)
+            elif prev_status not in ("pending", "void") and new_status == "pending":
+                reverse_amount_on_account(acct, row.amount)
+    # Amount (or account) change on a books-applied txn: reverse old, apply new
+    elif prev_status not in ("pending", "void") and new_status not in ("pending", "void"):
+        amount_changed = "amount" in data and Decimal(str(prev_amount)) != Decimal(str(new_amount))
+        account_changed = (
+            "account_id" in data and prev_account_id is not None and prev_account_id != new_account_id
+        )
+        if amount_changed or account_changed:
+            old_acct = db.get(Account, prev_account_id) if prev_account_id else None
+            new_acct = db.get(Account, new_account_id) if new_account_id else None
+            if old_acct is not None:
+                reverse_amount_on_account(old_acct, prev_amount)
+            if new_acct is not None:
+                apply_amount_to_account(new_acct, new_amount)
     # Learn merchant rule when user sets/changes category
     if learn and body.category_id and body.category_id != prev_cat:
         learn_rule_from_correction(db, row, body.category_id)
@@ -2623,11 +2671,13 @@ class IntermixIn(BaseModel):
     to_account_id: int
     txn_date: date | None = None
     memo: str | None = None
+    confirm_unsafe: bool = False
 
 
 @app.post("/api/intermix")
 def intermix(body: IntermixIn, db: Session = Depends(get_db)):
     from financial_os.services.intermix import apply_intermix
+    from financial_os.services.never_neg import WouldGoNegative
 
     try:
         return apply_intermix(
@@ -2638,7 +2688,10 @@ def intermix(body: IntermixIn, db: Session = Depends(get_db)):
             to_account_id=body.to_account_id,
             txn_date=body.txn_date,
             memo=body.memo,
+            confirm_unsafe=bool(getattr(body, "confirm_unsafe", False)),
         )
+    except WouldGoNegative as e:
+        raise HTTPException(status_code=409, detail=e.payload) from e
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
@@ -3096,6 +3149,12 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/categorize/batch")
 def categorize_batch(body: CategorizeRequest, db: Session = Depends(get_db)):
+    from financial_os.db import Transaction
+
+    q = db.query(Transaction).filter(Transaction.category_id.is_(None))
+    if body.profile_id is not None:
+        q = q.filter(Transaction.profile_id == body.profile_id)
+    uncategorized_total = q.count()
     return {
         "results": categorize_uncategorized(
             db,
@@ -3105,6 +3164,8 @@ def categorize_batch(body: CategorizeRequest, db: Session = Depends(get_db)):
             use_grok=body.use_grok,
             min_confidence=body.min_confidence,
         ),
+        "uncategorized_total": uncategorized_total,
+        "limit": body.limit,
         "grok_enabled": app_settings.grok_enabled,
     }
 
