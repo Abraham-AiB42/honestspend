@@ -2019,6 +2019,7 @@ class PrePurchaseIn(BaseModel):
     profile_id: int | None = None
     scope: str | None = None
     category_id: int | None = None
+    allow_envelope_raid: bool = False
 
 
 @app.post("/api/pre-purchase")
@@ -2033,6 +2034,7 @@ def pre_purchase(body: PrePurchaseIn, db: Session = Depends(get_db)):
         profile_id=body.profile_id,
         scope=body.scope,
         category_id=body.category_id,
+        allow_envelope_raid=body.allow_envelope_raid,
     )
 
 

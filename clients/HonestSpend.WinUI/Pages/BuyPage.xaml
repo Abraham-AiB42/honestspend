@@ -11,7 +11,7 @@
         <StackPanel Spacing="16" MaxWidth="640">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Can I buy this?" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                Text="Protects checking and prefers interest-free card float when it's safe. Uses Who / money view from the top bar." />
+                Text="Protects checking and Safe to spend (after budgets). Auto prefers cash when it fits. Uses Who / money view from the top bar." />
 
             <NumberBox x:Name="AmountBox" Header="Amount ($)" Minimum="0.01"
                        SpinButtonPlacementMode="Inline" Value="100" />
@@ -19,7 +19,7 @@
                       PlaceholderText="Any / uncategorized"
                       HorizontalAlignment="Stretch" />
             <ComboBox x:Name="PreferBox" Header="Prefer" SelectedIndex="0" MinWidth="280">
-                <ComboBoxItem Content="Auto (card float if safe, else cash)" Tag="auto" />
+                <ComboBoxItem Content="Auto (cash if Safe covers, else card)" Tag="auto" IsSelected="True" />
                 <ComboBoxItem Content="Cash first" Tag="cash" />
                 <ComboBoxItem Content="Card first" Tag="card" />
             </ComboBox>
@@ -38,6 +38,11 @@
                     <TextBlock x:Name="RecText" FontSize="16" TextWrapping="Wrap" />
                     <TextBlock x:Name="ReasonText" Opacity="0.85" TextWrapping="Wrap" />
                     <TextBlock x:Name="BudgetCheckText" Opacity="0.85" TextWrapping="Wrap" />
+                    <StackPanel x:Name="RaidPanel" Spacing="6" Visibility="Collapsed">
+                        <TextBlock x:Name="RaidText" Opacity="0.9" TextWrapping="Wrap" />
+                        <Button x:Name="RaidBtn" Content="Raid envelope &amp; re-check"
+                                Click="Raid_Click" HorizontalAlignment="Left" />
+                    </StackPanel>
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Options" Margin="0,8,0,0" />
                     <ItemsControl x:Name="OptionsList" />
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Free cash from budgets" Margin="0,8,0,0" />

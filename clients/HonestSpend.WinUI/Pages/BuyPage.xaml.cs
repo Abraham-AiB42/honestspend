@@ -12,6 +12,7 @@ public sealed partial class BuyPage : Page
     private readonly List<(int Id, string Name)> _categories = new();
     private bool _busy;
     private bool _hasCash = true;
+    private bool _raidMode;
 
     public BuyPage()
     {
@@ -162,13 +163,15 @@ public sealed partial class BuyPage : Page
             }
 
             using var api = new LedgerApiClient();
-            var res = await api.PrePurchaseAsync(amount, prefer, categoryId: catId);
+            var res = await api.PrePurchaseAsync(
+                amount, prefer, categoryId: catId, allowEnvelopeRaid: _raidMode);
             var verdict = res.GetProperty("verdict").GetString() ?? "";
             VerdictText.Text = verdict switch
             {
                 "safe" => "Yes — safe",
                 "safe_via_other_method" => "Yes — use the other method",
                 "safe_budget_tight" => "Maybe — cash ok, budget tight",
+                "safe_raid_envelope" => "Yes — if you raid envelopes",
                 _ => "No — don't buy yet",
             };
 
@@ -191,6 +194,20 @@ public sealed partial class BuyPage : Page
                             : "");
             }
 
+            // Envelope raid offer (liquidity ok without budgets, Safe short)
+            if (res.TryGetProperty("envelope_raid", out var er) && er.ValueKind == JsonValueKind.Object
+                && er.TryGetProperty("available", out var av) && av.ValueKind == JsonValueKind.True
+                && !_raidMode)
+            {
+                RaidPanel.Visibility = Visibility.Visible;
+                RaidText.Text = JsonUi.Str(er, "message");
+            }
+            else
+            {
+                RaidPanel.Visibility = Visibility.Collapsed;
+                RaidText.Text = "";
+            }
+
             // Category budget from API (server-side)
             ApplyBudgetCheckFromResponse(res);
 
@@ -208,12 +225,14 @@ public sealed partial class BuyPage : Page
             OptionsList.ItemsSource = opts.Count > 0 ? opts : new List<string> { "No alternate options." };
             ScopeText.Text =
                 $"{UiCopy.MoneyView(AppState.IfppScope)}" +
-                $" · as of {JsonUi.Str(res, "as_of")}";
+                $" · as of {JsonUi.Str(res, "as_of")}" +
+                (_raidMode ? " · envelope raid" : "");
 
             // Show cut offers when purchase is tight or category short
-            var tight = verdict is not ("safe" or "safe_via_other_method");
+            var tight = verdict is not ("safe" or "safe_via_other_method" or "safe_raid_envelope");
             await LoadCutOffersAsync(api, force: tight || BudgetCheckText.Text.Contains("short", StringComparison.OrdinalIgnoreCase));
-            ScenarioMsg.Text = "";
+            ScenarioMsg.Text = _raidMode ? "Checked with envelope raid allowed." : "";
+            _raidMode = false; // one-shot unless user taps raid again
         }
         catch (Exception ex)
         {
@@ -221,11 +240,18 @@ public sealed partial class BuyPage : Page
             ErrorBar.IsOpen = true;
             VerdictText.Text = "Couldn't check";
             ReasonText.Text = ex.Message;
+            _raidMode = false;
         }
         finally
         {
             SetBusy(false);
         }
+    }
+
+    private void Raid_Click(object sender, RoutedEventArgs e)
+    {
+        _raidMode = true;
+        Check_Click(sender, e);
     }
 
     private void ApplyBudgetCheckFromResponse(JsonElement res)

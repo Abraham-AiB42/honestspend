@@ -79,6 +79,7 @@ public sealed partial class HomePage : Page
             _home = await api.GetHomeSimpleAsync();
 
             SafeText.Text = Money(_home, "safe_to_spend");
+            ApplyFloatWhisper(_home);
             ApplyWhyThisNumber(_home);
             ApplyBudgetSummary(_home);
             ApplyBudgetSeedHint(_home);
@@ -530,6 +531,29 @@ public sealed partial class HomePage : Page
         }
     }
 
+    private void ApplyFloatWhisper(JsonElement home)
+    {
+        try
+        {
+            var status = JsonUi.Str(home, "status", "safe");
+            var floatAmt = JsonUi.Str(home, "can_charge_no_interest", "0");
+            var red = home.TryGetProperty("is_red_now", out var ir) && ir.ValueKind == JsonValueKind.True;
+            if (red || status == "danger" || floatAmt is "0" or "0.00" or "—" or "")
+            {
+                FloatWhisper.Text = "";
+                FloatWhisper.Visibility = Visibility.Collapsed;
+                return;
+            }
+            // Optional best card from why lines / ifpp details not always present — keep simple
+            FloatWhisper.Text = $"+ {Money(home, "can_charge_no_interest")} interest-free on best card (not added to Safe)";
+            FloatWhisper.Visibility = Visibility.Visible;
+        }
+        catch
+        {
+            FloatWhisper.Visibility = Visibility.Collapsed;
+        }
+    }
+
     private void ApplyWhyThisNumber(JsonElement home)
     {
         try
@@ -565,6 +589,18 @@ public sealed partial class HomePage : Page
     {
         var reserve = JsonUi.Str(home, "budget_reserve", "0");
         var before = JsonUi.Str(home, "safe_to_spend_before_budgets", "");
+        var view = JsonUi.Str(home, "money_view");
+        if (view == "all_money")
+        {
+            BudgetScopeNote.Text =
+                $"All money: ${reserve} reserved across entities. Cards below are this entity only.";
+            BudgetScopeNote.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            BudgetScopeNote.Text = "";
+            BudgetScopeNote.Visibility = Visibility.Collapsed;
+        }
         if (!string.IsNullOrEmpty(reserve) && reserve != "0" && reserve != "0.00" && reserve != "—")
         {
             BudgetReserveLine.Text = string.IsNullOrEmpty(before) || before == "—"

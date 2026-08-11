@@ -242,6 +242,12 @@ def build_home_simple(
         "safe_to_spend": str(cash.quantize(Decimal("0.01"))),
         "safe_to_spend_before_budgets": str(cash_raw.quantize(Decimal("0.01"))),
         "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+        "budget_scope_note": (
+            f"${reserve.quantize(Decimal('0.01'))} reserved across all entities; "
+            "budget cards below are this entity only."
+            if sc == "group"
+            else None
+        ),
         "why_this_number": why_this_number,
         "budgets": budgets,
         "budget_seed_hint": budget_seed_hint,

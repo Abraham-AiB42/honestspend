@@ -49,6 +49,8 @@
                             Text="After bills, buffer, tax vault, and remaining budgets (reserved)" />
                         <TextBlock x:Name="SafeText" FontSize="48" FontWeight="SemiBold"
                                    Margin="0,4,0,0" Text="—" />
+                        <TextBlock x:Name="FloatWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
                         <TextBlock x:Name="WhyOneLiner" Opacity="0.7" FontSize="13" TextWrapping="Wrap" />
                         <TextBlock x:Name="BudgetReserveLine" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                         <TextBlock x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />
@@ -68,6 +70,8 @@
                         BorderThickness="1" CornerRadius="12" Padding="16">
                     <StackPanel Spacing="8">
                         <TextBlock Opacity="0.7" Text="Budgets this period" />
+                        <TextBlock x:Name="BudgetScopeNote" Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
                         <ItemsControl x:Name="BudgetSummaryList" />
                         <TextBlock Opacity="0.65" FontSize="12" Text="Free cash (tap to apply)"
                                    Margin="0,4,0,0" />

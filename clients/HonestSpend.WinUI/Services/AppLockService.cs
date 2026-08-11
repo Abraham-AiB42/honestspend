@@ -231,22 +231,14 @@ public static class AppLockService
 
     private static async Task StoreProtectedDekAsync(string dekB64)
     {
-        try
-        {
-            var provider = new DataProtectionProvider("LOCAL=user");
-            var clear = CryptographicBuffer.ConvertStringToBinary(dekB64, BinaryStringEncoding.Utf8);
-            var protectedBuf = await provider.ProtectAsync(clear);
-            CryptographicBuffer.CopyToByteArray(protectedBuf, out var bytes);
-            ApplicationData.Current.LocalSettings.Values["AppLockDekProtected"] =
-                Convert.ToBase64String(bytes);
-            // Remove any legacy cleartext DEK
-            ApplicationData.Current.LocalSettings.Values.Remove("AppLockDek");
-        }
-        catch
-        {
-            // Last resort (should be rare): still better than failing Hello setup silently
-            ApplicationData.Current.LocalSettings.Values["AppLockDek"] = dekB64;
-        }
+        var provider = new DataProtectionProvider("LOCAL=user");
+        var clear = CryptographicBuffer.ConvertStringToBinary(dekB64, BinaryStringEncoding.Utf8);
+        var protectedBuf = await provider.ProtectAsync(clear);
+        CryptographicBuffer.CopyToByteArray(protectedBuf, out var bytes);
+        ApplicationData.Current.LocalSettings.Values["AppLockDekProtected"] =
+            Convert.ToBase64String(bytes);
+        // Never store cleartext DEK
+        ApplicationData.Current.LocalSettings.Values.Remove("AppLockDek");
     }
 
     private static async Task<string?> LoadProtectedDekAsync()
@@ -262,12 +254,25 @@ public static class AppLockService
                 var clear = await provider.UnprotectAsync(buf);
                 return CryptographicBuffer.ConvertBinaryToString(BinaryStringEncoding.Utf8, clear);
             }
-            // Legacy cleartext migration
+            // One-time migration: re-protect legacy cleartext then wipe it
             if (ls["AppLockDek"] is string legacy && !string.IsNullOrEmpty(legacy))
             {
-                await StoreProtectedDekAsync(legacy);
-                return legacy;
+                try
+                {
+                    await StoreProtectedDekAsync(legacy);
+                    return legacy;
+                }
+                catch
+                {
+                    ls.Remove("AppLockDek");
+                    throw new InvalidOperationException(
+                        "Could not protect Windows Hello key. Re-enable Hello lock in Settings.");
+                }
             }
+        }
+        catch (InvalidOperationException)
+        {
+            throw;
         }
         catch { /* ignore */ }
         return null;

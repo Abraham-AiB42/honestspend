@@ -300,6 +300,7 @@ public sealed class LedgerApiClient : IDisposable
         int? profileId = null,
         string? scope = null,
         int? categoryId = null,
+        bool allowEnvelopeRaid = false,
         CancellationToken ct = default)
         => PostJsonAsync("api/pre-purchase", new
         {
@@ -308,6 +309,7 @@ public sealed class LedgerApiClient : IDisposable
             profile_id = profileId ?? AppState.SelectedProfileId,
             scope = scope ?? AppState.IfppScope,
             category_id = categoryId is > 0 ? categoryId : null,
+            allow_envelope_raid = allowEnvelopeRaid,
         }, ct);
 
     public Task<JsonElement> GetTaxVaultAsync(CancellationToken ct = default)

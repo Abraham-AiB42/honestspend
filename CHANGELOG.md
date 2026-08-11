@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.54 — Polish: envelope raid, float whisper, DEK protect-only
+
+- **Can I buy**: `envelope_raid` offer + `allow_envelope_raid` → `safe_raid_envelope`; WinUI **Raid envelope** button
+- **Home**: whisper “+ $X interest-free on best card”; All-money budget scope note
+- **Hello DEK**: no cleartext LocalSettings fallback (DataProtection only; migrate legacy once)
+- API `POST /api/pre-purchase` accepts `allow_envelope_raid`
+
 ## 1.0.53 — P1: one Safe number everywhere
 
 - **Glance** exposes `safe_to_spend` (post budget reserve) matching Home

@@ -102,6 +102,7 @@ def check_purchase(
     profile_id: int | None = None,
     scope: str | None = None,
     category_id: int | None = None,
+    allow_envelope_raid: bool = False,
 ) -> dict[str, Any]:
     as_of = as_of or date.today()
     amount = abs(_d(amount))
@@ -116,6 +117,23 @@ def check_purchase(
     )
     cash_raw = _d(ifpp.cash_spendable)
     safe_to_spend = max(ZERO, cash_raw - reserve)
+    # Envelope raid: liquidity before budgets covers amount, but Safe to spend does not
+    envelope_raid: dict[str, Any] | None = None
+    if cash_raw >= amount and safe_to_spend < amount and reserve > ZERO:
+        raid_amt = (amount - safe_to_spend).quantize(Decimal("0.01"))
+        envelope_raid = {
+            "available": True,
+            "raid_amount": str(raid_amt),
+            "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
+            "cash_before_budgets": str(cash_raw.quantize(Decimal("0.01"))),
+            "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+            "message": (
+                f"Liquidity covers ${amount} if you raid ${raid_amt} from budget envelopes "
+                f"(Safe to spend is only ${safe_to_spend})."
+            ),
+        }
+    # When user explicitly allows raid, treat cash path against cash_raw for this check
+    effective_safe = cash_raw if allow_envelope_raid and cash_raw >= amount else safe_to_spend
 
     # Per-account cash options (balance − account buffer)
     sc = (ifpp.details or {}).get("ifpp_scope") or scope or "entity"
@@ -132,12 +150,12 @@ def check_purchase(
         bal = _d(a.current_balance)
         abuf = _d(getattr(a, "safety_buffer", None) or 0)
         avail = max(ZERO, bal - abuf)
-        # Cap EVERY cash option by aggregate Safe to spend (never-neg + total/per-acct + budget reserve)
-        avail_eff = min(avail, safe_to_spend)
-        ok = avail_eff >= amount and safe_to_spend >= amount
+        # Cap cash by Safe to spend (or cash_raw when user allows envelope raid)
+        avail_eff = min(avail, effective_safe)
+        ok = avail_eff >= amount and effective_safe >= amount
         reason = (
             f"{a.nickname}: ${avail_eff} available after account buffer "
-            f"(capped by Safe to spend ${safe_to_spend})."
+            f"(capped by {'cash after bills/buffer' if allow_envelope_raid else 'Safe to spend'} ${effective_safe})."
             if ok
             else f"{a.nickname}: only ${avail_eff} after buffers / Safe to spend (need ${amount})."
         )
@@ -164,24 +182,29 @@ def check_purchase(
                     best_cash = opt
 
     # Aggregate cash path (for prefer=cash without picking account)
-    cash_ok = safe_to_spend >= amount
-    cash_reason = (
-        f"Safe to spend ${safe_to_spend} covers this purchase."
-        if cash_ok
-        else (
+    cash_ok = effective_safe >= amount
+    if cash_ok and allow_envelope_raid and safe_to_spend < amount:
+        cash_reason = (
+            f"Envelope raid: cash after bills/buffer ${cash_raw} covers ${amount}; "
+            f"raids ~${(amount - safe_to_spend).quantize(Decimal('0.01'))} from budgets "
+            f"(normal Safe to spend is ${safe_to_spend})."
+        )
+    elif cash_ok:
+        cash_reason = f"Safe to spend ${safe_to_spend} covers this purchase."
+    else:
+        cash_reason = (
             f"Safe to spend ${safe_to_spend} is short — would risk never-neg "
             f"or raid reserved budgets (${cash_raw} after buffers, ${reserve} budget reserve)."
         )
-    )
     options.insert(
         0,
         PurchaseOption(
             method="cash",
             account_id=None,
-            account_name="Any cash / Safe to spend",
+            account_name="Any cash / Safe to spend" + (" (envelope raid)" if allow_envelope_raid else ""),
             safe=cash_ok,
             reason=cash_reason,
-            remaining_spendable=(safe_to_spend - amount) if cash_ok else safe_to_spend,
+            remaining_spendable=(effective_safe - amount) if cash_ok else effective_safe,
         ),
     )
 
@@ -252,8 +275,9 @@ def check_purchase(
                 f"Not safe: only ${safe_amt} interest-free capacity. "
                 f"Charging ${amount} risks revolving/APR. {plan.payoff_path if plan else ''}"
             )
-        # Card payoff still needs Safe-to-spend cash (post-reserve)
-        if safe and safe_to_spend < amount:
+        # Card payoff still needs cash after bills/buffer; envelopes optional with raid
+        cash_for_card = cash_raw if allow_envelope_raid else safe_to_spend
+        if safe and cash_for_card < amount:
             safe = False
             reason = (
                 f"Interest-free capacity ${safe_amt}, but Safe to spend ${safe_to_spend} "
@@ -329,13 +353,18 @@ def check_purchase(
                     + " · Category budget is short — stay in budget or raid envelope."
                 ).strip()
 
+    if allow_envelope_raid and rec and rec.safe and safe_to_spend < amount:
+        verdict = "safe_raid_envelope"
+
     return {
         "amount": str(amount),
         "as_of": as_of.isoformat(),
         "verdict": verdict,
         "prefer_applied": prefer,
+        "allow_envelope_raid": allow_envelope_raid,
         "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
         "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+        "envelope_raid": envelope_raid,
         "recommended": {
             "method": rec.method if rec else None,
             "account_id": rec.account_id if rec else None,
@@ -372,6 +401,6 @@ def check_purchase(
             "Never go negative on checking",
             "Safe to spend subtracts remaining discretionary budgets (reserve)",
             "Auto prefers cash when Safe to spend covers",
-            "Card only if interest-free payoff path exists and Safe to spend covers",
+            "Explicit envelope raid only when you choose it",
         ],
     }
