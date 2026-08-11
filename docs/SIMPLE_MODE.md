@@ -7,6 +7,7 @@
 | Surface | Purpose |
 |---------|---------|
 | **Home** | Safe to spend · status · Do this next · Up next · wealth basics |
+| **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
 | **Add** | Wizards: cash, savings, card, loan, bill, income, business, child |
 | **Get started** | First-run wizard (~2 min) |
 | **Can I buy?** | Pre-purchase check |
@@ -19,7 +20,9 @@
 | **Close the month** | `month_close` — fees · charges · promo · tax · reconcile · backup |
 | **Move money** | Add → Playbooks (reimburse · pay myself · fund biz · kid allowance) |
 
-**Full books** (shell toggle) restores the full nav for month-end / CPA / power users.
+**Full books** (shell toggle) restores the full nav for month-end / CPA / power users — including the **Credit** desk (statement close/due, pay policy, pay-from cash, projected statement balance, next payment, promo installment lines). Simple never shows that desk; cash next payments still feed **Safe to spend** in the background.
+
+See [STATEMENT_CYCLES.md](./STATEMENT_CYCLES.md).
 
 ## Language
 
@@ -32,6 +35,7 @@
 | `min` / `statement` / `promo_sink` | Minimum only / Pay statement in full / 0% promo set-aside |
 | `cash` / `card` methods | Cash / checking · Card (interest-free when safe) |
 | raw account / txn `#id` | Nickname in pickers and messages |
+| projected statement / cycle config | Statement balance · next payment · close day / due day / pay from (Full books only) |
 
 ## APIs
 

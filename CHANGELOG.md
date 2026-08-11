@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- **Statement cycles**: close day + due day + pay policy → projected **statement balance** and **next payment**; cash **pay-from** schedule so Safe to spend sees the right card outflow (no day grid; multi-entity; promo installment lines; recompute after books mutations)
+- **Simple mode**: Home whisper only for soon card payments (within 14 days); full Credit desk stays Full books
+- Docs: [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT + SIMPLE_MODE contract
+
+## 1.0.55 — Trust bar + Simple mode e2e fixes + Store cert
+
+- **Self-contained engine**: `prepare-engine-bundle.ps1` ships **CPython embeddable** under `engine\python\` (end users do not install Python); prefers embed over system `python`
+- **Tray**: same embeddable `ResolvePython` path as the fiscal engine
+- **PATCH amount**: reverse/re-apply books balance so Safe stays honest
+- **Home**: promo account id kept for one-tap set-aside; SuccessBar for books/promo/month-close; quiet-day density; feedback bars at top
+- **Do this next**: Safe ≤ $0 always rescue; fee_brief + promo_brief before Sort
+- **Discover/Review/FirstRun**: conservative credit select; Review bulk ≥0.85; recurring default off; buffer warning when bal &lt; floor
+- **Card-first recurring**: detect on any account; default schedule on majority account (cards); IFPP skips **all** credit-account schedules from cash Safe (not only autopay names)
+- **Store tiles (10.1.1.11)**: regenerate full scale-100/200 set + wide wordmark; brand `#0F2744`; multi-size `AppIcon.ico`; `ShowNameOnTiles`
+- **Store crash**: activate window before engine; soft-fail `OnLaunched` / `NavView_Loaded`; MSIX build requires `engine-portable.zip`
+- **Promo float**: interest-free capacity subtracts existing promo/card balance (no APR-by-accident)
+- **Card float**: no double-count of scheduled net on top of IFPP cash
+- **Never-neg**: intermix checks checking outflows (409 + rescue payload)
+- **Pending honesty**: pending txns do not apply to books balance; clear applies once
+- **Discover/recurring**: skip liability payees; merge-in bills default unselected
+- **Do this next**: bank re-auth, fiscal desk before sort; promo one-tap; tax vault navigates
+- **Simple UI**: quieter shell (single Who), Success bar, Import more-options, jargon pass
+- **Tray**: Safe-first tooltip; offline “Open HonestSpend”
+- **Secrets**: DPAPI protect failure refuses plaintext store
+- **Review**: accept-all requires ≥70% confidence; batch reports uncategorized total
+
 ## 1.0.54 — Polish: envelope raid, float whisper, DEK protect-only
 
 - **Can I buy**: `envelope_raid` offer + `allow_envelope_raid` → `safe_raid_envelope`; WinUI **Raid envelope** button
