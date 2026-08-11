@@ -23,8 +23,13 @@ DEFAULT_DUE_DAY = 15
 DEFAULT_POLICY = "statement"
 USER_SOURCE = "user"
 
+# Payment/transfer-like payee phrasing (not mere card-name presence).
 _PAYMENT_TO = re.compile(
-    r"\b(?:payment\s+to|pymt\s+to|pay\s+to|autopay)\b",
+    r"\b(?:"
+    r"payment\s+to|pymt\s+to|pay\s+to|autopay|"
+    r"payment|pymt|"
+    r"transfer\s+to|xfer\s+to|ach\s+(?:pmt|payment)|online\s+pmt"
+    r")\b",
     re.I,
 )
 
@@ -113,14 +118,16 @@ def suggest_funding_from_payment_history(
         pn = _norm(payee)
         if not pn:
             continue
-        # Card name appears in payee, optionally with payment phrasing
+        # Require payment/transfer phrasing — card name alone is not enough
+        # (avoids matching purchases like "Amazon Card store" as funding signals).
+        if not _PAYMENT_TO.search(payee):
+            continue
         if card_key not in pn:
-            # allow partial last token match (e.g. "capital one" vs "Payment to Capital One")
+            # allow partial token match (e.g. "capital one" vs "Payment to Capital One")
             tokens = card_key.split()
             if not tokens or not all(tok in pn for tok in tokens if len(tok) > 2):
                 continue
-        if _PAYMENT_TO.search(payee) or "card" in pn or card_key in pn:
-            counts[int(t.account_id)] += 1
+        counts[int(t.account_id)] += 1
 
     if not counts:
         return None

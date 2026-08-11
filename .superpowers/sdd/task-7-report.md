@@ -43,3 +43,16 @@ Related suites still green: setup_discover, onboarding, plaid_service, bank_csv,
 - Discover still defaults **payment_option** to `interest_saving` (promo_sink) when the user accepts that path; cycle helper only fills blank `autopay_policy` (statement). Intentional product recommendation, not a freeze violation.
 - OFX import path not wired for cycle fill (CSV + Plaid + discover covered); easy follow-up if needed.
 - Payment-history funding uses nickname token match; may miss heavily abbreviated payees.
+
+## Fix review
+
+**Commit:** `fix: cycle learn — sticky select UX; payment-like funding match`
+
+### Important
+1. **Restored prior discover `selected` UX (out of scope for T7):** Reverted credit/loan auto-select to mid conf (`≥0.65`) and merge-in recurring bills to `selected=True`. Kept only cycle-config defaults/funding wiring on discover apply.
+2. **Tightened `suggest_funding_from_payment_history`:** Require payment/transfer-like payee phrasing (`_PAYMENT_TO`: payment to / pymt / transfer to / ACH pmt / etc.) **and** card-name match. Card name alone no longer counts as a funding signal.
+   - Regression: `test_suggest_funding_ignores_card_name_without_payment_phrasing`
+   - Existing `test_suggest_funding_from_payment_to_card` still green
+
+### Tests
+`pytest tests/test_cycle_config_learn.py tests/test_setup_discover.py -q` — 14 passed.

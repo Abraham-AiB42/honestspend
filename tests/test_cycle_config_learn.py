@@ -399,6 +399,38 @@ def test_suggest_funding_from_payment_to_card(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_suggest_funding_ignores_card_name_without_payment_phrasing(
+    tmp_path: Path, monkeypatch
+):
+    """Card name alone in payee (no payment/transfer phrasing) must not match."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Main",
+        current_balance=Decimal("3000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    base = date(2026, 5, 1)
+    for i in range(3):
+        s.add(
+            Transaction(
+                profile_id=p.id,
+                account_id=cash.id,
+                txn_date=base + timedelta(days=30 * i),
+                amount=Decimal("-45.00"),
+                payee="Amazon Card store purchase",
+            )
+        )
+    s.commit()
+
+    assert suggest_funding_from_payment_history(s, p.id, "Amazon Card") is None
+    s.close()
+
+
 def test_default_funding_prefers_checking(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()

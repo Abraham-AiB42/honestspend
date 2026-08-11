@@ -252,11 +252,11 @@ def discover_liabilities(
                 "suggested_next_date": next_due.isoformat(),
                 "reason": reason,
                 "default_payment_option": default_payment,
-                # Conservative auto-select: credit/loan need ≥2 hits + higher conf (less false cards)
+                # Pre-check credit/loan at mid conf; bills only at high conf (less noise)
                 "selected": (
                     conf >= 0.75
                     if prop_type == "bill"
-                    else (conf >= 0.75 and len(txns) >= 2)
+                    else conf >= 0.65
                     if prop_type in ("credit", "loan")
                     else conf >= 0.8
                 ),
@@ -302,8 +302,7 @@ def discover_liabilities(
                 or (as_of + timedelta(days=14)).isoformat(),
                 "reason": s.get("reason") or "Detected recurring bill pattern",
                 "default_payment_option": None,
-                # Conservative: user must opt-in (avoids fake bills polluting Safe to spend)
-                "selected": False,
+                "selected": True,
             }
         )
         seen.add(payee)
