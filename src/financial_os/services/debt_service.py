@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -20,6 +21,7 @@ from financial_os.services.debt_strategy import (
     resolve_opportunity_rate,
     simulate_payoff,
 )
+from financial_os.services.promo_installments import effective_promo_balance
 
 
 def accounts_to_debts(
@@ -27,7 +29,9 @@ def accounts_to_debts(
     *,
     profile_id: int | None = None,
     scope: str | None = None,
+    as_of: date | None = None,
 ) -> list[DebtView]:
+    as_of = as_of or date.today()
     q = session.query(Account).filter(Account.kind.in_(("credit", "loan")))
     if (scope or "entity") == "entity" and profile_id is not None:
         q = q.filter(Account.profile_id == profile_id)
@@ -37,6 +41,13 @@ def accounts_to_debts(
         bal = Decimal(a.current_balance or 0)
         if bal <= 0 and a.kind == "loan":
             continue
+        # Credit: installment lines own the balloon when present
+        if (a.kind or "") == "credit":
+            promo_bal = effective_promo_balance(session, a, as_of=as_of)
+        else:
+            promo_bal = (
+                Decimal(a.promo_balance) if a.promo_balance is not None else None
+            )
         debts.append(
             DebtView(
                 id=a.id,
@@ -48,7 +59,7 @@ def accounts_to_debts(
                 credit_limit=Decimal(a.credit_limit) if a.credit_limit is not None else None,
                 promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
                 promo_end_date=a.promo_end_date,
-                promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
+                promo_balance=promo_bal,
                 payment_due_day=a.payment_due_day,
                 priority_rank=int(getattr(a, "priority_rank", None) or 100),
                 opened_date=getattr(a, "opened_date", None),

@@ -377,6 +377,9 @@ def test_window_capped_when_second_payday_missing(tmp_path: Path, monkeypatch):
     )
     assert w["window_capped"] is True
     assert w["window_end"] == (as_of + timedelta(days=45)).isoformat()
+    # Plain English — no engine "horizon" jargon in user labels
+    assert "horizon" not in (w.get("label") or "").lower()
+    assert "few weeks" in (w.get("label") or "").lower() or "payday" in (w.get("label") or "").lower()
     s.close()
 
 

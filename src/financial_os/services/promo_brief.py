@@ -37,22 +37,52 @@ def build_promo_brief(
     needs: list[dict[str, Any]] = []
     for p in focus:
         nick = p.get("name") or ""
-        has = any(nick and nick in (s.name or "") for s in sinks)
-        if has:
-            continue
         monthly = (p.get("sinking_fund") or {}).get("monthly")
+        try:
+            monthly_d = float(monthly or 0)
+        except (TypeError, ValueError):
+            monthly_d = 0.0
+        days = p.get("days_left")
+        try:
+            days_i = int(days) if days is not None else 0
+        except (TypeError, ValueError):
+            days_i = 0
+        months_left = max(1, (days_i + 29) // 30) if days_i > 0 else 1
+        # Existing sinks for this card nickname
+        matching = [s for s in sinks if nick and nick in (s.name or "")]
+        has = bool(matching)
+        funded = 0.0
+        for s in matching:
+            try:
+                funded += abs(float(s.amount or 0))
+            except (TypeError, ValueError):
+                pass
+        underfunded = has and monthly_d > 0 and funded + 0.01 < monthly_d
+        if has and not underfunded:
+            continue
+        if underfunded:
+            reason = (
+                f"0% ends in {days}d — set-aside ${funded:.0f}/mo is short of "
+                f"${monthly_d:.0f}/mo needed to clear without APR."
+            )
+            urgency = "critical" if days_i <= 45 else (p.get("urgency") or "soon")
+        else:
+            reason = (
+                f"0% ends in {p.get('days_left')}d — set aside ${monthly}/mo "
+                f"so you never pay APR by accident."
+            )
+            urgency = p.get("urgency")
         needs.append(
             {
                 "account_id": p.get("account_id"),
                 "name": nick,
                 "days_left": p.get("days_left"),
                 "monthly_sink": str(monthly),
+                "months_left_est": months_left,
                 "promo_end": p.get("promo_end"),
-                "urgency": p.get("urgency"),
-                "reason": (
-                    f"0% ends in {p.get('days_left')}d — set aside ${monthly}/mo "
-                    f"so you never pay APR by accident."
-                ),
+                "urgency": urgency,
+                "underfunded": underfunded,
+                "reason": reason,
             }
         )
 

@@ -115,25 +115,30 @@ def run_ifpp(
         if a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp
     ]
 
-    cards = [
-        CardView(
-            id=a.id,
-            name=a.nickname,
-            balance=Decimal(a.current_balance or 0),
-            credit_limit=Decimal(a.credit_limit or 0),
-            available_credit=Decimal(a.available_credit or 0),
-            statement_close_day=a.statement_close_day,
-            payment_due_day=a.payment_due_day,
-            apr=Decimal(a.apr) if a.apr is not None else None,
-            promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
-            promo_end_date=a.promo_end_date,
-            promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
-            min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
-            rewards_score=1 if a.rewards_program else 0,
+    from financial_os.services.promo_installments import effective_promo_balance
+
+    cards = []
+    for a in accounts:
+        if a.kind != "credit":
+            continue
+        promo_bal = effective_promo_balance(session, a, as_of=as_of)
+        cards.append(
+            CardView(
+                id=a.id,
+                name=a.nickname,
+                balance=Decimal(a.current_balance or 0),
+                credit_limit=Decimal(a.credit_limit or 0),
+                available_credit=Decimal(a.available_credit or 0),
+                statement_close_day=a.statement_close_day,
+                payment_due_day=a.payment_due_day,
+                apr=Decimal(a.apr) if a.apr is not None else None,
+                promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
+                promo_end_date=a.promo_end_date,
+                promo_balance=promo_bal,
+                min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
+                rewards_score=1 if a.rewards_program else 0,
+            )
         )
-        for a in accounts
-        if a.kind == "credit"
-    ]
 
     cliff_on = bool(getattr(settings, "income_cliff_enabled", False))
     cliff_factor = Decimal(str(getattr(settings, "income_cliff_factor", None) or "1"))
@@ -301,7 +306,10 @@ def ifpp_to_dict(result: IfppResult, session: Session | None = None) -> dict:
         pid = (result.details or {}).get("profile_id")
         if (result.details or {}).get("ifpp_scope") == "entity" and pid is not None:
             q = q.filter(Account.profile_id == pid)
+        from financial_os.services.promo_installments import effective_promo_balance
+
         for a in q.all():
+            promo_bal = effective_promo_balance(session, a, as_of=result.as_of)
             card_views[a.id] = CardView(
                 id=a.id,
                 name=a.nickname,
@@ -313,7 +321,7 @@ def ifpp_to_dict(result: IfppResult, session: Session | None = None) -> dict:
                 apr=Decimal(a.apr) if a.apr is not None else None,
                 promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
                 promo_end_date=a.promo_end_date,
-                promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
+                promo_balance=promo_bal,
                 min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
             )
 

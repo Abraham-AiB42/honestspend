@@ -13,7 +13,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from financial_os.db import PromoInstallmentLine
+from financial_os.db import Account, PromoInstallmentLine
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
@@ -83,6 +83,76 @@ def open_promo_totals(
     return _q(principal), _q(monthly)
 
 
+def _account_has_promo_lines(session: Session, account_id: int) -> bool:
+    """True when installment lines exist (active or settled) — lines own the balloon."""
+    n = (
+        session.query(PromoInstallmentLine.id)
+        .filter(PromoInstallmentLine.account_id == account_id)
+        .limit(1)
+        .count()
+    )
+    return n > 0
+
+
+def effective_promo_balance(
+    session: Session,
+    account: Account | int,
+    *,
+    as_of: date | None = None,
+) -> Decimal | None:
+    """Promo balloon used by IFPP float / pay policies.
+
+    Open installment lines are the source of truth when any principal remains.
+    When lines exist but open principal is 0, return 0 (do not keep a stale
+    synced promo_balance). Without lines, fall back to Account.promo_balance.
+    """
+    as_of = as_of or date.today()
+    if isinstance(account, int):
+        acct = session.get(Account, account)
+        if not acct:
+            return None
+        account_id = account
+        legacy = _d(acct.promo_balance) if acct.promo_balance is not None else None
+    else:
+        account_id = int(account.id)
+        legacy = _d(account.promo_balance) if account.promo_balance is not None else None
+
+    principal, _monthly = open_promo_totals(session, account_id, as_of=as_of)
+    if principal > ZERO:
+        return principal
+    if _account_has_promo_lines(session, account_id):
+        return ZERO
+    return legacy
+
+
+def sync_account_promo_balance_from_lines(
+    session: Session,
+    account_id: int,
+    *,
+    as_of: date | None = None,
+) -> Decimal | None:
+    """Keep Account.promo_balance aligned with open installment lines.
+
+    When lines exist with principal, write that total. When lines exist but
+    open principal is 0 (paid off), clear promo_balance so IFPP float recovers.
+    When the account has never had lines, leave manual promo_balance alone.
+    """
+    as_of = as_of or date.today()
+    acct = session.get(Account, account_id)
+    if not acct or (acct.kind or "") != "credit":
+        return None
+    principal, _ = open_promo_totals(session, account_id, as_of=as_of)
+    if principal > ZERO:
+        acct.promo_balance = principal
+        session.flush()
+        return principal
+    if _account_has_promo_lines(session, account_id):
+        acct.promo_balance = ZERO
+        session.flush()
+        return ZERO
+    return _d(acct.promo_balance) if acct.promo_balance is not None else None
+
+
 def apply_month_roll(
     session: Session,
     account_id: int,
@@ -106,6 +176,7 @@ def apply_month_roll(
             line.principal_remaining = ZERO
             line.active = False
     session.flush()
+    sync_account_promo_balance_from_lines(session, account_id, as_of=as_of)
 
 
 def roll_line(
@@ -139,6 +210,7 @@ def roll_line(
         line.principal_remaining = ZERO
         line.active = False
     session.flush()
+    sync_account_promo_balance_from_lines(session, int(line.account_id), as_of=as_of)
     return line
 
 
@@ -167,6 +239,7 @@ def create_promo_line(
     )
     session.add(row)
     session.flush()
+    sync_account_promo_balance_from_lines(session, account_id, as_of=start_date)
     return row
 
 
@@ -205,6 +278,7 @@ def update_promo_line(
     if active is not None:
         line.active = bool(active)
     session.flush()
+    sync_account_promo_balance_from_lines(session, int(line.account_id))
     return line
 
 

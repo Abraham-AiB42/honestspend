@@ -12,6 +12,7 @@ from financial_os.db import Account
 from financial_os.engine.ifpp import CardView
 from financial_os.engine.schedule_expand import add_months
 from financial_os.services.payoff import plan_card_payoff
+from financial_os.services.promo_installments import effective_promo_balance
 
 ZERO = Decimal("0")
 
@@ -43,8 +44,10 @@ def promo_death_clock(
         if a.promo_apr is None or _d(a.promo_apr) != ZERO:
             continue
         days = (a.promo_end_date - as_of).days
-        bal = max(ZERO, _d(a.promo_balance if a.promo_balance is not None else a.current_balance))
-        if bal <= ZERO and days < 0:
+        # Lines own the balloon when present; paid-off installments must not nag.
+        eff = effective_promo_balance(session, a, as_of=as_of)
+        bal = max(ZERO, _d(eff if eff is not None else a.current_balance))
+        if bal <= ZERO:
             continue
         # Sinking fund: linear set-aside from today to promo end
         months_left = max(1, (days // 30) or 1)
@@ -76,7 +79,7 @@ def promo_death_clock(
             apr=Decimal(a.apr) if a.apr is not None else None,
             promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
             promo_end_date=a.promo_end_date,
-            promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
+            promo_balance=eff,
             min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
         )
         plan = plan_card_payoff(cv, as_of=as_of)

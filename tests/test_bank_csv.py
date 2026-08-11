@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, Transaction, init_db
+from financial_os.db import Account, Profile, ScheduledItem, Transaction, init_db
 from financial_os.seed import seed_all
 from financial_os.services.bank_csv import import_bank_csv
 
@@ -483,4 +483,49 @@ def test_credit_csv_refund_and_payment_balance(tmp_path: Path):
     s.refresh(acct)
     # 200 + 80 - 20 - 50 = 210
     assert acct.current_balance == Decimal("210.00")
+    s.close()
+
+
+def test_csv_import_advances_matching_schedule(tmp_path: Path):
+    """After bank CSV creates outflows, high-confidence schedules are advanced."""
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Cash",
+        current_balance=Decimal("2000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    rent = ScheduledItem(
+        profile_id=personal.id,
+        account_id=cash.id,
+        name="Rent",
+        amount=Decimal("-1200.00"),
+        next_date=date(2026, 6, 1),
+        cadence="monthly",
+        certainty="fixed",
+        kind="expense",
+        active=True,
+    )
+    s.add(rent)
+    s.flush()
+
+    csv_text = """Date,Description,Amount
+06/01/2026,Rent ACME LLC,-1200.00
+"""
+    result = import_bank_csv(
+        s,
+        account_id=cash.id,
+        file_obj=StringIO(csv_text),
+        auto_categorize=False,
+    )
+    assert result.transactions_created == 1
+    assert result.schedule_advance_error is None
+    assert result.schedules_advanced == 1
+    assert "Rent" in (result.schedules_advanced_names or [])
+    s.refresh(rent)
+    assert rent.next_date == date(2026, 7, 1)
     s.close()

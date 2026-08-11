@@ -48,6 +48,7 @@ def apply_intermix(
     to_account_id: int,
     txn_date: date | None = None,
     memo: str | None = None,
+    confirm_unsafe: bool = False,
 ) -> dict[str, Any]:
     """Create paired transfer transactions across accounts (possibly profiles).
 
@@ -95,6 +96,20 @@ def apply_intermix(
         raise ValueError(f"Unknown intermix kind: {kind}")
 
     note = memo or f"{label}: {src.nickname} → {dst.nickname}"
+
+    # Never-neg: refuse/warn when source checking would go negative (same as POST /transactions)
+    from financial_os.services.never_neg import WouldGoNegative, check_cash_outflow
+
+    try:
+        check_cash_outflow(
+            session,
+            account=src,
+            amount=-amount,
+            confirm_unsafe=confirm_unsafe,
+        )
+    except WouldGoNegative:
+        raise
+
     # Outflow from source
     t_out = Transaction(
         profile_id=src.profile_id,
@@ -177,6 +192,6 @@ def _guidance(kind: str) -> str:
         "capital_inject": "Owner put personal cash into the business — capital contribution, not revenue.",
         "child_allowance": (
             "Personal → child transfer for allowance. Not a business expense. "
-            "Tracks siloed Spendable for the child entity."
+            "Tracks siloed Safe to spend for the child (Who)."
         ),
     }.get(kind, "")

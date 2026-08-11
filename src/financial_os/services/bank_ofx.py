@@ -39,6 +39,10 @@ class OfxImportResult:
     books_balance: str | None = None
     drift: str | None = None
     next_steps: list[dict[str, str]] = field(default_factory=list)
+    schedules_advanced: int = 0
+    schedules_advanced_names: list[str] = field(default_factory=list)
+    schedule_advance_hint: str | None = None
+    schedule_advance_error: str | None = None
 
 
 def _read_text(file_obj: BinaryIO | TextIO | bytes | str | Path) -> str:
@@ -398,6 +402,26 @@ def import_ofx(
             min_confidence=0.85,
         )
         result.categorized = sum(1 for x in applied if x.get("applied"))
+
+    if result.transactions_created > 0:
+        try:
+            from financial_os.services.schedule_mark_paid import advance_schedules_after_import
+
+            adv = advance_schedules_after_import(
+                session,
+                account_id=account_id,
+                profile_id=acct.profile_id,
+                auto_apply=True,
+            )
+            result.schedules_advanced = int(adv.get("advanced_count") or 0)
+            result.schedules_advanced_names = [
+                str(x.get("name") or "") for x in (adv.get("advanced") or []) if x.get("name")
+            ]
+            result.schedule_advance_hint = adv.get("hint")
+        except Exception as e:
+            # Import still succeeded; surface advance failure without failing the import
+            result.schedules_advanced = 0
+            result.schedule_advance_error = str(e)[:300]
 
     from financial_os.services.import_brief import build_post_import_next_steps
 

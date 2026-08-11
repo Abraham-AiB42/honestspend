@@ -245,7 +245,7 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             if health.get("needs_unlock"):
                 state["title"] = "HonestSpend — books locked\nUnlock in the app"
             else:
-                state["title"] = "HonestSpend — server offline\nStart: financial-os serve"
+                state["title"] = "HonestSpend — engine offline\nOpen HonestSpend to start"
             if icon:
                 icon.title = state["title"]
                 try:
@@ -279,12 +279,18 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                 "All clear" if not alerts else f"{len(alerts)} alert(s)"
             )
 
-        reserve_bit = f" · budgets −{_money(reserve)}" if reserve and str(reserve) not in ("0", "0.00") else ""
+        # One hero number first; optional float only when non-zero and not red
+        is_red = bool(data.get("status") == "danger" or data.get("is_red_now") or critical)
+        try:
+            card_d = Decimal(str(card or 0))
+        except Exception:
+            card_d = Decimal("0")
+        line2 = alert_line or f"Next risk {red}"
+        if (not is_red) and card_d > 0:
+            line2 = f"+ interest-free card {_money(card)} · {line2}"
         state["title"] = (
             f"Safe to spend {_money(safe)}\n"
-            f"Cash {_money(cash_raw)}{reserve_bit} · Can charge {_money(card)}\n"
-            f"Next risk {red}\n"
-            f"{alert_line}"
+            f"{line2}"
         )
         if icon:
             icon.title = state["title"]

@@ -250,6 +250,12 @@ def process_inbox(
     last_success_account_id: int | None = None
     # Accounts that imported money-in but still lack institution_balance
     need_ending_accounts: list[int] = []
+    # Aggregate bill-advance feedback from nested CSV/OFX/PDF imports
+    total_schedules_advanced = 0
+    schedules_advanced_names: list[str] = []
+    _seen_adv_names: set[str] = set()
+    schedule_advance_hint: str | None = None
+    schedule_advance_error: str | None = None
 
     for meta in files:
         path = Path(meta["path"])
@@ -359,6 +365,29 @@ def process_inbox(
             entry["institution_balance_set"] = inst_set
             entry["errors"] = res.errors[:5]
             entry["next_steps"] = list(getattr(res, "next_steps", None) or [])
+            # Surface schedule advance from nested import (object attrs or dict)
+            entry_adv = _sched_adv_from_result(res)
+            entry["schedules_advanced"] = entry_adv["schedules_advanced"]
+            entry["schedules_advanced_names"] = entry_adv["schedules_advanced_names"]
+            entry["schedule_advance_hint"] = entry_adv["schedule_advance_hint"]
+            entry["schedule_advance_error"] = entry_adv["schedule_advance_error"]
+            total_schedules_advanced += int(entry_adv["schedules_advanced"] or 0)
+            for n in entry_adv["schedules_advanced_names"] or []:
+                if n and n not in _seen_adv_names:
+                    _seen_adv_names.add(n)
+                    schedules_advanced_names.append(n)
+            if entry_adv["schedule_advance_hint"] and not schedule_advance_hint:
+                schedule_advance_hint = entry_adv["schedule_advance_hint"]
+            elif (
+                entry_adv["schedule_advance_hint"]
+                and schedule_advance_hint
+                and entry_adv["schedule_advance_hint"] not in schedule_advance_hint
+            ):
+                schedule_advance_hint = (
+                    f"{schedule_advance_hint}; {entry_adv['schedule_advance_hint']}"
+                )
+            if entry_adv["schedule_advance_error"] and not schedule_advance_error:
+                schedule_advance_error = entry_adv["schedule_advance_error"]
             # Money-in success: new/skipped txns OR bank bal set (bal-only PDF/OFX)
             if money_in:
                 any_ok = True
@@ -513,9 +542,43 @@ def process_inbox(
         "results": results,
         "next_steps": next_steps,
         "ofx_acctid_matches": ofx_linked,
+        "schedules_advanced": total_schedules_advanced,
+        "schedules_advanced_names": schedules_advanced_names,
+        "schedule_advance_hint": schedule_advance_hint,
+        "schedule_advance_error": schedule_advance_error,
         "hint": (
             "OFX ACCTID is remembered after first import; name files with nicknames for CSV/PDF."
             if files
             else "Inbox is empty — drop bank CSV/OFX exports here."
         ),
+    }
+
+
+def _sched_adv_from_result(res: Any) -> dict[str, Any]:
+    """Pull schedule-advance fields from nested import result (dataclass or dict)."""
+
+    def _get(key: str, default: Any = None) -> Any:
+        if isinstance(res, dict):
+            return res.get(key, default)
+        return getattr(res, key, default)
+
+    names_raw = _get("schedules_advanced_names") or []
+    if not isinstance(names_raw, (list, tuple)):
+        names_raw = []
+    names = [str(n) for n in names_raw if n]
+    try:
+        advanced = int(_get("schedules_advanced") or 0)
+    except (TypeError, ValueError):
+        advanced = 0
+    hint = _get("schedule_advance_hint")
+    if hint is not None:
+        hint = str(hint) if str(hint).strip() else None
+    err = _get("schedule_advance_error")
+    if err is not None:
+        err = str(err) if str(err).strip() else None
+    return {
+        "schedules_advanced": advanced,
+        "schedules_advanced_names": names,
+        "schedule_advance_hint": hint,
+        "schedule_advance_error": err,
     }

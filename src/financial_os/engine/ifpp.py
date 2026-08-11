@@ -264,22 +264,20 @@ def card_safe_to_charge(
     promo_bal = _d(card.promo_balance) if card.promo_balance is not None else ZERO
     due = next_due_date(as_of, card.payment_due_day)
 
-    # Cash we can use to pay this card by due date (conservative path for new charges)
+    # cash_available_for_payoff is already post schedule/buffer (IFPP cash_spendable).
+    # Do NOT re-add scheduled net for the due/promo window — that double-counts bills/income.
     cash_for_card = cash_available_for_payoff
+    # Existing card debt that must still be paid from the same cash pool.
+    # Prefer promo_balance when set (0% balloon target); else full card balance owed.
+    owed = max(balance, promo_bal) if promo_bal > ZERO else balance
 
     if promo and card.promo_end_date:
-        # 0% strategy: can float promo balance until last month; new charges on promo
-        # only safe if we can pay them off by promo end without APR.
+        # 0% strategy: new charges only safe if cash can clear existing promo debt + new by end.
         days_left = (card.promo_end_date - as_of).days
         if days_left < 0:
             promo = False
         else:
-            # Minimum payments until last month still need cash runway — simplified:
-            # safe_to_charge limited by available credit AND ability to clear by promo end
-            # using cash + scheduled net before promo_end.
-            net_before_end = _scheduled_net(schedule, as_of, card.promo_end_date, mode)
-            capacity_by_cash = max(ZERO, cash_for_card + net_before_end)
-            # Existing promo balance already planned for balloon; new charge capacity:
+            capacity_by_cash = max(ZERO, cash_for_card - owed)
             safe = min(available, capacity_by_cash)
             path = (
                 f"0% promo until {card.promo_end_date.isoformat()}; "
@@ -287,7 +285,14 @@ def card_safe_to_charge(
             )
             risk = "promo_float"
             if safe <= ZERO:
-                warnings.append("No cash path to clear new charges by promo end")
+                warnings.append(
+                    "No cash path to clear existing promo balance and new charges by promo end"
+                )
+            elif owed > ZERO:
+                warnings.append(
+                    f"Existing promo/card balance ${owed.quantize(Decimal('0.01'))} "
+                    f"reserved from interest-free capacity"
+                )
             plan = CardPlan(
                 account_id=card.id,
                 name=card.name,
@@ -307,11 +312,8 @@ def card_safe_to_charge(
         path = "unknown due date"
         risk = "blocked"
     else:
-        net_before_due = _scheduled_net(schedule, as_of, due, mode)
-        capacity = max(ZERO, cash_for_card + net_before_due - balance)
-        # Actually: existing statement balance must be paid; new charges on current cycle
-        # Safe new charge ≈ cash available to pay statement+new by due, minus current balance
-        capacity = max(ZERO, cash_for_card + net_before_due - balance)
+        # Existing statement balance must be paid; new charge capacity from residual cash.
+        capacity = max(ZERO, cash_for_card - balance)
         safe = min(available, capacity)
         path = f"Pay statement in full by {due.isoformat()} (no APR)"
         risk = "statement_payoff" if safe > ZERO else "blocked"

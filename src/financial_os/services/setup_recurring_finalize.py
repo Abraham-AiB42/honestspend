@@ -82,6 +82,14 @@ def apply_recurring_choices(
             continue
         if a <= 0:
             continue
+        # Prefer explicit account_id / suggested_account_id (card-first: charge on card)
+        raw_aid = item.get("account_id")
+        if raw_aid is None:
+            raw_aid = item.get("suggested_account_id")
+        try:
+            aid = int(raw_aid) if raw_aid is not None and str(raw_aid).strip() != "" else None
+        except (TypeError, ValueError):
+            aid = None
         res = accept_recurring_suggestion(
             session,
             name=name,
@@ -89,6 +97,7 @@ def apply_recurring_choices(
             cadence=item.get("cadence") or "monthly",
             next_date=item.get("suggested_next_date"),
             profile_id=pid,
+            account_id=aid,
         )
         created.append(res)
     session.flush()

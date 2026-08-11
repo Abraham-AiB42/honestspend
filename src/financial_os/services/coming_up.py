@@ -150,11 +150,11 @@ def _paydays_window(
     if window_capped:
         end = as_of + timedelta(days=MAX_PAYDAY_HORIZON_DAYS)
         if len(paydays) == 0:
-            n_label = "no payday in range"
+            n_label = "no payday in the next few weeks"
         elif len(paydays) == 1 and payday_count >= 2:
-            n_label = "next payday · 2nd beyond 45 days"
+            n_label = "next payday · 2nd is more than a few weeks out"
         else:
-            n_label = "horizon cap (45 days)"
+            n_label = "next few weeks · waiting on another payday"
         label = f"Until {_label_date(end)} ({n_label})"
     else:
         end = paydays[min(len(paydays), payday_count) - 1] if paydays else as_of

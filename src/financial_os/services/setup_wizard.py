@@ -203,7 +203,7 @@ def get_setup_state(session: Session) -> dict[str, Any]:
         "hints": {
             "welcome": "About 2 minutes to a Safe-to-spend number. First: where books live + optional app lock.",
             "storage": "Local is simplest. A cloud folder lets another PC of yours open the same books — one writer at a time.",
-            "security": "Optional app lock (PIN, password, or Windows Hello). Not bank-vault encryption — your OS login still matters.",
+            "security": "Optional app lock (PIN, password, or Windows Hello) with AES-256 at rest. Forget the secret and sealed books cannot be recovered.",
             "path": "Plaid uses your free trial keys (up to 10 bank connections). CSV never needs bank passwords in our app.",
             "manual": "Fast path: one checking, optional card and bill — then optional smarter setup.",
             "power_menu": "You already have a number. Optionally find bills, categorize, budget, or set AI keys.",

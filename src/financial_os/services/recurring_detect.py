@@ -13,12 +13,25 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from financial_os.db import ScheduledItem, Transaction
+from financial_os.db import Account, ScheduledItem, Transaction
 
 ZERO = Decimal("0")
 _NOISE = re.compile(r"[^a-z0-9\s]+")
 _DIGITS = re.compile(r"\d+")
 _MULTI_SPACE = re.compile(r"\s+")
+# Card/loan payment payees — never suggest as bills when a liability account exists
+_LIABILITY_PAY = re.compile(
+    r"\b("
+    r"payment\s+to|pymt\s+to|pay\s+to|"
+    r"credit\s*card\s*payment|cc\s*payment|card\s*payment|"
+    r"amex|american\s*express|chase\s*card|citi\s*card|capital\s*one|"
+    r"discover\s*card|apple\s*card|synchrony|barclays|"
+    r"autopay.*card|cardmember|"
+    r"mortgage|home\s*loan|heloc|auto\s*loan|car\s*payment|"
+    r"student\s*loan|loan\s*payment|personal\s*loan"
+    r")\b",
+    re.I,
+)
 
 
 def _d(v: Any) -> Decimal:
@@ -101,12 +114,41 @@ def detect_recurring(
     known = {normalize_payee(s.name) for s in sq.all()}
     known |= {normalize_payee(s.name.split()[0]) for s in sq.all() if s.name}
 
+    # Liability nicknames / institutions — skip "payment to Capital One" style bills
+    lq = session.query(Account).filter(
+        Account.archived_at.is_(None),
+        Account.kind.in_(("credit", "loan")),
+    )
+    if profile_id is not None:
+        lq = lq.filter(Account.profile_id == profile_id)
+    liability_keys: set[str] = set()
+    for a in lq.all():
+        if a.nickname:
+            liability_keys.add(normalize_payee(a.nickname))
+        if a.institution:
+            liability_keys.add(normalize_payee(a.institution))
+
     suggestions: list[dict[str, Any]] = []
     for key, txns in by_key.items():
         if len(txns) < min_occurrences:
             continue
         # Already scheduled?
         if key in known or any(k and (k in key or key in k) for k in known if len(k) >= 4):
+            continue
+
+        # Display name early for liability/payment filters
+        names: dict[str, int] = defaultdict(int)
+        for t in txns:
+            names[(t.payee or key).strip()] += 1
+        display = max(names.items(), key=lambda x: x[1])[0]
+
+        # Skip card/loan payments (double-count with liability accounts / IFPP card path)
+        if _LIABILITY_PAY.search(display) or _LIABILITY_PAY.search(key):
+            continue
+        if any(
+            lk and len(lk) >= 3 and (lk in key or key in lk or lk in normalize_payee(display))
+            for lk in liability_keys
+        ):
             continue
 
         dates = sorted({t.txn_date for t in txns})
@@ -123,12 +165,6 @@ def detect_recurring(
             continue
         spread = max(amounts) - min(amounts)
         stability = float(1 - min(Decimal("1"), spread / avg)) if avg else 0.0
-
-        # Display name: most common original payee
-        names: dict[str, int] = defaultdict(int)
-        for t in txns:
-            names[(t.payee or key).strip()] += 1
-        display = max(names.items(), key=lambda x: x[1])[0]
         last = max(dates)
         next_guess = last + (
             timedelta(days=30)
@@ -141,6 +177,48 @@ def detect_recurring(
         )
 
         score = len(txns) * 10 + stability * 20 + (15 if cadence == "monthly" else 5)
+
+        # Majority account among hits — default schedule there (card-first users)
+        acct_counts: dict[int, int] = defaultdict(int)
+        for t in txns:
+            if t.account_id is not None:
+                acct_counts[int(t.account_id)] += 1
+        suggested_account_id: int | None = None
+        suggested_account_name: str | None = None
+        suggested_account_kind: str | None = None
+        pays_from = "cash"
+        if acct_counts:
+            suggested_account_id = max(acct_counts.items(), key=lambda x: x[1])[0]
+            acct = session.get(Account, suggested_account_id)
+            if acct:
+                suggested_account_name = acct.nickname
+                suggested_account_kind = (acct.kind or "other").lower()
+                if suggested_account_kind == "credit":
+                    pays_from = "card"
+                elif suggested_account_kind == "loan":
+                    pays_from = "loan"
+                else:
+                    pays_from = "cash"
+
+        if pays_from == "card":
+            reason = (
+                f"Seen {len(txns)}× on card {suggested_account_name or ''} · "
+                f"~${avg.quantize(Decimal('0.01'))} · {cadence}. "
+                f"Default: schedule on this card (editable — won't double-hit Safe to spend)."
+            )
+            button = "Add on card"
+        else:
+            reason = (
+                f"Seen {len(txns)}× in {lookback_days}d · "
+                f"~${avg.quantize(Decimal('0.01'))} · looks {cadence}"
+                + (
+                    f" · default account {suggested_account_name}"
+                    if suggested_account_name
+                    else ""
+                )
+            )
+            button = "Add as bill"
+
         suggestions.append(
             {
                 "name": display[:128],
@@ -153,12 +231,14 @@ def detect_recurring(
                 "suggested_next_date": next_guess.isoformat(),
                 "stability_0_1": round(stability, 3),
                 "score": round(score, 2),
-                "reason": (
-                    f"Seen {len(txns)}× in {lookback_days}d · "
-                    f"~${avg.quantize(Decimal('0.01'))} · looks {cadence}"
-                ),
+                "suggested_account_id": suggested_account_id,
+                "account_id": suggested_account_id,  # apply path default
+                "suggested_account_name": suggested_account_name,
+                "suggested_account_kind": suggested_account_kind,
+                "pays_from": pays_from,
+                "reason": reason.strip(),
                 "action": "add_bill",
-                "button_label": "Add as bill",
+                "button_label": button,
             }
         )
 
@@ -214,7 +294,9 @@ def accept_recurring_suggestion(
     elif not session.get(Profile, profile_id):
         raise ValueError("Profile not found")
 
+    notes_bits = ["Added from recurring detection"]
     if account_id is None:
+        # Only when caller omits account — card-first flows pass suggested_account_id
         cash = (
             session.query(Account)
             .filter(
@@ -229,10 +311,12 @@ def accept_recurring_suggestion(
             .first()
         )
         account_id = cash.id if cash else None
-    elif account_id is not None:
+    else:
         acct = session.get(Account, account_id)
         if not acct or acct.profile_id != profile_id:
             raise ValueError("account_id must belong to profile")
+        if (acct.kind or "").lower() == "credit":
+            notes_bits.append("pays_from=card")
 
     if next_date is None:
         nxt = date.today() + timedelta(days=30 if cad == "monthly" else 7)
@@ -240,6 +324,8 @@ def accept_recurring_suggestion(
         nxt = next_date
     else:
         nxt = date.fromisoformat(str(next_date)[:10])
+
+    notes = " · ".join(notes_bits)
 
     # Idempotent by name + profile
     existing = (
@@ -256,6 +342,10 @@ def accept_recurring_suggestion(
         existing.cadence = cad
         existing.next_date = nxt
         existing.account_id = account_id or existing.account_id
+        if notes and (
+            not existing.notes or "recurring detection" in (existing.notes or "").lower()
+        ):
+            existing.notes = notes
         session.flush()
         return {
             "ok": True,
@@ -266,6 +356,7 @@ def accept_recurring_suggestion(
             "amount": str(existing.amount),
             "cadence": existing.cadence,
             "next_date": existing.next_date.isoformat(),
+            "account_id": existing.account_id,
         }
 
     row = ScheduledItem(
@@ -277,7 +368,7 @@ def accept_recurring_suggestion(
         cadence=cad,
         certainty="expected",
         kind="expense",
-        notes="Added from recurring detection",
+        notes=notes,
         active=True,
     )
     session.add(row)
@@ -291,4 +382,5 @@ def accept_recurring_suggestion(
         "amount": str(row.amount),
         "cadence": row.cadence,
         "next_date": row.next_date.isoformat(),
+        "account_id": row.account_id,
     }

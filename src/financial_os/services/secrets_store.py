@@ -135,8 +135,11 @@ def _dpapi_protect(raw: bytes) -> str:
             kernel32.LocalFree(out_blob.pbData)
         return "win-dpapi:" + base64.b64encode(encrypted).decode("ascii")
     except Exception as e:
-        log.warning("DPAPI protect failed, storing plain local: %s", e)
-        return "plain:" + base64.b64encode(raw).decode("ascii")
+        log.error("DPAPI protect failed — refusing plaintext secret store: %s", e)
+        raise RuntimeError(
+            "Could not protect secrets with Windows DPAPI. "
+            "Retry, or set secrets only when DPAPI is available."
+        ) from e
 
 
 def _dpapi_unprotect(token: str) -> bytes:

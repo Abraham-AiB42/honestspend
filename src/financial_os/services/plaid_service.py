@@ -333,6 +333,32 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
         )
         categorized = sum(1 for r in results if r.get("applied"))
 
+    # Honesty: bank already paid the bill — advance matching schedules (high confidence only)
+    schedules_advanced = 0
+    schedules_advanced_names: list[str] = []
+    schedule_advance_hint: str | None = None
+    schedule_advance_error: str | None = None
+    if added > 0:
+        try:
+            from financial_os.services.schedule_mark_paid import advance_schedules_after_import
+
+            # Profile-wide: item may span multiple cash accounts; matcher uses each schedule's account_id
+            adv = advance_schedules_after_import(
+                session,
+                account_id=None,
+                profile_id=item.profile_id,
+                auto_apply=True,
+            )
+            schedules_advanced = int(adv.get("advanced_count") or 0)
+            schedules_advanced_names = [
+                str(x.get("name") or "") for x in (adv.get("advanced") or []) if x.get("name")
+            ]
+            schedule_advance_hint = adv.get("hint")
+        except Exception as e:
+            # Sync still succeeded; surface advance failure without failing the sync
+            schedules_advanced = 0
+            schedule_advance_error = str(e)[:300]
+
     return {
         "added": added,
         "modified": modified,
@@ -342,6 +368,10 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
         "last_synced_at": item.last_synced_at.isoformat() if item.last_synced_at else None,
         # Honesty: bank omitted balances.current — books left unchanged (not zeroed)
         "balances_missing_current": balances_missing_current,
+        "schedules_advanced": schedules_advanced,
+        "schedules_advanced_names": schedules_advanced_names,
+        "schedule_advance_hint": schedule_advance_hint,
+        "schedule_advance_error": schedule_advance_error,
     }
 
 
