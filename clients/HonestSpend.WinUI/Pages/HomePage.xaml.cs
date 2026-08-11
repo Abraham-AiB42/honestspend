@@ -79,6 +79,7 @@ public sealed partial class HomePage : Page
             _home = await api.GetHomeSimpleAsync();
 
             SafeText.Text = Money(_home, "safe_to_spend");
+            ApplyWhyThisNumber(_home);
             ApplyBudgetSummary(_home);
             ApplyBudgetSeedHint(_home);
             var status = JsonUi.Str(_home, "status", "safe");
@@ -526,6 +527,37 @@ public sealed partial class HomePage : Page
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void ApplyWhyThisNumber(JsonElement home)
+    {
+        try
+        {
+            if (!home.TryGetProperty("why_this_number", out var why) || why.ValueKind != JsonValueKind.Object)
+            {
+                WhyOneLiner.Text = "";
+                WhyList.ItemsSource = null;
+                return;
+            }
+            var one = JsonUi.Str(why, "one_liner");
+            WhyOneLiner.Text = (string.IsNullOrEmpty(one) || one == "—") ? "" : one;
+            var lines = new List<string>();
+            if (why.TryGetProperty("lines", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var line in arr.EnumerateArray())
+                {
+                    var s = line.GetString();
+                    if (!string.IsNullOrWhiteSpace(s))
+                        lines.Add("· " + s);
+                }
+            }
+            WhyList.ItemsSource = lines.Count > 0 ? lines : null;
+        }
+        catch
+        {
+            WhyOneLiner.Text = "";
+            WhyList.ItemsSource = null;
         }
     }
 

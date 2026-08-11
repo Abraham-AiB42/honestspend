@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.51 — P2: simpler surface, cleaner IFPP
+
+- **Card autopay schedules** excluded from cash runway (card payoff path owns them)
+- **`ifpp_cleared_only` wired**: True = reserve pending outflows in Safe to spend; False = warning only
+- **Group budget reserve**: All money sums envelopes across entities
+- **Home “Why this number?”** expander + one-liner under Safe to spend
+- **Title-bar Lock chip**: Seal & lock / Books locked — one tap
+- pre_purchase reserve respects IFPP scope
+
 ## 1.0.50 — E2E honesty RC (encryption + IFPP + budgets)
 
 - **Seal before kill**: WinUI seals books before stopping the engine on exit

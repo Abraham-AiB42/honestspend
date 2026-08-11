@@ -111,7 +111,9 @@ def check_purchase(
     # Align with Home: Safe to spend = cash_spendable − period budget reserve
     from financial_os.services.budget_service import budget_reserve_total
 
-    reserve = budget_reserve_total(session, profile_id=profile_id, as_of=as_of)
+    reserve = budget_reserve_total(
+        session, profile_id=profile_id, as_of=as_of, scope=scope
+    )
     cash_raw = _d(ifpp.cash_spendable)
     safe_to_spend = max(ZERO, cash_raw - reserve)
 

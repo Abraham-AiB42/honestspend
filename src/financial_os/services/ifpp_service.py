@@ -21,6 +21,21 @@ from financial_os.services.payoff import plan_card_payoff, plan_to_dict
 IfppScope = Literal["entity", "group"]
 
 
+def _is_credit_card_autopay_schedule(item: ScheduledItem, credit_ids: set[int]) -> bool:
+    """True when a schedule is an autopay tied to a credit card (card path owns payoff)."""
+    if item.account_id is not None and item.account_id in credit_ids:
+        name = (item.name or "").strip().lower()
+        notes = (item.notes or "").strip().lower()
+        if name.startswith("autopay") or "autopay policy=" in notes:
+            return True
+        # promo sink bills also encode card payoff — skip cash double-count
+        if "promo" in name and "sink" in name:
+            return True
+        if "promo_sink" in notes or "promo sink" in notes:
+            return True
+    return False
+
+
 def _active_accounts(session: Session, profile_id: int | None, scope: IfppScope):
     q = session.query(Account).filter(Account.archived_at.is_(None))
     if scope == "entity" and profile_id is not None:
@@ -129,8 +144,17 @@ def run_ifpp(
     if sc == "entity" and resolved_pid is not None:
         sched_q = sched_q.filter(ScheduledItem.profile_id == resolved_pid)
 
+    # Credit account ids — autopay schedules on these already modeled by card payoff path
+    credit_ids = {a.id for a in accounts if a.kind == "credit"}
+    skipped_card_autopay = 0
+
     scheduled = []
     for s in sched_q.all():
+        # Honesty: do not also subtract Autopay · * · card from cash runway when card
+        # balance/payoff math already reserves that cash (double-count fix).
+        if _is_credit_card_autopay_schedule(s, credit_ids):
+            skipped_card_autopay += 1
+            continue
         amt = Decimal(s.amount)
         cert = s.certainty or "fixed"
         if cliff_on and amt > 0 and cert in ("expected", "historical_avg"):
@@ -182,8 +206,16 @@ def run_ifpp(
     result.details["ifpp_scope"] = sc
     result.details["profile_id"] = resolved_pid
     result.details["scope_note"] = scope_note
-    result.details["ifpp_cleared_only"] = bool(getattr(settings, "ifpp_cleared_only", True))
-    # Pending exposure for UI (balances remain authoritative source for Spendable)
+    cleared_only = bool(getattr(settings, "ifpp_cleared_only", True))
+    result.details["ifpp_cleared_only"] = cleared_only
+    result.details["skipped_card_autopay_schedules"] = skipped_card_autopay
+    if skipped_card_autopay:
+        result.warnings.append(
+            f"Skipped {skipped_card_autopay} card autopay schedule(s) in cash runway "
+            "(already counted in card payoff / balance path)."
+        )
+
+    # Pending exposure for UI
     from financial_os.db import Transaction
     from decimal import Decimal as D
 
@@ -205,6 +237,27 @@ def run_ifpp(
         if pending_rows
         else None
     )
+
+    # Wire ifpp_cleared_only: when True, treat pending outflows as already reserved
+    # (strict / conservative Safe to spend). When False, pending is warning-only.
+    cash_before_pending = result.cash_spendable
+    if cleared_only and pend_out > 0:
+        new_cash = max(D("0"), D(str(result.cash_spendable)) - pend_out)
+        delta = D(str(result.cash_spendable)) - new_cash
+        result.cash_spendable = new_cash.quantize(D("0.01"))
+        # Keep combined consistent with best-card float
+        result.combined_purchasing_power = (
+            result.cash_spendable + result.card_float_interest_free
+        ).quantize(D("0.01"))
+        result.details["pending_reserved"] = str(delta.quantize(D("0.01")))
+        result.details["cash_before_pending"] = str(cash_before_pending)
+        result.warnings.append(
+            f"Strict mode: reserved ${delta} for {len(pending_rows)} pending outflow(s)."
+        )
+    else:
+        result.details["pending_reserved"] = "0.00"
+        result.details["cash_before_pending"] = str(cash_before_pending)
+
     return result
 
 

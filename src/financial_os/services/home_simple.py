@@ -49,9 +49,56 @@ def build_home_simple(
     # Period budgets: reserve remaining envelopes so Safe to spend doesn't double-count
     from financial_os.services.budget_service import budget_reserve_total, home_budget_payload
 
+    sc = (scope or ifpp_d.get("ifpp_scope") or "entity").lower()
+    # Group view: budgets across all entities; entity: selected/default profile
     budgets = home_budget_payload(session, profile_id=profile_id, as_of=as_of)
-    reserve = budget_reserve_total(session, profile_id=profile_id, as_of=as_of)
+    reserve = budget_reserve_total(
+        session, profile_id=profile_id, as_of=as_of, scope=sc
+    )
     cash = max(ZERO, cash_raw - reserve)
+    # Why this number — one expandable breakdown for Simple Home
+    det = ifpp.details or {}
+    why_lines = []
+    why_lines.append(f"Cash after bills & buffer: ${cash_raw}")
+    buf = det.get("safety_buffer")
+    if buf and str(buf) not in ("0", "0.00"):
+        why_lines.append(f"Safety buffer reserved: ${buf}")
+    tv = det.get("tax_vault")
+    if tv and str(tv) not in ("0", "0.00"):
+        why_lines.append(f"Tax vault reserved: ${tv}")
+    if reserve > ZERO:
+        why_lines.append(
+            f"Budget envelopes reserved: ${reserve.quantize(Decimal('0.01'))} "
+            f"({'all entities' if sc == 'group' else 'this entity'}; max per category)"
+        )
+    pend_r = det.get("pending_reserved") or "0"
+    if pend_r not in ("0", "0.00", None):
+        why_lines.append(f"Pending outflows reserved (strict): ${pend_r}")
+    elif det.get("pending_warning"):
+        why_lines.append(f"Pending (not reserved): {det.get('pending_warning')}")
+    if det.get("best_card_name"):
+        why_lines.append(
+            f"Best interest-free card float: ${ifpp.card_float_interest_free} "
+            f"({det.get('best_card_name')} — not sum of all cards)"
+        )
+    if det.get("skipped_card_autopay_schedules"):
+        why_lines.append(
+            f"Card autopay schedules excluded from cash runway: "
+            f"{det.get('skipped_card_autopay_schedules')} (card path owns payoff)"
+        )
+    for w in (ifpp.warnings or [])[:4]:
+        why_lines.append(w)
+    why_this_number = {
+        "safe_to_spend": str(cash.quantize(Decimal("0.01"))),
+        "cash_after_bills_buffer": str(cash_raw.quantize(Decimal("0.01"))),
+        "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+        "lines": why_lines,
+        "one_liner": (
+            f"${cash_raw} after bills/buffer"
+            + (f" − ${reserve} budgets" if reserve > ZERO else "")
+            + f" = ${cash} safe"
+        ),
+    }
     # Nudge: history exists but no budgets yet
     budget_seed_hint = None
     if not (budgets.get("summary") or []):
@@ -134,7 +181,8 @@ def build_home_simple(
     from financial_os.services.import_reminders import build_import_reminder
 
     import_rem = build_import_reminder(session, as_of=as_of)
-    sc = ifpp_d.get("ifpp_scope") or "entity"
+    # sc already set from scope / ifpp for reserve math
+    sc = (sc or ifpp_d.get("ifpp_scope") or "entity").lower()
     pid = ifpp_d.get("profile_id")
     who_name = _who_name(session, pid)
 
@@ -186,6 +234,7 @@ def build_home_simple(
         "safe_to_spend": str(cash.quantize(Decimal("0.01"))),
         "safe_to_spend_before_budgets": str(cash_raw.quantize(Decimal("0.01"))),
         "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+        "why_this_number": why_this_number,
         "budgets": budgets,
         "budget_seed_hint": budget_seed_hint,
         "can_charge_no_interest": str(_d(ifpp.card_float_interest_free).quantize(Decimal("0.01"))),
@@ -199,6 +248,8 @@ def build_home_simple(
         "pending_warning": ifpp_d.get("pending_warning"),
         "pending_count": ifpp_d.get("pending_count") or 0,
         "pending_outflows_abs": ifpp_d.get("pending_outflows_abs") or "0",
+        "pending_reserved": ifpp_d.get("pending_reserved") or "0",
+        "ifpp_cleared_only": ifpp_d.get("ifpp_cleared_only"),
         "who_name": who_name,
         "who_profile_id": pid,
         "money_view": "this_money" if sc == "entity" else "all_money",

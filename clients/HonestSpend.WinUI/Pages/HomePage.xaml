@@ -49,11 +49,16 @@
                             Text="After bills, buffer, tax vault, and remaining budgets (reserved)" />
                         <TextBlock x:Name="SafeText" FontSize="48" FontWeight="SemiBold"
                                    Margin="0,4,0,0" Text="—" />
+                        <TextBlock x:Name="WhyOneLiner" Opacity="0.7" FontSize="13" TextWrapping="Wrap" />
                         <TextBlock x:Name="BudgetReserveLine" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                         <TextBlock x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />
                         <TextBlock x:Name="RiskLine" Opacity="0.8" TextWrapping="Wrap" Margin="0,4,0,0" />
                         <TextBlock x:Name="PendingLine" Opacity="0.75" TextWrapping="Wrap" Foreground="Orange" />
                         <TextBlock x:Name="WhoLine" Opacity="0.55" FontSize="12" Margin="0,4,0,0" />
+                        <Expander x:Name="WhyExpander" Header="Why this number?" Margin="0,8,0,0"
+                                  HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <ItemsControl x:Name="WhyList" Margin="0,8,0,0" />
+                        </Expander>
                     </StackPanel>
                 </Border>
 

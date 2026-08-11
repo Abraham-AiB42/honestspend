@@ -286,10 +286,28 @@ def budget_reserve_total(
     *,
     profile_id: int | None = None,
     as_of: date | None = None,
+    scope: str | None = None,
 ) -> Decimal:
+    """Sum of max-per-category remaining envelopes.
+
+    scope=group → sum reserves across all non-archived profiles (All money view).
+    """
     settings = _settings(session)
     if not bool(getattr(settings, "budget_reserve_enabled", True)):
         return ZERO
+    sc = (scope or "entity").strip().lower()
+    if sc == "group":
+        from financial_os.db import Profile
+
+        total = ZERO
+        q = session.query(Profile)
+        if hasattr(Profile, "archived_at"):
+            q = q.filter(Profile.archived_at.is_(None))
+        for p in q.all():
+            total += _d(
+                budgets_status(session, profile_id=p.id, as_of=as_of).get("reserve_total")
+            )
+        return total.quantize(Decimal("0.01"))
     st = budgets_status(session, profile_id=profile_id, as_of=as_of)
     return _d(st.get("reserve_total"))
 

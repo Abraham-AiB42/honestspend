@@ -102,6 +102,7 @@ public sealed partial class MainWindow : Window
         catch { /* continue — offline path below */ }
 
         AppLockService.MarkUnlocked();
+        RefreshLockChip();
         await ContinueAfterUnlockAsync();
     }
 
@@ -109,6 +110,7 @@ public sealed partial class MainWindow : Window
     public async void OnAppUnlocked()
     {
         NavView.IsEnabled = true;
+        RefreshLockChip();
         await ContinueAfterUnlockAsync();
     }
 
@@ -392,6 +394,55 @@ public sealed partial class MainWindow : Window
         {
             SelectNav("home");
             NavFrame.Navigate(typeof(HomePage));
+        }
+    }
+
+    public void RefreshLockChip()
+    {
+        try
+        {
+            if (LockChipBtn is null) return;
+            if (AppLockService.NeedsUnlock)
+            {
+                LockChipBtn.Content = "Books locked";
+                LockChipBtn.IsEnabled = true;
+                return;
+            }
+            LockChipBtn.Content = AppLockService.IsLockEnabled || AppLockService.IsUnlocked
+                ? "Seal & lock"
+                : "Books unlocked";
+            // When no lock configured, chip still can show unlocked; seal only if encryption on
+            LockChipBtn.IsEnabled = true;
+        }
+        catch { /* ignore */ }
+    }
+
+    private async void LockChip_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (AppLockService.NeedsUnlock)
+            {
+                ForceLockScreen();
+                return;
+            }
+            // Seal books then show lock UI
+            LockChipBtn.IsEnabled = false;
+            LockChipBtn.Content = "Sealing…";
+            await AppLockService.SealDatabaseAsync();
+            AppLockService.LockSession();
+            RefreshLockChip();
+            ForceLockScreen();
+        }
+        catch (Exception ex)
+        {
+            try { LockChipBtn.Content = "Seal failed"; } catch { /* ignore */ }
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+        finally
+        {
+            try { LockChipBtn.IsEnabled = true; } catch { /* ignore */ }
+            RefreshLockChip();
         }
     }
 
