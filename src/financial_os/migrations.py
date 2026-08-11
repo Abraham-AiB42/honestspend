@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -406,6 +406,20 @@ def _mig_21_coming_up_settings(conn) -> None:
     )
 
 
+def _mig_22_schedule_agency_steals(conn) -> None:
+    """Schedule window, series, vendor, opex, income_source for agency steals."""
+    _exec_ignore(conn, "ALTER TABLE scheduled_items ADD COLUMN start_date DATE")
+    _exec_ignore(conn, "ALTER TABLE scheduled_items ADD COLUMN series_id VARCHAR(36)")
+    _exec_ignore(conn, "ALTER TABLE scheduled_items ADD COLUMN series_label VARCHAR(128)")
+    _exec_ignore(conn, "ALTER TABLE scheduled_items ADD COLUMN vendor VARCHAR(128)")
+    _exec_ignore(conn, "ALTER TABLE scheduled_items ADD COLUMN opex_class VARCHAR(16)")
+    _exec_ignore(conn, "ALTER TABLE scheduled_items ADD COLUMN income_source VARCHAR(64)")
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_scheduled_items_series ON scheduled_items(series_id)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -429,6 +443,7 @@ MIGRATIONS: dict[int, Callable] = {
     19: _mig_19_payment_timing,
     20: _mig_20_rewards_rates,
     21: _mig_21_coming_up_settings,
+    22: _mig_22_schedule_agency_steals,
 }
 
 

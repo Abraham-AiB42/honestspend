@@ -11,6 +11,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -253,6 +254,7 @@ class ScheduledItem(Base):
     """
 
     __tablename__ = "scheduled_items"
+    __table_args__ = (Index("ix_scheduled_items_series", "series_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     profile_id: Mapped[int] = mapped_column(ForeignKey("profiles.id"))
@@ -261,11 +263,17 @@ class ScheduledItem(Base):
     name: Mapped[str] = mapped_column(String(128))
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))  # + income, - bill
     next_date: Mapped[date] = mapped_column(Date)
+    start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     cadence: Mapped[str] = mapped_column(String(32), default="monthly")  # weekly|biweekly|semimonthly|monthly|yearly
     certainty: Mapped[str] = mapped_column(String(32), default="fixed")  # fixed|expected|historical_avg
-    # expense | income — derived from amount sign but stored for clear UI filters
+    # expense | income | owner_draw — derived from amount sign but stored for clear UI filters
     kind: Mapped[str] = mapped_column(String(16), default="expense")
+    series_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    series_label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    vendor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    opex_class: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # fixed|variable
+    income_source: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     ended_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
