@@ -676,8 +676,9 @@ public sealed partial class HomePage : Page
     }
 
     /// <summary>
-    /// Soft cash after Coming up window outflows (not a replacement for Safe to spend).
-    /// e.g. "Until payday: $1,160.00" when the window is payday-driven.
+    /// Soft cash after Coming up window (secondary to Safe to spend).
+    /// Hidden when amount equals STS — no second identical cash number.
+    /// Soften "Safe until …" → "Until …".
     /// </summary>
     private void ApplySafeUntilWindow(JsonElement home)
     {
@@ -695,14 +696,31 @@ public sealed partial class HomePage : Page
                 SafeUntilLine.Visibility = Visibility.Collapsed;
                 return;
             }
-            var label = JsonUi.Str(su, "label", "");
-            // Prefer short UI copy: payday vs end of window
-            string prefix;
-            if (label.Contains("payday", StringComparison.OrdinalIgnoreCase))
-                prefix = "Until payday";
+
+            // One cash spine: hide soft when it matches Safe to spend
+            if (SoftUntilEqualsSafeToSpend(home, su))
+            {
+                SafeUntilLine.Text = "";
+                SafeUntilLine.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            var label = JsonUi.Str(su, "label", "").Trim();
+            if (!string.IsNullOrEmpty(label) && label != "—")
+            {
+                if (label.StartsWith("Safe until", StringComparison.OrdinalIgnoreCase))
+                    label = "Until" + label["Safe until".Length..];
+                const string within = " · within Safe to spend";
+                if (label.EndsWith(within, StringComparison.OrdinalIgnoreCase))
+                    label = label[..^within.Length].TrimEnd();
+                SafeUntilLine.Text = $"{label}: {amt}";
+            }
             else
-                prefix = "Until end of window";
-            SafeUntilLine.Text = $"{prefix}: {amt}";
+            {
+                SafeUntilLine.Text = label.Contains("payday", StringComparison.OrdinalIgnoreCase)
+                    ? $"Until payday: {amt}"
+                    : $"Left after bills in view: {amt}";
+            }
             SafeUntilLine.Visibility = Visibility.Visible;
         }
         catch
@@ -710,6 +728,25 @@ public sealed partial class HomePage : Page
             SafeUntilLine.Text = "";
             SafeUntilLine.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private static bool SoftUntilEqualsSafeToSpend(JsonElement home, JsonElement su)
+    {
+        if (!TryParseMoneyAmount(JsonUi.Str(home, "safe_to_spend", ""), out var sts))
+            return false;
+        if (!TryParseMoneyAmount(JsonUi.Str(su, "amount", ""), out var soft))
+            return false;
+        return Math.Abs(sts - soft) < 0.015m;
+    }
+
+    private static bool TryParseMoneyAmount(string s, out decimal value)
+    {
+        value = 0;
+        if (string.IsNullOrWhiteSpace(s) || s == "—")
+            return false;
+        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+            return true;
+        return decimal.TryParse(s, NumberStyles.Currency, CultureInfo.CurrentCulture, out value);
     }
 
     private void ApplyFloatWhisper(JsonElement home)
