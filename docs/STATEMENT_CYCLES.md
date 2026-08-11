@@ -100,12 +100,25 @@ Like the spreadsheet ISB tab, per card:
 
 | Field | Role |
 |-------|------|
-| Name | e.g. “Amazon 0%” |
+| Name | e.g. “Amazon 0%” / “HD 24 mo” |
 | Principal remaining | Still on the promo plan |
 | Monthly payment | Set-aside / installment this cycle |
 | Active + date window | Open lines only count |
 
 Create / edit / roll one month from Full books **Credit**. Rolling reduces principal by one installment and recomputes next payment.
+
+### Promo payoff calendar (dynamic length)
+
+Not a fixed 12-month grid. For each open plan:
+
+```
+months ≈ ceil(principal_remaining ÷ monthly_payment)
+```
+
+so **24-month Home Depot financing** projects **24 rows** (partial final installment supported). Multiple plans on one card merge into a single month list (`by_month`) spanning the **longest** plan. Safety cap: 120 months (pathological tiny payments).
+
+API: `GET /api/accounts/{id}/promo-calendar`  
+UI: Full books Credit → **Promo payoff calendar** under promo lines.
 
 ### Multi-entity
 

@@ -204,6 +204,16 @@
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
                         Text="0% plans and installments: remaining principal is carved out of statement pay; monthly amount still due this cycle. Pick a plan to edit remaining/monthly, or roll one month." />
                     <ItemsControl x:Name="PromoLineList" />
+
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Promo payoff calendar"
+                               Margin="0,12,0,0" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="Month-by-month until each plan is paid off — length is dynamic (not capped at 12). A 24-month Home Depot plan shows 24 rows when remaining ÷ monthly matches." />
+                    <TextBlock x:Name="PromoCalendarSummary" FontWeight="SemiBold" TextWrapping="Wrap"
+                               Text="No open promo plans." />
+                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl x:Name="PromoCalendarList" />
+                    </ScrollViewer>
                     <ComboBox x:Name="PromoEditPickBox" Header="Plan to edit" HorizontalAlignment="Stretch"
                               PlaceholderText="Pick a plan" SelectionChanged="PromoEditPick_Changed" />
                     <Grid ColumnSpacing="12" RowSpacing="8">

@@ -419,6 +419,8 @@ public sealed partial class CreditPage : Page
             CycleNextPaymentText.Text = "Next payment: —";
             CycleDatesText.Text = "";
             PromoLineList.ItemsSource = new List<string> { "Pick a card to see promo lines." };
+            PromoCalendarSummary.Text = "Pick a card to see the promo calendar.";
+            PromoCalendarList.ItemsSource = new List<string>();
             return;
         }
 
@@ -572,11 +574,76 @@ public sealed partial class CreditPage : Page
             PromoLineList.ItemsSource = lines.Count > 0
                 ? lines
                 : new List<string> { "No promo/installment lines on this card." };
+
+            await LoadPromoCalendarAsync(api, accountId);
         }
         catch
         {
             PromoLineList.ItemsSource = new List<string> { "Promo lines unavailable." };
             PromoEditPickBox.Items.Clear();
+            PromoCalendarSummary.Text = "Promo calendar unavailable.";
+            PromoCalendarList.ItemsSource = new List<string>();
+        }
+    }
+
+    private async Task LoadPromoCalendarAsync(LedgerApiClient api, int accountId)
+    {
+        try
+        {
+            var cal = await api.GetPromoCalendarAsync(accountId);
+            var span = JsonUi.Int(cal, "months_span", 0);
+            var lineCount = JsonUi.Int(cal, "line_count", 0);
+            if (lineCount == 0 || span == 0)
+            {
+                PromoCalendarSummary.Text = "No open promo plans to project.";
+                PromoCalendarList.ItemsSource = new List<string>();
+                return;
+            }
+
+            var lineBits = new List<string>();
+            if (cal.TryGetProperty("lines", out var linesEl) && linesEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var ln in linesEl.EnumerateArray())
+                {
+                    var name = JsonUi.Str(ln, "name");
+                    var mo = JsonUi.Int(ln, "months_remaining", 0);
+                    var fin = JsonUi.Str(ln, "final_month", "");
+                    lineBits.Add($"{name}: {mo} mo" + (string.IsNullOrEmpty(fin) || fin == "—" ? "" : $" → {fin}"));
+                }
+            }
+
+            PromoCalendarSummary.Text =
+                $"{lineCount} plan(s) · longest run {span} months" +
+                (lineBits.Count > 0 ? " · " + string.Join(" · ", lineBits) : "") +
+                (cal.TryGetProperty("capped", out var cap) && cap.ValueKind == JsonValueKind.True
+                    ? " · (hit safety cap — check monthly payment)"
+                    : "");
+
+            var rows = new List<string>();
+            if (cal.TryGetProperty("by_month", out var byMo) && byMo.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var m in byMo.EnumerateArray())
+                {
+                    var month = JsonUi.Str(m, "month");
+                    var pay = JsonUi.Money(m, "payment_total");
+                    var after = JsonUi.Money(m, "principal_after_total");
+                    var n = JsonUi.Int(m, "line_count", 1);
+                    var names = new List<string>();
+                    if (m.TryGetProperty("lines", out var mls) && mls.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var ml in mls.EnumerateArray())
+                            names.Add(JsonUi.Str(ml, "name"));
+                    }
+                    var label = names.Count > 0 ? string.Join(", ", names) : $"{n} plan(s)";
+                    rows.Add($"{month}  ·  pay {pay}  ·  remaining after {after}  ·  {label}");
+                }
+            }
+            PromoCalendarList.ItemsSource = rows;
+        }
+        catch
+        {
+            PromoCalendarSummary.Text = "Promo calendar unavailable.";
+            PromoCalendarList.ItemsSource = new List<string>();
         }
     }
 

@@ -6,8 +6,9 @@ add monthly_payment into next payment due.
 
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, ROUND_UP
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -16,6 +17,9 @@ from financial_os.db import PromoInstallmentLine
 
 ZERO = Decimal("0")
 CENT = Decimal("0.01")
+# Safety ceiling so a $1/mo plan cannot produce an unbounded calendar.
+# Dynamic length is min(ceil(principal/monthly), this cap) — 24–60 mo plans fit easily.
+MAX_PROMO_CALENDAR_MONTHS = 120
 
 
 def _d(v: Any) -> Decimal:
@@ -215,4 +219,221 @@ def line_to_dict(line: PromoInstallmentLine) -> dict[str, Any]:
         "end_date": line.end_date.isoformat() if line.end_date else None,
         "active": bool(line.active),
         "source": line.source or "user",
+    }
+
+
+def _first_of_month(d: date) -> date:
+    return date(d.year, d.month, 1)
+
+
+def _add_months(d: date, n: int) -> date:
+    """Advance calendar month by n (day clamped to month length)."""
+    y = d.year + (d.month - 1 + n) // 12
+    m = (d.month - 1 + n) % 12 + 1
+    day = min(d.day, monthrange(y, m)[1])
+    return date(y, m, day)
+
+
+def estimated_months_remaining(
+    principal: Decimal | Any,
+    monthly: Decimal | Any,
+    *,
+    max_months: int = MAX_PROMO_CALENDAR_MONTHS,
+) -> int:
+    """How many installment months until principal is cleared (0 if already paid)."""
+    rem = _d(principal)
+    pay = _d(monthly)
+    if rem <= ZERO:
+        return 0
+    if pay <= ZERO:
+        return 0
+    # ceil(rem / pay) but never above max_months
+    n = int((rem / pay).to_integral_value(rounding=ROUND_UP))
+    return max(1, min(int(max_months), n))
+
+
+def project_line_calendar(
+    line: PromoInstallmentLine,
+    *,
+    as_of: date | None = None,
+    max_months: int = MAX_PROMO_CALENDAR_MONTHS,
+) -> dict[str, Any]:
+    """Month-by-month amortization for one promo line until paid off or cap.
+
+    Length is **dynamic**: ceil(remaining / monthly), not fixed at 12.
+    Supports multi-year financing (e.g. 24-month Home Depot plans).
+    Stops early if end_date is set and passed.
+    """
+    as_of = as_of or date.today()
+    rem = _q(_d(line.principal_remaining))
+    pay = _q(_d(line.monthly_payment))
+    months_out: list[dict[str, Any]] = []
+    notes: list[str] = []
+
+    if not line.active or rem <= ZERO:
+        return {
+            "line_id": line.id,
+            "name": line.name,
+            "months": [],
+            "months_remaining": 0,
+            "total_payments": "0.00",
+            "final_month": None,
+            "capped": False,
+            "notes": ["Plan paid off or inactive."],
+        }
+
+    if pay <= ZERO:
+        return {
+            "line_id": line.id,
+            "name": line.name,
+            "months": [],
+            "months_remaining": 0,
+            "total_payments": "0.00",
+            "final_month": None,
+            "capped": False,
+            "notes": [
+                "Monthly payment is zero — set a monthly installment to project the calendar."
+            ],
+        }
+
+    # First installment month: current calendar month if as_of is after start, else start month
+    cursor = _first_of_month(as_of)
+    if line.start_date and _first_of_month(line.start_date) > cursor:
+        cursor = _first_of_month(line.start_date)
+
+    remaining = rem
+    total_paid = ZERO
+    capped = False
+    guard = 0
+    while remaining > ZERO and guard < max_months:
+        # Allow any payment whose month is on or before the plan end month
+        if line.end_date is not None and _first_of_month(cursor) > _first_of_month(
+            line.end_date
+        ):
+            notes.append(
+                f"Stopped after plan end month {line.end_date.isoformat()[:7]} "
+                f"with {remaining} still remaining."
+            )
+            break
+        installment = _q(min(remaining, pay))
+        remaining = _q(remaining - installment)
+        total_paid += installment
+        months_out.append(
+            {
+                "month": cursor.isoformat()[:7],  # YYYY-MM
+                "month_start": cursor.isoformat(),
+                "payment": str(installment),
+                "principal_after": str(remaining),
+                "is_final": remaining <= ZERO,
+            }
+        )
+        if remaining <= ZERO:
+            break
+        cursor = _add_months(cursor, 1)
+        guard += 1
+    else:
+        if remaining > ZERO and guard >= max_months:
+            capped = True
+            notes.append(
+                f"Calendar capped at {max_months} months with {remaining} still remaining "
+                "(increase monthly payment or check the plan)."
+            )
+
+    final = months_out[-1]["month"] if months_out else None
+    return {
+        "line_id": line.id,
+        "name": line.name,
+        "principal_remaining": str(rem),
+        "monthly_payment": str(pay),
+        "start_date": line.start_date.isoformat() if line.start_date else None,
+        "end_date": line.end_date.isoformat() if line.end_date else None,
+        "months": months_out,
+        "months_remaining": len(months_out),
+        "total_payments": str(_q(total_paid)),
+        "final_month": final,
+        "capped": capped,
+        "notes": notes,
+    }
+
+
+def project_promo_calendar(
+    session: Session,
+    account_id: int,
+    *,
+    as_of: date | None = None,
+    max_months: int = MAX_PROMO_CALENDAR_MONTHS,
+    active_only: bool = True,
+) -> dict[str, Any]:
+    """Dynamic multi-line promo amortization calendar for a card.
+
+    Not fixed at 12 months — each line runs until principal is cleared
+    (or end_date / safety cap). Account-level rows merge all lines by month.
+    """
+    as_of = as_of or date.today()
+    lines = list_promo_lines(session, account_id, active_only=active_only)
+    line_schedules: list[dict[str, Any]] = []
+    by_month: dict[str, dict[str, Any]] = {}
+
+    for line in lines:
+        # Project any active line with remaining balance (including future-start plans)
+        if active_only and not line.active:
+            continue
+        if _d(line.principal_remaining) <= ZERO:
+            continue
+        if line.end_date is not None and line.end_date < as_of:
+            continue
+        sched = project_line_calendar(line, as_of=as_of, max_months=max_months)
+        line_schedules.append(sched)
+        for m in sched.get("months") or []:
+            key = m["month"]
+            bucket = by_month.setdefault(
+                key,
+                {
+                    "month": key,
+                    "payment_total": ZERO,
+                    "principal_after_total": ZERO,
+                    "lines": [],
+                },
+            )
+            bucket["payment_total"] += _d(m["payment"])
+            bucket["principal_after_total"] += _d(m["principal_after"])
+            bucket["lines"].append(
+                {
+                    "line_id": sched["line_id"],
+                    "name": sched["name"],
+                    "payment": m["payment"],
+                    "principal_after": m["principal_after"],
+                    "is_final": m.get("is_final", False),
+                }
+            )
+
+    merged = []
+    for key in sorted(by_month.keys()):
+        b = by_month[key]
+        merged.append(
+            {
+                "month": key,
+                "payment_total": str(_q(b["payment_total"])),
+                "principal_after_total": str(_q(b["principal_after_total"])),
+                "line_count": len(b["lines"]),
+                "lines": b["lines"],
+            }
+        )
+
+    max_span = max((s.get("months_remaining") or 0) for s in line_schedules) if line_schedules else 0
+    any_capped = any(s.get("capped") for s in line_schedules)
+
+    return {
+        "account_id": account_id,
+        "as_of": as_of.isoformat(),
+        "line_count": len(line_schedules),
+        "months_span": max_span,
+        "max_months_cap": max_months,
+        "capped": any_capped,
+        "lines": line_schedules,
+        "by_month": merged,
+        "hint": (
+            "Calendar length is dynamic from remaining ÷ monthly payment "
+            f"(up to {max_months} months). 24-month financing shows 24 rows when payments match."
+        ),
     }

@@ -404,6 +404,10 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetPromoLinesAsync(int accountId, CancellationToken ct = default)
         => GetJsonAsync($"api/accounts/{accountId}/promo-lines", ct);
 
+    /// <summary>Dynamic promo amortization calendar (span = remaining ÷ monthly, e.g. 24 mo HD plans).</summary>
+    public Task<JsonElement> GetPromoCalendarAsync(int accountId, CancellationToken ct = default)
+        => GetJsonAsync($"api/accounts/{accountId}/promo-calendar", ct);
+
     public Task<JsonElement> CreatePromoLineAsync(int accountId, object body, CancellationToken ct = default)
         => PostJsonAsync($"api/accounts/{accountId}/promo-lines", body, ct);
 

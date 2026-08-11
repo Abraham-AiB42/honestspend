@@ -1923,6 +1923,27 @@ def list_account_promo_lines(account_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/accounts/{account_id}/promo-calendar")
+def get_account_promo_calendar(
+    account_id: int,
+    max_months: int = 120,
+    db: Session = Depends(get_db),
+):
+    """Dynamic promo amortization calendar (length from remaining ÷ monthly, not fixed 12 mo)."""
+    from financial_os.services.promo_installments import (
+        MAX_PROMO_CALENDAR_MONTHS,
+        project_promo_calendar,
+    )
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    if (row.kind or "") != "credit":
+        raise HTTPException(400, "Promo calendar applies to credit accounts only")
+    cap = max(1, min(int(max_months or MAX_PROMO_CALENDAR_MONTHS), MAX_PROMO_CALENDAR_MONTHS))
+    return project_promo_calendar(db, account_id, max_months=cap)
+
+
 @app.post("/api/accounts/{account_id}/promo-lines")
 def create_account_promo_line(
     account_id: int,
