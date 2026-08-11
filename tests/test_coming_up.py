@@ -12,9 +12,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from financial_os.config import settings
-from financial_os.db import Account, Profile, ScheduledItem, init_db, make_engine, make_session_factory
+from financial_os.db import Account, AppSettings, Profile, ScheduledItem, init_db, make_engine, make_session_factory
+from financial_os.migrations import SCHEMA_VERSION, get_schema_version
 from financial_os.seed import seed_all
 from financial_os.services.coming_up import build_coming_up, resolve_window
+from financial_os.services.home_simple import build_home_simple
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -333,3 +335,146 @@ def test_api_coming_up_200(api_client: TestClient):
     )
     assert r2.status_code == 200, r2.text
     assert r2.json()["window"]["mode_effective"] == "calendar"
+
+
+def test_migration_coming_up_settings_columns(tmp_path: Path, monkeypatch):
+    """SCHEMA_VERSION >= 21 and app_settings has coming_up_* columns with defaults."""
+    from sqlalchemy import inspect
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    eng = create_engine(f"sqlite:///{(data / 'mig.db').as_posix()}")
+    init_db(eng)
+    assert get_schema_version(eng) == SCHEMA_VERSION
+    assert SCHEMA_VERSION >= 21
+
+    for name in (
+        "coming_up_window_mode",
+        "coming_up_calendar_days",
+        "coming_up_payday_count",
+        "coming_up_show_income",
+    ):
+        assert hasattr(AppSettings, name), f"AppSettings missing {name}"
+
+    insp = inspect(eng)
+    cols = {c["name"]: c for c in insp.get_columns("app_settings")}
+    for name in (
+        "coming_up_window_mode",
+        "coming_up_calendar_days",
+        "coming_up_payday_count",
+        "coming_up_show_income",
+    ):
+        assert name in cols, f"app_settings missing column {name}"
+
+    Session = sessionmaker(bind=eng)
+    s = Session()
+    try:
+        seed_all(s)
+        s.commit()
+        row = s.get(AppSettings, 1)
+        assert row is not None
+        assert (row.coming_up_window_mode or "auto") == "auto"
+        assert int(row.coming_up_calendar_days or 14) == 14
+        assert int(row.coming_up_payday_count or 1) == 1
+        assert bool(row.coming_up_show_income) is True
+    finally:
+        s.close()
+
+
+def test_build_coming_up_reads_app_settings(tmp_path: Path, monkeypatch):
+    """When mode not passed, build_coming_up uses AppSettings coming_up_* prefs."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    # Income exists — auto would use paydays; force calendar via settings
+    payday = as_of + timedelta(days=5)
+    s.add(
+        ScheduledItem(
+            profile_id=p.id,
+            name="Paycheck",
+            amount=Decimal("2100"),
+            next_date=payday,
+            cadence="biweekly",
+            certainty="fixed",
+            kind="income",
+            active=True,
+        )
+    )
+    st = s.get(AppSettings, 1)
+    assert st is not None
+    st.coming_up_window_mode = "calendar"
+    st.coming_up_calendar_days = 7
+    st.coming_up_show_income = False
+    s.commit()
+
+    # No mode / calendar_days / show_income → settings
+    result = build_coming_up(s, as_of=as_of, profile_id=p.id)
+    assert result["window"]["mode_effective"] == "calendar"
+    assert result["window"]["calendar_days"] == 7
+    assert result["window"]["window_end"] == (as_of + timedelta(days=7)).isoformat()
+    # Income hidden via settings
+    assert all(i["direction"] != "in" for i in result["items"])
+
+    # Explicit override wins over settings
+    result2 = build_coming_up(
+        s,
+        as_of=as_of,
+        profile_id=p.id,
+        mode="auto",
+        show_income=True,
+    )
+    assert result2["window"]["mode_effective"] == "paydays"
+    assert result2["window"]["window_end"] == payday.isoformat()
+    s.close()
+
+
+def test_home_simple_reads_coming_up_settings(tmp_path: Path, monkeypatch):
+    """home_simple coming_up embeds settings-driven window when no query overrides."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    st = s.get(AppSettings, 1)
+    assert st is not None
+    st.coming_up_window_mode = "calendar"
+    st.coming_up_calendar_days = 10
+    s.commit()
+
+    home = build_home_simple(s, profile_id=p.id, as_of=as_of)
+    cu = home["coming_up"]
+    assert cu["window"]["mode_effective"] == "calendar"
+    assert cu["window"]["calendar_days"] == 10
+    assert cu["window"]["window_end"] == (as_of + timedelta(days=10)).isoformat()
+    s.close()
+
+
+def test_patch_coming_up_settings(api_client: TestClient):
+    """PATCH /api/settings accepts coming_up_* and home/coming-up honor them."""
+    api_client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
+    r = api_client.patch(
+        "/api/settings",
+        json={
+            "coming_up_window_mode": "calendar",
+            "coming_up_calendar_days": 7,
+            "coming_up_payday_count": 2,
+            "coming_up_show_income": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["coming_up_window_mode"] == "calendar"
+    assert body["coming_up_calendar_days"] == 7
+    assert body["coming_up_payday_count"] == 2
+    assert body["coming_up_show_income"] is False
+
+    r2 = api_client.get("/api/settings")
+    assert r2.json()["coming_up_window_mode"] == "calendar"
+
+    r3 = api_client.get("/api/coming-up")
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["window"]["mode_effective"] == "calendar"
+    assert r3.json()["window"]["calendar_days"] == 7
+
+    # Invalid mode rejected
+    bad = api_client.patch("/api/settings", json={"coming_up_window_mode": "nope"})
+    assert bad.status_code == 400

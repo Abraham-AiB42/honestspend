@@ -253,22 +253,56 @@ def _income_certainty_ok(certainty: str, mode: str) -> bool:
     return c in ("fixed", "expected", "historical_avg")
 
 
+def _settings_window_defaults(settings: AppSettings) -> tuple[WindowMode, int, int, bool]:
+    """Read Coming up prefs from AppSettings (with safe fallbacks)."""
+    mode_raw = (getattr(settings, "coming_up_window_mode", None) or "auto").lower()
+    if mode_raw not in ("auto", "calendar", "paydays"):
+        mode_raw = "auto"
+    try:
+        cal = int(getattr(settings, "coming_up_calendar_days", None) or 14)
+    except (TypeError, ValueError):
+        cal = 14
+    try:
+        pd = int(getattr(settings, "coming_up_payday_count", None) or 1)
+    except (TypeError, ValueError):
+        pd = 1
+    show = getattr(settings, "coming_up_show_income", None)
+    if show is None:
+        show_income = True
+    else:
+        show_income = bool(show)
+    return mode_raw, cal, pd, show_income  # type: ignore[return-value]
+
+
 def build_coming_up(
     session: Session,
     *,
     as_of: date | None = None,
-    mode: WindowMode = "auto",
-    calendar_days: int = 14,
-    payday_count: int = 1,
+    mode: WindowMode | None = None,
+    calendar_days: int | None = None,
+    payday_count: int | None = None,
     profile_id: int | None = None,
     scope: str | None = None,
     ifpp_mode: str | None = None,
     limit: int = 8,
-    show_income: bool = True,
+    show_income: bool | None = None,
 ) -> dict[str, Any]:
-    """Build Coming up list: window + cash-side schedule rows."""
+    """Build Coming up list: window + cash-side schedule rows.
+
+    When mode / calendar_days / payday_count / show_income are None, values are
+    taken from AppSettings (coming_up_* columns). Explicit args always win.
+    """
     as_of = as_of or date.today()
     settings = session.get(AppSettings, 1) or AppSettings(id=1)
+    def_mode, def_cal, def_pd, def_show = _settings_window_defaults(settings)
+    if mode is None:
+        mode = def_mode
+    if calendar_days is None:
+        calendar_days = def_cal
+    if payday_count is None:
+        payday_count = def_pd
+    if show_income is None:
+        show_income = def_show
     ifpp_mode = ifpp_mode or getattr(settings, "ifpp_mode", None) or "expected"
     limit = max(1, min(int(limit), 50))
 

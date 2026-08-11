@@ -500,6 +500,10 @@ class SettingsIn(BaseModel):
     budget_reserve_enabled: bool | None = None
     budget_week_starts_on: int | None = None
     budget_workdays: int | None = None
+    coming_up_window_mode: str | None = None  # auto | calendar | paydays
+    coming_up_calendar_days: int | None = None  # 7–14
+    coming_up_payday_count: int | None = None  # 1–2
+    coming_up_show_income: bool | None = None
 
 
 class SettingsPatch(BaseModel):
@@ -546,6 +550,10 @@ class SettingsPatch(BaseModel):
     budget_reserve_enabled: bool | None = None
     budget_week_starts_on: int | None = None
     budget_workdays: int | None = None
+    coming_up_window_mode: str | None = None
+    coming_up_calendar_days: int | None = None
+    coming_up_payday_count: int | None = None
+    coming_up_show_income: bool | None = None
 
 
 class SettingsOut(BaseModel):
@@ -592,6 +600,10 @@ class SettingsOut(BaseModel):
     budget_reserve_enabled: bool = True
     budget_week_starts_on: int = 0
     budget_workdays: int = 31
+    coming_up_window_mode: str = "auto"
+    coming_up_calendar_days: int = 14
+    coming_up_payday_count: int = 1
+    coming_up_show_income: bool = True
 
 
 class QuickSetupIn(BaseModel):
@@ -2333,6 +2345,21 @@ def patch_settings(body: SettingsPatch, db: Session = Depends(get_db)):
     if "never_negative_enforcement" in data and data["never_negative_enforcement"] is not None:
         if data["never_negative_enforcement"] not in ("off", "warn", "hard"):
             raise HTTPException(400, "never_negative_enforcement must be off, warn, or hard")
+    if "coming_up_window_mode" in data and data["coming_up_window_mode"] is not None:
+        mode = str(data["coming_up_window_mode"]).lower()
+        if mode not in ("auto", "calendar", "paydays"):
+            raise HTTPException(400, "coming_up_window_mode must be auto, calendar, or paydays")
+        data["coming_up_window_mode"] = mode
+    if "coming_up_calendar_days" in data and data["coming_up_calendar_days"] is not None:
+        d = int(data["coming_up_calendar_days"])
+        if d < 7 or d > 14:
+            raise HTTPException(400, "coming_up_calendar_days must be 7–14")
+        data["coming_up_calendar_days"] = d
+    if "coming_up_payday_count" in data and data["coming_up_payday_count"] is not None:
+        n = int(data["coming_up_payday_count"])
+        if n not in (1, 2):
+            raise HTTPException(400, "coming_up_payday_count must be 1 or 2")
+        data["coming_up_payday_count"] = n
     for k, v in data.items():
         setattr(row, k, v)
     db.flush()
@@ -2379,23 +2406,31 @@ def get_cash_runway(
 
 @app.get("/api/coming-up")
 def get_coming_up(
-    mode: str = "auto",
-    calendar_days: int = 14,
-    payday_count: int = 1,
+    mode: Optional[str] = None,
+    calendar_days: Optional[int] = None,
+    payday_count: Optional[int] = None,
     limit: int = 8,
-    show_income: bool = True,
+    show_income: Optional[bool] = None,
     profile_id: Optional[int] = None,
     scope: Optional[str] = None,
     as_of: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    """Coming up strip: cash-side schedules in calendar or payday window."""
+    """Coming up strip: cash-side schedules in calendar or payday window.
+
+    Omit mode / calendar_days / payday_count / show_income to use AppSettings.
+    Query overrides always win when provided.
+    """
     from financial_os.services.coming_up import build_coming_up
+
+    resolved_mode: Optional[str] = None
+    if mode is not None:
+        resolved_mode = mode if mode in ("auto", "calendar", "paydays") else "auto"
 
     return build_coming_up(
         db,
         as_of=as_of,
-        mode=mode if mode in ("auto", "calendar", "paydays") else "auto",
+        mode=resolved_mode,  # type: ignore[arg-type]
         calendar_days=calendar_days,
         payday_count=payday_count,
         profile_id=profile_id,

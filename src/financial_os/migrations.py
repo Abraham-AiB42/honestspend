@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -386,6 +386,26 @@ def _mig_20_rewards_rates(conn) -> None:
     )
 
 
+def _mig_21_coming_up_settings(conn) -> None:
+    """Coming up strip window prefs on AppSettings."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN coming_up_window_mode VARCHAR(16) DEFAULT 'auto'",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN coming_up_calendar_days INTEGER DEFAULT 14",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN coming_up_payday_count INTEGER DEFAULT 1",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN coming_up_show_income BOOLEAN DEFAULT 1",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -408,6 +428,7 @@ MIGRATIONS: dict[int, Callable] = {
     18: _mig_18_promo_installment_lines,
     19: _mig_19_payment_timing,
     20: _mig_20_rewards_rates,
+    21: _mig_21_coming_up_settings,
 }
 
 

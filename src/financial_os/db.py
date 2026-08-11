@@ -490,6 +490,14 @@ class AppSettings(Base):
     # plaid | csv | manual | null
     setup_path: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     setup_payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Coming up strip window (Simple Home)
+    # auto | calendar | paydays
+    coming_up_window_mode: Mapped[str] = mapped_column(String(16), default="auto")
+    # Allowed 7–14; service clamps
+    coming_up_calendar_days: Mapped[int] = mapped_column(Integer, default=14)
+    # Allowed 1–2; service clamps
+    coming_up_payday_count: Mapped[int] = mapped_column(Integer, default=1)
+    coming_up_show_income: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:
