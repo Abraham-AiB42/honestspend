@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.52 — P0: crypto side-channels + Safe honesty
+
+- **CLI/tray** refuse offline DB open when encrypted/sealed (no empty plaintext next to vault)
+- **Unlock** prefers sealed over empty/stale leftover plaintext
+- **Migrate books**: seal → full bundle copy → restart; Settings uses same path
+- **Start/Restart engine** seals before kill
+- **Pending strict mode** recomputes card float after cash cut
+- **Budget reserve** skips fixed-obligation groups (housing/utilities/insurance/debt)
+- **Why-this-number** shows effective dual buffer
+- **Lock chip** hidden when no lock/encryption; seal-only without junk PIN
+- **No lock** requires secret and disables encryption
+
 ## 1.0.51 — P2: simpler surface, cleaner IFPP
 
 - **Card autopay schedules** excluded from cash runway (card payoff path owns them)

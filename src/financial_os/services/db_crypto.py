@@ -120,6 +120,44 @@ def needs_unlock() -> bool:
     return sealed_present() or plaintext_present()
 
 
+def refuse_offline_open_if_encrypted() -> None:
+    """Raise if CLI/tray must not open SQLite outside db_runtime unlock.
+
+    Prevents creating an empty financial_os.db next to a real .sealed vault.
+    """
+    if not encryption_enabled():
+        return
+    if sealed_present() or plaintext_present() or crypto_meta_path().is_file():
+        raise RuntimeError(
+            "Books are encrypted. Start the HonestSpend app and unlock with your PIN/password "
+            "(or Windows Hello), then retry. Offline CLI/tray must not open a sealed vault."
+        )
+
+
+def plaintext_is_usable_sqlite() -> bool:
+    return plaintext_present()
+
+
+def prefer_unseal_over_plaintext() -> bool:
+    """True when sealed exists and leftover plaintext looks empty/stale/corrupt."""
+    if not sealed_present():
+        return False
+    if not plaintext_present():
+        return True
+    try:
+        plain = plaintext_db_path()
+        sealed = sealed_db_path()
+        # Empty or tiny file → prefer sealed
+        if plain.stat().st_size < 4096:
+            return True
+        # Sealed newer than plaintext → prefer sealed (seal succeeded after open)
+        if sealed.stat().st_mtime >= plain.stat().st_mtime:
+            return True
+    except OSError:
+        return True
+    return False
+
+
 def status() -> dict[str, Any]:
     meta = load_meta() or {}
     enc = encryption_enabled()

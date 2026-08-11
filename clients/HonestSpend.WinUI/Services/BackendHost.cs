@@ -299,6 +299,8 @@ public sealed class BackendHost : IDisposable
 
     public async Task<bool> RestartAsync(CancellationToken ct = default)
     {
+        // Seal while engine is still alive (encrypted vaults)
+        try { await AppLockService.SealDatabaseAsync(ct); } catch { /* best-effort */ }
         Stop();
         await Task.Delay(400, ct);
         return await EnsureRunningAsync(ct);

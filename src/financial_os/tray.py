@@ -196,11 +196,13 @@ def run_tray(*, poll_seconds: int = 60) -> None:
                     return
         except Exception:
             pass
-        # Offline: run engine import if DB available
+        # Offline: only if books are not encrypted/sealed
         try:
             from financial_os.db import init_db, make_engine, make_session_factory
+            from financial_os.services.db_crypto import refuse_offline_open_if_encrypted
             from financial_os.services.import_inbox import process_inbox
 
+            refuse_offline_open_if_encrypted()
             eng = make_engine()
             init_db(eng)
             Session = make_session_factory(eng)
@@ -211,6 +213,9 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             seen = data.get("files_seen", 0)
             if icon:
                 notify(icon, "HonestSpend · import", f"Inbox: {seen} file(s) · {n} new")
+        except RuntimeError as e:
+            if icon:
+                notify(icon, "HonestSpend · import", str(e)[:120])
         except Exception as e:
             if icon:
                 notify(icon, "HonestSpend · import", f"Failed: {e}")

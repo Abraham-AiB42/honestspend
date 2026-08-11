@@ -409,6 +409,12 @@ def compute_ifpp(
             "the same cash can only pay off one charge path)."
         )
 
+    buf = effective_safety_buffer(
+        cash_accounts,
+        total_buffer=safety_buffer,
+        never_negative_scope=never_negative_scope,
+    )
+
     return IfppResult(
         as_of=as_of,
         mode=mode,
@@ -422,6 +428,9 @@ def compute_ifpp(
         details={
             "horizon_days": horizon_days,
             "safety_buffer": str(safety_buffer),
+            "total_floor_buffer": str(_d(buf.get("total_floor", safety_buffer)).quantize(Decimal("0.01"))),
+            "per_account_buffer_sum": str(_d(buf.get("per_account_sum", ZERO)).quantize(Decimal("0.01"))),
+            "effective_buffer": str(_d(buf.get("effective", safety_buffer)).quantize(Decimal("0.01"))),
             "never_negative_scope": never_negative_scope,
             "tax_vault": str(max(ZERO, _d(tax_vault))),
             "cash_accounts": len([a for a in cash_accounts if a.is_cash_for_ifpp]),

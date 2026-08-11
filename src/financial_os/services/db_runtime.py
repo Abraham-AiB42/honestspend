@@ -98,10 +98,21 @@ def unlock(*, secret: str | None = None, dek_b64: str | None = None) -> dict[str
             return boot()
 
         dek = dc.resolve_dek(secret=secret, dek_b64=dek_b64)
-        if dc.sealed_present() and not dc.plaintext_present():
+        # Prefer sealed when leftover plaintext is empty/stale (avoid empty-ledger orphan)
+        if dc.sealed_present() and (
+            not dc.plaintext_present() or dc.prefer_unseal_over_plaintext()
+        ):
+            # Remove stale/empty leftover so unseal can write cleanly
+            if dc.plaintext_present() and dc.prefer_unseal_over_plaintext():
+                try:
+                    from financial_os.services.db_crypto import _wipe_or_remove, plaintext_db_path
+
+                    _wipe_or_remove(plaintext_db_path())
+                except Exception:
+                    pass
             dc.unseal_database(dek)
         elif dc.plaintext_present():
-            # Crash leftover plaintext — open after DEK recovered (will re-seal on exit)
+            # Crash leftover plaintext still valid — open after DEK recovered
             pass
         elif not dc.plaintext_present():
             raise ValueError("No sealed or plaintext database found")

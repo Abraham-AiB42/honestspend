@@ -397,7 +397,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    public void RefreshLockChip()
+    public async void RefreshLockChip()
     {
         try
         {
@@ -405,13 +405,33 @@ public sealed partial class MainWindow : Window
             if (AppLockService.NeedsUnlock)
             {
                 LockChipBtn.Content = "Books locked";
+                LockChipBtn.Visibility = Visibility.Visible;
                 LockChipBtn.IsEnabled = true;
                 return;
             }
-            LockChipBtn.Content = AppLockService.IsLockEnabled || AppLockService.IsUnlocked
-                ? "Seal & lock"
-                : "Books unlocked";
-            // When no lock configured, chip still can show unlocked; seal only if encryption on
+            var enc = false;
+            try
+            {
+                using var api = new LedgerApiClient();
+                if (await api.HealthAsync())
+                {
+                    var h = await api.GetHealthDetailsAsync();
+                    enc = h is JsonElement he
+                        && he.TryGetProperty("encryption_enabled", out var e)
+                        && e.ValueKind == JsonValueKind.True;
+                }
+            }
+            catch { /* offline */ }
+
+            // Only show seal/lock when lock or encryption actually does something
+            if (!AppLockService.IsLockEnabled && !enc)
+            {
+                LockChipBtn.Content = "Books unlocked";
+                LockChipBtn.Visibility = Visibility.Collapsed;
+                return;
+            }
+            LockChipBtn.Visibility = Visibility.Visible;
+            LockChipBtn.Content = "Seal & lock";
             LockChipBtn.IsEnabled = true;
         }
         catch { /* ignore */ }
@@ -426,12 +446,19 @@ public sealed partial class MainWindow : Window
                 ForceLockScreen();
                 return;
             }
-            // Seal books then show lock UI
+            if (!AppLockService.IsLockEnabled)
+            {
+                // Encryption-only: seal without forcing junk PIN on LockPage
+                LockChipBtn.IsEnabled = false;
+                LockChipBtn.Content = "Sealing…";
+                await AppLockService.SealDatabaseAsync();
+                LockChipBtn.Content = "Sealed";
+                return;
+            }
             LockChipBtn.IsEnabled = false;
             LockChipBtn.Content = "Sealing…";
             await AppLockService.SealDatabaseAsync();
             AppLockService.LockSession();
-            RefreshLockChip();
             ForceLockScreen();
         }
         catch (Exception ex)

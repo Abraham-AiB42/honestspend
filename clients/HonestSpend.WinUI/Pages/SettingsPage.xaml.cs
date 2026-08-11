@@ -435,56 +435,24 @@ public sealed partial class SettingsPage : Page
             var dest = DataDirBox.Text?.Trim();
             if (string.IsNullOrWhiteSpace(dest))
                 throw new InvalidOperationException("Set a data dir path first (or Suggest OneDrive).");
-            Directory.CreateDirectory(dest);
-
-            // Source: current engine path if known, else default home
-            var srcDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".financial-os");
-            try
-            {
-                using var api = new LedgerApiClient();
-                await api.EnsureBackendAsync();
-                var info = await api.GetSystemInfoAsync();
-                var p = JsonUi.Str(info, "data_dir", "");
-                if (!string.IsNullOrWhiteSpace(p) && Directory.Exists(p))
-                    srcDir = p;
-            }
-            catch
-            {
-                /* use default home */
-            }
-
-            var srcDb = Path.Combine(srcDir, "financial_os.db");
-            var destDb = Path.Combine(dest, "financial_os.db");
-            if (!File.Exists(srcDb))
-                throw new InvalidOperationException($"No database at {srcDb}");
 
             var confirm = new ContentDialog
             {
-                Title = "Copy database?",
-                Content = $"From:\n{srcDb}\n\nTo:\n{destDb}\n\nThen save connection and restart engine.",
-                PrimaryButtonText = "Copy",
+                Title = "Move books folder?",
+                Content =
+                    $"Seal (if encrypted), copy full books bundle (db/sealed/crypto/license), " +
+                    $"set data dir, and restart engine.\n\nDestination:\n{dest}",
+                PrimaryButtonText = "Move",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = XamlRoot,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
 
-            File.Copy(srcDb, destDb, overwrite: true);
-            // also copy backups folder if present
-            var srcBak = Path.Combine(srcDir, "backups");
-            var destBak = Path.Combine(dest, "backups");
-            if (Directory.Exists(srcBak))
-            {
-                Directory.CreateDirectory(destBak);
-                foreach (var f in Directory.GetFiles(srcBak))
-                    File.Copy(f, Path.Combine(destBak, Path.GetFileName(f)), overwrite: true);
-            }
-
-            AppConfig.DataDir = dest;
-            ApplicationData.Current.LocalSettings.Values["DataDir"] = dest;
-            PathsHintText.Text = $"Copied DB to {destDb}. Click Save connection, then Start engine to use FOS_DATA_DIR.";
+            await StorageLocationService.ApplyAndRestartEngineAsync(dest, copyFromPrevious: true);
+            DataDirBox.Text = dest;
+            PathsHintText.Text =
+                $"Books moved to {dest}. Unlock if prompted. Engine restarted with FOS_DATA_DIR.";
         }
         catch (Exception ex)
         {
@@ -601,16 +569,46 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
+            // Require secret if encryption is on — half-clear is forbidden
+            var pinBox = new PasswordBox { Header = "PIN/password (required if books are encrypted)" };
+            var dlg = new ContentDialog
+            {
+                Title = "Turn off app lock",
+                Content = new StackPanel
+                {
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = "This also decrypts books to plaintext if encryption is on. Leave blank only if you never set encryption.",
+                            TextWrapping = TextWrapping.Wrap,
+                        },
+                        pinBox,
+                    },
+                },
+                PrimaryButtonText = "Turn off",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot,
+            };
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                return;
+            var secret = pinBox.Password;
+            if (!string.IsNullOrEmpty(secret))
+            {
+                await AppLockService.UnlockDatabaseAsync(secret);
+                try { await AppLockService.DisableDatabaseEncryptionAsync(secret); }
+                catch { /* may already be off */ }
+            }
             AppLockService.SetNone();
-            AppLockMsgText.Text =
-                "App lock UI disabled. If books were encrypted, use Clear lock with your PIN to also decrypt, or leave sealed.";
+            AppLockMsgText.Text = "App lock off" +
+                (string.IsNullOrEmpty(secret) ? "." : " and encryption disabled (books plaintext).");
             RefreshAppLockStatus();
         }
         catch (Exception ex)
         {
             AppLockMsgText.Text = ex.Message;
         }
-        await Task.CompletedTask;
     }
 
     private async void AppLockPin_Click(object sender, RoutedEventArgs e)
@@ -755,15 +753,28 @@ public sealed partial class SettingsPage : Page
     private async Task StartEngine_Click_Core()
     {
         Save_Click(this, new RoutedEventArgs());
-        // Force new process so FOS_DATA_DIR is picked up
+        // Seal then restart so FOS_DATA_DIR is picked up without leaving plaintext
+        StatusText.Text = "Sealing / restarting engine…";
         try
         {
-            App.Backend?.Dispose();
+            if (App.Backend is not null)
+            {
+                var okRestart = await App.Backend.RestartAsync();
+                StatusText.Text = okRestart
+                    ? "Engine healthy on " + AppConfig.BaseUrl +
+                      (string.IsNullOrWhiteSpace(AppConfig.DataDir) ? "" : " · FOS_DATA_DIR=" + AppConfig.DataDir)
+                    : ("Failed: " + (App.Backend.LastError ?? "unknown"));
+                if (okRestart)
+                {
+                    await LoadPathsAsync();
+                    await LoadFiscalAsync();
+                }
+                return;
+            }
             App.Backend = new BackendHost();
         }
         catch { /* ignore */ }
 
-        StatusText.Text = "Starting…";
         if (App.Backend is null)
         {
             StatusText.Text = "Backend host not available.";

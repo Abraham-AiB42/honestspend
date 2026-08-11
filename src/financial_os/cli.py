@@ -12,9 +12,22 @@ from financial_os.db import init_db, make_engine, make_session_factory
 from financial_os.seed import seed_all
 
 
-def cmd_init_db(_args: argparse.Namespace) -> int:
+def _require_plain_engine():
+    """Open DB only when not sealed/encrypted-offline. Raises RuntimeError if locked."""
+    from financial_os.services.db_crypto import refuse_offline_open_if_encrypted
+
+    refuse_offline_open_if_encrypted()
     engine = make_engine()
     init_db(engine)
+    return engine
+
+
+def cmd_init_db(_args: argparse.Namespace) -> int:
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         seed_all(session)
@@ -62,8 +75,11 @@ def cmd_serve(args: argparse.Namespace) -> int:
 def cmd_import_xlsx(args: argparse.Namespace) -> int:
     from financial_os.services.excel_import import import_budget_xlsx
 
-    engine = make_engine()
-    init_db(engine)
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         seed_all(session)
@@ -93,7 +109,11 @@ def cmd_tax_packet(args: argparse.Namespace) -> int:
     from financial_os.db import Profile
     from financial_os.services.tax_packet import write_tax_packet_dir
 
-    engine = make_engine()
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         profile = session.query(Profile).filter(Profile.slug == args.profile).first()
@@ -122,8 +142,11 @@ def cmd_backup(args: argparse.Namespace) -> int:
 
     from financial_os.services.backup import create_backup, maybe_auto_backup, prune_backups
 
-    engine = make_engine()
-    init_db(engine)
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         if args.force or args.auto:
@@ -188,8 +211,11 @@ def cmd_digest(_args: argparse.Namespace) -> int:
 
     from financial_os.services.digest import build_digest
 
-    engine = make_engine()
-    init_db(engine)
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         seed_all(session)
@@ -207,8 +233,11 @@ def cmd_token(args: argparse.Namespace) -> int:
     from financial_os.db import AppUser
     from financial_os.services.permissions import generate_api_token
 
-    engine = make_engine()
-    init_db(engine)
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         seed_all(session)
@@ -254,8 +283,11 @@ def cmd_import_inbox(args: argparse.Namespace) -> int:
     """Process data_dir/inbox CSV drops into accounts."""
     from financial_os.services.import_inbox import ensure_inbox_layout, process_inbox
 
-    engine = make_engine()
-    init_db(engine)
+    try:
+        engine = _require_plain_engine()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 3
     session = make_session_factory(engine)()
     try:
         layout = ensure_inbox_layout()

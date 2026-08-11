@@ -60,9 +60,17 @@ def build_home_simple(
     det = ifpp.details or {}
     why_lines = []
     why_lines.append(f"Cash after bills & buffer: ${cash_raw}")
-    buf = det.get("safety_buffer")
-    if buf and str(buf) not in ("0", "0.00"):
-        why_lines.append(f"Safety buffer reserved: ${buf}")
+    eff = det.get("effective_buffer") or det.get("safety_buffer")
+    if eff and str(eff) not in ("0", "0.00"):
+        floor = det.get("total_floor_buffer") or det.get("safety_buffer")
+        per = det.get("per_account_buffer_sum")
+        if per and str(per) not in ("0", "0.00") and str(floor) != str(eff):
+            why_lines.append(
+                f"Safety buffer (effective): ${eff} "
+                f"(max of floor ${floor} and per-account ${per})"
+            )
+        else:
+            why_lines.append(f"Safety buffer reserved: ${eff}")
     tv = det.get("tax_vault")
     if tv and str(tv) not in ("0", "0.00"):
         why_lines.append(f"Tax vault reserved: ${tv}")

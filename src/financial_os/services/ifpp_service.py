@@ -242,15 +242,41 @@ def run_ifpp(
     # (strict / conservative Safe to spend). When False, pending is warning-only.
     cash_before_pending = result.cash_spendable
     if cleared_only and pend_out > 0:
+        from financial_os.engine.ifpp import card_safe_to_charge
+
         new_cash = max(D("0"), D(str(result.cash_spendable)) - pend_out)
         delta = D(str(result.cash_spendable)) - new_cash
         result.cash_spendable = new_cash.quantize(D("0.01"))
-        # Keep combined consistent with best-card float
+        # Recompute card plans with reduced cash (same cash can't pay pending + float)
+        mode_s = mode or settings.ifpp_mode or "conservative"
+        rebuilt = []
+        for card in cards:
+            rebuilt.append(
+                card_safe_to_charge(
+                    card,
+                    as_of=as_of,
+                    cash_available_for_payoff=result.cash_spendable,
+                    schedule=scheduled,
+                    mode=mode_s,
+                    soft_util_pct=settings.utilization_warn_soft,
+                    hard_util_pct=settings.utilization_warn_hard,
+                )
+            )
+        result.cards = rebuilt
+        positive = [c for c in rebuilt if c.safe_to_charge > 0]
+        best = max(positive, key=lambda c: c.safe_to_charge) if positive else None
+        result.card_float_interest_free = (
+            best.safe_to_charge.quantize(D("0.01")) if best else D("0.00")
+        )
         result.combined_purchasing_power = (
             result.cash_spendable + result.card_float_interest_free
         ).quantize(D("0.01"))
         result.details["pending_reserved"] = str(delta.quantize(D("0.01")))
         result.details["cash_before_pending"] = str(cash_before_pending)
+        result.details["card_float_after_pending"] = True
+        if best:
+            result.details["best_card_id"] = best.account_id
+            result.details["best_card_name"] = best.name
         result.warnings.append(
             f"Strict mode: reserved ${delta} for {len(pending_rows)} pending outflow(s)."
         )

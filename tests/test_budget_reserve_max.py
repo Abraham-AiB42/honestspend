@@ -54,7 +54,7 @@ def test_reserve_max_per_category_not_stack(tmp_path: Path, monkeypatch):
     )
     s.commit()
     st = budgets_status(s, profile_id=p.id, as_of=date.today())
-    assert st.get("reserve_mode") == "max_remaining_per_category"
+    assert "max_remaining_per_category" in str(st.get("reserve_mode") or "")
     # With no spend, remaining ≈ plan; must not be 50+800
     reserve = budget_reserve_total(s, profile_id=p.id, as_of=date.today())
     assert reserve <= Decimal("800.01")

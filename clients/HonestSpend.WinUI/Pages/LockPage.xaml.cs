@@ -35,8 +35,10 @@ public sealed partial class LockPage : Page
         // If only encryption (edge) show PIN box
         if (mode == AppLockService.LockMode.None)
         {
-            HintText.Text = "Books are encrypted. Enter your PIN or password to open them.";
-            UnlockBtn.Content = "Unlock books";
+            HintText.Text =
+                "Books need to be unlocked. Enter your PIN/password if you set one, " +
+                "or tap Continue if encryption is off.";
+            UnlockBtn.Content = "Unlock / Continue";
         }
         UnlockBtn.Visibility = mode is not AppLockService.LockMode.Platform
             ? Visibility.Visible
@@ -70,14 +72,28 @@ public sealed partial class LockPage : Page
         }
         else if (string.IsNullOrEmpty(secret))
         {
-            ErrorText.Text = "Enter your PIN or password.";
+            // No UI lock + empty secret: allow only if books already ready (encryption off)
+            AppLockService.MarkUnlocked();
+            using var api = new LedgerApiClient();
+            try
+            {
+                await api.EnsureBackendAsync();
+                if (await api.BooksReadyAsync())
+                {
+                    if (App.MainWindowInstance is MainWindow mw)
+                        mw.OnAppUnlocked();
+                    return;
+                }
+            }
+            catch { /* fall through */ }
+            ErrorText.Text = "Enter your PIN or password to decrypt books.";
             return;
         }
         else
         {
             AppLockService.MarkUnlocked();
         }
-        await FinishUnlockedAsync(secret);
+        await FinishUnlockedAsync(string.IsNullOrEmpty(secret) ? null : secret);
     }
 
     private async void Hello_Click(object sender, RoutedEventArgs e)

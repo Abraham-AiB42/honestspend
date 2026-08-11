@@ -37,6 +37,22 @@ DAILY_LOOKBACK_DAYS = 90
 WEEKLY_LOOKBACK_WEEKS = 24
 MONTHLY_LOOKBACK_MONTHS = 18
 
+# Fixed obligations usually already in IFPP schedule as bills — do not also
+# reserve remaining envelopes (avoids rent bill + rent budget double-count).
+FIXED_OBLIGATION_BUDGET_GROUPS = frozenset(
+    {
+        "housing",
+        "utilities",
+        "insurance",
+        "debt",
+        "loan",
+        "transfer",
+        "income",
+        "taxes",
+        "tax",
+    }
+)
+
 
 def _d(v: Any) -> Decimal:
     if v is None:
@@ -248,9 +264,10 @@ def budgets_status(
     if pid is None:
         return {"as_of": as_of.isoformat(), "items": [], "reserve_total": "0.00"}
     items = []
-    # Honesty: do not stack daily+weekly+monthly for the same category.
-    # Reserve = sum over categories of max(remaining) across periods.
+    # Honesty: max remaining per category; skip fixed-obligation groups (bills already
+    # in IFPP schedule) so rent isn't reserved twice.
     best_by_cat: dict[int, Decimal] = {}
+    skipped_fixed = 0
     for rule in list_rules(session, pid):
         st = rule_status(session, rule, as_of=as_of)
         if st:
@@ -260,10 +277,18 @@ def budgets_status(
                 rem = _d(st.get("remaining"))
                 if rem < ZERO:
                     rem = ZERO
-                if cid > 0:
-                    prev = best_by_cat.get(cid, ZERO)
-                    if rem > prev:
-                        best_by_cat[cid] = rem
+                if cid <= 0:
+                    continue
+                cat = session.get(Category, cid)
+                bg = (cat.budget_group or "").lower() if cat else ""
+                if bg in FIXED_OBLIGATION_BUDGET_GROUPS:
+                    skipped_fixed += 1
+                    st["reserves_safe_to_spend"] = False
+                    continue
+                st["reserves_safe_to_spend"] = True
+                prev = best_by_cat.get(cid, ZERO)
+                if rem > prev:
+                    best_by_cat[cid] = rem
     reserve = sum(best_by_cat.values(), ZERO)
     settings = _settings(session)
     return {
@@ -271,7 +296,8 @@ def budgets_status(
         "profile_id": pid,
         "reserve_enabled": bool(getattr(settings, "budget_reserve_enabled", True)),
         "reserve_total": str(reserve.quantize(Decimal("0.01"))),
-        "reserve_mode": "max_remaining_per_category",
+        "reserve_mode": "max_remaining_per_category_discretionary",
+        "skipped_fixed_obligation_rules": skipped_fixed,
         "items": items,
         "by_period": {
             "daily": [i for i in items if i["period"] == "daily"],
