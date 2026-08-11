@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace HonestSpend_WinUI.Pages;
 
-/// <summary>Step wizards for cash, savings, card, loan, bill, income, business, child.</summary>
+/// <summary>Step wizards for cash, savings, card, loan, bill, income, owner_draw, business, child.</summary>
 public sealed partial class MoneyWizardPage : Page
 {
     private string _kind = "cash";
@@ -31,10 +31,15 @@ public sealed partial class MoneyWizardPage : Page
     private ComboBox? _accountBox;
     private ComboBox? _taxBox;
     private CalendarDatePicker? _nextDateBox;
+    private CalendarDatePicker? _startDateBox;
+    private CalendarDatePicker? _endDateBox;
     private CalendarDatePicker? _promoEndBox;
     private CheckBox? _promoBox;
     private ComboBox? _autopayBox;
     private CheckBox? _certaintyBox;
+    private TextBox? _vendorBox;
+    private TextBox? _incomeSourceBox;
+    private ComboBox? _opexBox;
     private RewardsRatesUi? _rewardsUi;
     private Dictionary<string, decimal>? _rewardsRates;
 
@@ -56,6 +61,7 @@ public sealed partial class MoneyWizardPage : Page
             "loan" => "Add loan",
             "bill" => "Add bill",
             "income" => "Add income",
+            "owner_draw" => "Add owner draw",
             "business" => "Add business",
             "child" => "Add child",
             _ => "Add",
@@ -87,15 +93,18 @@ public sealed partial class MoneyWizardPage : Page
         "cash" or "savings" => 3,
         "card" => 5,
         "loan" => 4,
-        "bill" or "income" => 5,
+        "bill" or "income" or "owner_draw" => 5,
         "business" or "child" => 2,
         _ => 2,
     };
+
+    private bool IsScheduleKind => _kind is "bill" or "income" or "owner_draw";
 
     private void RenderStep()
     {
         ErrorBar.IsOpen = false;
         FieldsPanel.Children.Clear();
+        HintText.Text = "";
         StepText.Text = $"Step {_step + 1} of {MaxStep + 1}";
         BackBtn.IsEnabled = _step > 0;
         NextBtn.Content = _step >= MaxStep ? "Finish" : "Next";
@@ -114,6 +123,7 @@ public sealed partial class MoneyWizardPage : Page
                 break;
             case "bill":
             case "income":
+            case "owner_draw":
                 RenderBillSteps();
                 break;
             case "business":
@@ -264,12 +274,40 @@ public sealed partial class MoneyWizardPage : Page
 
     private void RenderBillSteps()
     {
-        var isBill = _kind == "bill";
+        var isOut = _kind is "bill" or "owner_draw";
         if (_step == 0)
         {
-            QuestionText.Text = isBill ? "What bill is this?" : "What income is this?";
-            _nameBox = new TextBox { Header = "Name", PlaceholderText = isBill ? "Rent / utilities" : "Paycheck" };
+            QuestionText.Text = _kind switch
+            {
+                "bill" => "What bill is this?",
+                "owner_draw" => "Owner draw name",
+                _ => "What income is this?",
+            };
+            _nameBox = new TextBox
+            {
+                Header = "Name",
+                PlaceholderText = _kind switch
+                {
+                    "bill" => "Rent / utilities",
+                    "owner_draw" => "Owner draw",
+                    _ => "Paycheck",
+                },
+            };
             FieldsPanel.Children.Add(_nameBox);
+            if (_kind is "bill" or "owner_draw")
+            {
+                _vendorBox = new TextBox { Header = "Vendor", PlaceholderText = "Who you pay (optional)" };
+                FieldsPanel.Children.Add(_vendorBox);
+            }
+            else
+            {
+                _incomeSourceBox = new TextBox
+                {
+                    Header = "Income source",
+                    PlaceholderText = "Job, retainers, rent…",
+                };
+                FieldsPanel.Children.Add(_incomeSourceBox);
+            }
         }
         else if (_step == 1)
         {
@@ -288,18 +326,25 @@ public sealed partial class MoneyWizardPage : Page
         }
         else if (_step == 3)
         {
-            QuestionText.Text = "Next date";
+            QuestionText.Text = "When?";
+            HintText.Text = "Starts / Ends window the series; next date is the first hit.";
+            _startDateBox = new CalendarDatePicker { Header = "Starts", Date = DateTimeOffset.Now };
             _nextDateBox = new CalendarDatePicker { Header = "Next date", Date = DateTimeOffset.Now.AddDays(7) };
+            _endDateBox = new CalendarDatePicker { Header = "Ends (optional)" };
+            FieldsPanel.Children.Add(_startDateBox);
             FieldsPanel.Children.Add(_nextDateBox);
+            FieldsPanel.Children.Add(_endDateBox);
         }
         else if (_step == 4)
         {
-            QuestionText.Text = isBill ? "Paid from which account?" : "Deposits to which account?";
-            HintText.Text = "Pick by name — this powers Safe to spend.";
-            _accountBox = AccountCombo();
+            QuestionText.Text = _kind == "income"
+                ? "Deposits to which account?"
+                : "Pay from which account?";
+            HintText.Text = "Cash or credit — this powers Safe to spend.";
+            _accountBox = PayFromAccountCombo();
             if (_accountBox.Items.Count == 0)
             {
-                HintText.Text = "No accounts yet. Finish this later, or go to Add → Checking first.";
+                HintText.Text = "No cash/credit accounts yet. Add checking or a card first.";
             }
             FieldsPanel.Children.Add(_accountBox);
         }
@@ -308,15 +353,31 @@ public sealed partial class MoneyWizardPage : Page
             QuestionText.Text = "Is the amount fixed?";
             _certaintyBox = new CheckBox
             {
-                Content = isBill ? "Yes — fixed bill" : "Mostly reliable income",
-                IsChecked = isBill,
+                Content = isOut
+                    ? (_kind == "owner_draw" ? "Yes — fixed draw" : "Yes — fixed bill")
+                    : "Mostly reliable income",
+                IsChecked = isOut,
             };
-            HintText.Text = isBill
+            HintText.Text = isOut
                 ? "Uncheck if it varies (we'll treat it more carefully)."
                 : "Uncheck if commission/variable — we'll haircut it in careful mode.";
             FieldsPanel.Children.Add(_certaintyBox);
+
+            // Opex class when any selected/related profile is a business
+            if (isOut && HasBusinessProfile())
+            {
+                _opexBox = new ComboBox { Header = "Opex class (business)" };
+                _opexBox.Items.Add(new ComboBoxItem { Content = "Fixed", Tag = "fixed" });
+                _opexBox.Items.Add(new ComboBoxItem { Content = "Variable", Tag = "variable" });
+                _opexBox.SelectedIndex = 0;
+                FieldsPanel.Children.Add(_opexBox);
+            }
         }
     }
+
+    private bool HasBusinessProfile()
+        => _profiles.Any(p =>
+            string.Equals(JsonUi.Str(p, "entity_type"), "business", StringComparison.OrdinalIgnoreCase));
 
     private void RenderEntitySteps()
     {
@@ -383,6 +444,31 @@ public sealed partial class MoneyWizardPage : Page
         return box;
     }
 
+    /// <summary>Pay from: cash (checking/savings) or credit only.</summary>
+    private ComboBox PayFromAccountCombo()
+    {
+        var box = new ComboBox
+        {
+            Header = _kind == "income" ? "Deposits to" : "Pay from",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        foreach (var a in _accounts)
+        {
+            var kind = JsonUi.Str(a, "kind", "").ToLowerInvariant();
+            var isCash = a.TryGetProperty("is_cash_for_ifpp", out var ic) && ic.ValueKind == JsonValueKind.True;
+            if (kind is not ("checking" or "savings" or "cash" or "credit") && !isCash)
+                continue;
+            var role = kind == "credit" ? "credit" : "cash";
+            box.Items.Add(new ComboBoxItem
+            {
+                Content = $"{JsonUi.Str(a, "nickname")} [{role}]",
+                Tag = a.GetProperty("id").GetInt32(),
+            });
+        }
+        if (box.Items.Count > 0) box.SelectedIndex = 0;
+        return box;
+    }
+
     private void Back_Click(object sender, RoutedEventArgs e)
     {
         if (_step > 0)
@@ -440,6 +526,11 @@ public sealed partial class MoneyWizardPage : Page
     private DateTimeOffset? _promoEnd;
     private decimal _promoBal;
     private DateTimeOffset? _nextDate;
+    private DateTimeOffset? _startDate;
+    private DateTimeOffset? _endDate;
+    private string? _vendor;
+    private string? _incomeSource;
+    private string? _opexClass;
 
     private void ValidateStep()
     {
@@ -448,8 +539,8 @@ public sealed partial class MoneyWizardPage : Page
             if (_whoBox?.SelectedItem is not ComboBoxItem { Tag: int })
                 throw new InvalidOperationException("Pick who this belongs to.");
         }
-        if ((_kind is "cash" or "savings" or "card" or "loan" or "bill" or "income" or "business" or "child")
-            && _step == 1 && _kind is not "bill" and not "income")
+        if ((_kind is "cash" or "savings" or "card" or "loan" or "bill" or "income" or "owner_draw" or "business" or "child")
+            && _step == 1 && !IsScheduleKind)
         {
             if (_kind is "cash" or "savings" or "card" or "loan" or "business" or "child")
             {
@@ -462,12 +553,12 @@ public sealed partial class MoneyWizardPage : Page
             if (_dueBox is null || double.IsNaN(_dueBox.Value))
                 throw new InvalidOperationException("We need a payment due day to keep interest off the table.");
         }
-        if (_kind is "bill" or "income")
+        if (IsScheduleKind)
         {
             if (_step == 0 && string.IsNullOrWhiteSpace(_nameBox?.Text))
                 throw new InvalidOperationException("Name it so you'll recognize it.");
             if (_step == 4 && (_accountBox?.SelectedItem is not ComboBoxItem { Tag: int }))
-                throw new InvalidOperationException("Pick an account by name (or add checking first).");
+                throw new InvalidOperationException("Pick a Pay from account (cash or credit).");
         }
     }
 
@@ -492,6 +583,13 @@ public sealed partial class MoneyWizardPage : Page
         if (_promoBox is not null) _hasPromo = _promoBox.IsChecked == true;
         if (_promoEndBox is not null) _promoEnd = _promoEndBox.Date;
         if (_nextDateBox is not null) _nextDate = _nextDateBox.Date;
+        if (_startDateBox is not null) _startDate = _startDateBox.Date;
+        if (_endDateBox is not null) _endDate = _endDateBox.Date;
+        if (_vendorBox is not null)
+            _vendor = string.IsNullOrWhiteSpace(_vendorBox.Text) ? null : _vendorBox.Text.Trim();
+        if (_incomeSourceBox is not null)
+            _incomeSource = string.IsNullOrWhiteSpace(_incomeSourceBox.Text) ? null : _incomeSourceBox.Text.Trim();
+        if (_opexBox?.SelectedItem is ComboBoxItem { Tag: string opex }) _opexClass = opex;
         // promo balance reuses _balBox on promo step — capture to _promoBal
         if (_kind == "card" && _step == 4 && _balBox is not null && !double.IsNaN(_balBox.Value))
             _promoBal = (decimal)_balBox.Value;
@@ -569,7 +667,7 @@ public sealed partial class MoneyWizardPage : Page
             });
             MsgText.Text = "Loan added — payoff planning will include it.";
         }
-        else if (_kind is "bill" or "income")
+        else if (IsScheduleKind)
         {
             if (_acctId == 0 && _accountBox?.SelectedItem is ComboBoxItem { Tag: int a }) _acctId = a;
             var acct = _accounts.FirstOrDefault(x => x.GetProperty("id").GetInt32() == _acctId);
@@ -578,22 +676,52 @@ public sealed partial class MoneyWizardPage : Page
                 : (_profiles.FirstOrDefault().ValueKind != JsonValueKind.Undefined
                     ? _profiles[0].GetProperty("id").GetInt32()
                     : 1);
-            var signed = _kind == "bill" ? -Math.Abs(_amt) : Math.Abs(_amt);
+            var apiKind = _kind switch
+            {
+                "bill" => "expense",
+                "owner_draw" => "owner_draw",
+                _ => "income",
+            };
+            var signed = apiKind is "expense" or "owner_draw" ? -Math.Abs(_amt) : Math.Abs(_amt);
             var next = (_nextDate ?? DateTimeOffset.Now.AddDays(7)).Date.ToString("yyyy-MM-dd");
-            await api.CreateScheduledAsync(new Dictionary<string, object?>
+            var defaultName = _kind switch
+            {
+                "bill" => "Bill",
+                "owner_draw" => "Owner draw",
+                _ => "Income",
+            };
+            var name = string.IsNullOrWhiteSpace(_name) ? defaultName : _name;
+            var body = new Dictionary<string, object?>
             {
                 ["profile_id"] = pid,
-                ["name"] = string.IsNullOrWhiteSpace(_name) ? (_kind == "bill" ? "Bill" : "Income") : _name,
+                ["name"] = name,
                 ["amount"] = signed,
                 ["next_date"] = next,
                 ["cadence"] = _cadence,
                 ["certainty"] = _certainty,
-                ["kind"] = _kind == "bill" ? "expense" : "income",
+                ["kind"] = apiKind,
                 ["account_id"] = _acctId,
-            });
-            MsgText.Text = _kind == "bill"
-                ? "Bill scheduled — Safe to spend will protect checking."
-                : "Income scheduled.";
+                ["series_id"] = Guid.NewGuid().ToString("N"),
+                ["series_label"] = name,
+            };
+            if (_startDate is not null)
+                body["start_date"] = _startDate.Value.Date.ToString("yyyy-MM-dd");
+            if (_endDate is not null)
+                body["end_date"] = _endDate.Value.Date.ToString("yyyy-MM-dd");
+            if (!string.IsNullOrWhiteSpace(_vendor))
+                body["vendor"] = _vendor;
+            if (apiKind == "income" && !string.IsNullOrWhiteSpace(_incomeSource))
+                body["income_source"] = _incomeSource;
+            if ((apiKind is "expense" or "owner_draw") && !string.IsNullOrWhiteSpace(_opexClass))
+                body["opex_class"] = _opexClass;
+
+            await api.CreateScheduledAsync(body);
+            MsgText.Text = _kind switch
+            {
+                "bill" => "Bill scheduled — Safe to spend will protect checking.",
+                "owner_draw" => "Owner draw scheduled.",
+                _ => "Income scheduled.",
+            };
         }
         else if (_kind is "business" or "child")
         {

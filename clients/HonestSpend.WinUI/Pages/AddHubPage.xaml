@@ -34,18 +34,24 @@
             </Grid>
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Recurring" />
-            <Grid ColumnSpacing="12">
+            <Grid ColumnSpacing="12" RowSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Button Content="Bill (money out)" Tag="bill" Click="Kind_Click"
                         HorizontalAlignment="Stretch" Padding="16" />
                 <Button Content="Income (money in)" Tag="income" Click="Kind_Click"
                         HorizontalAlignment="Stretch" Padding="16" Grid.Column="1" />
+                <Button Content="Owner draw (biz → personal)" Tag="owner_draw" Click="Kind_Click"
+                        HorizontalAlignment="Stretch" Padding="16" Grid.Row="1" Grid.ColumnSpan="2" />
             </Grid>
 
-            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="People / entities" />
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="People / money piles" />
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

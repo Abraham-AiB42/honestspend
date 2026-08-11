@@ -271,6 +271,9 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetCashflowReportAsync(int days = 30, CancellationToken ct = default)
         => GetJsonAsync($"api/reports/cashflow?days={days}", ct);
 
+    public Task<JsonElement> GetEntityPnlAsync(int profileId, int year, CancellationToken ct = default)
+        => GetJsonAsync($"api/reports/entity-pnl?profile_id={profileId}&year={year}", ct);
+
     public Task<JsonElement> GetDebtReportAsync(CancellationToken ct = default)
     {
         var q = "api/reports/debt";
@@ -488,6 +491,17 @@ public sealed class LedgerApiClient : IDisposable
 
     public Task<JsonElement> EndScheduledAsync(int id, string? reason = null, CancellationToken ct = default)
         => PostJsonAsync($"api/scheduled/{id}/end", new { reason }, ct);
+
+    /// <summary>List versioned schedule series (grouped segments) for a profile.</summary>
+    public Task<JsonElement> GetScheduledSeriesAsync(int profileId, CancellationToken ct = default)
+        => GetJsonAsync($"api/scheduled/series?profile_id={profileId}", ct);
+
+    /// <summary>
+    /// Close the open series segment and insert a new amount step (effective_from).
+    /// Body: series_id, new_amount, effective_from; optional end_date, next_date.
+    /// </summary>
+    public Task<JsonElement> AddSeriesStepAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/scheduled/series/step", body, ct);
 
     /// <summary>
     /// Mark one scheduled expense occurrence paid (optional cleared txn + advance next_date).
