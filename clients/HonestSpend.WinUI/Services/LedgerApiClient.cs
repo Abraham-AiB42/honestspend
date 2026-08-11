@@ -437,6 +437,9 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetAccountCycleAsync(int accountId, CancellationToken ct = default)
         => GetJsonAsync($"api/accounts/{accountId}/cycle", ct);
 
+    public Task<JsonElement> GetAccountPeakAsync(int accountId, int lookbackDays = 90, CancellationToken ct = default)
+        => GetJsonAsync($"api/accounts/{accountId}/peak?lookback_days={lookbackDays}", ct);
+
     /// <summary>
     /// PUT cycle-config. Uses null-preserving JSON so clearing pay-from cash
     /// (<c>payment_funding_account_id: null</c>) reaches the server (default

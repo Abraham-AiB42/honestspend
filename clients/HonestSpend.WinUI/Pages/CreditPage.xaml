@@ -166,6 +166,8 @@
                                        Text="Projected statement: —" />
                             <TextBlock x:Name="CycleNextPaymentText" FontWeight="SemiBold" TextWrapping="Wrap"
                                        Text="Next payment: —" />
+                            <TextBlock x:Name="CyclePeakText" Opacity="0.85" FontSize="12" TextWrapping="Wrap"
+                                       Visibility="Collapsed" Text="" />
                             <TextBlock x:Name="CycleDatesText" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
                             <TextBlock x:Name="CycleWarningsText" Foreground="{ThemeResource SystemFillColorCautionBrush}"
                                        FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" />

@@ -417,6 +417,8 @@ public sealed partial class CreditPage : Page
         {
             CycleProjectedText.Text = "Projected statement: —";
             CycleNextPaymentText.Text = "Next payment: —";
+            CyclePeakText.Text = "";
+            CyclePeakText.Visibility = Visibility.Collapsed;
             CycleDatesText.Text = "";
             PromoLineList.ItemsSource = new List<string> { "Pick a card to see promo lines." };
             PromoCalendarSummary.Text = "Pick a card to see the promo calendar.";
@@ -439,12 +441,31 @@ public sealed partial class CreditPage : Page
             var fundId = JsonUi.Int(c, "funding_account_id", JsonUi.Int(c, "payment_funding_account_id"));
             SelectIntTag(CycleFundingBox, fundId);
 
+            await LoadPeakLineAsync(api, id);
             await LoadPromoLinesAsync(api, id);
             await LoadFreezeHistoryAsync(api, id);
         }
         catch (Exception ex)
         {
             CycleMsg.Text = "Could not load card cycle: " + ex.Message;
+        }
+    }
+
+    private async Task LoadPeakLineAsync(LedgerApiClient api, int accountId)
+    {
+        try
+        {
+            var peak = await api.GetAccountPeakAsync(accountId, 90);
+            var days = JsonUi.Int(peak, "lookback_days", 90);
+            var lookback = JsonUi.Money(peak, "peak_lookback");
+            var cycle = JsonUi.Money(peak, "peak_open_cycle");
+            CyclePeakText.Text = $"Peak last {days}d: {lookback} · this cycle: {cycle}";
+            CyclePeakText.Visibility = Visibility.Visible;
+        }
+        catch
+        {
+            CyclePeakText.Text = "";
+            CyclePeakText.Visibility = Visibility.Collapsed;
         }
     }
 
