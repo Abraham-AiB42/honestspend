@@ -9,8 +9,8 @@
 | **Home** | Safe to spend · status · Do this next · **Coming up** · wealth basics |
 | **Home · Coming up** | Short cash-side list until **N calendar days (7–14)** or the **next 1–2 paydays** (auto when income known). Empty: “Nothing scheduled in this window — add a bill or paycheck in Add” |
 | **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
-| **Home · Coming up** | Bills + paychecks until next payday(s) or next 7–14 days (Settings). Totals cover the **full window**; list shows top rows. Cash-side only (Card payment on checking yes; Netflix on card no) |
-| **Add** | Wizards: cash, savings, card, loan, bill, income, business, child |
+| **Home · Coming up** | Bills + paychecks until next payday(s) or next 7–14 days (Settings). Totals cover the **full window**; list shows top rows. Cash-side only (Card payment on checking yes; Netflix on card no). **Owner draw** counts as outflow (never a payday); **payroll day** shows net + employer tax when both are scheduled |
+| **Add** | Wizards: cash, savings, card, loan, bill, income, business, child (business: optional payroll day; bill: pay from · owner draw · amount steps — see [BUSINESS_ENTITY.md](./BUSINESS_ENTITY.md)) |
 | **Get started** | First-run wizard (~2 min) |
 | **Can I buy?** | Pre-purchase check |
 | **Sort charges** | Plain review queue (accept categories) |
@@ -48,6 +48,8 @@ Plain list on Simple Home: bills, card cash payments, and optional paychecks thr
 | Active schedules on **cash** (checking/savings) in the window | Schedules on **credit** accounts (e.g. Netflix on the card) — same skip as Safe to spend |
 | **`Card payment · {nickname}`** on the pay-from checking account | Engine jargon (“horizon”, IFPP) |
 | Optional **income** rows (default on; `coming_up_show_income`) | — |
+| **Owner draw** (cash) as outflow | Owner draw never counts as paycheck/income |
+| **Payroll package** legs (`· net` + `· employer tax`) on the same pay date | Full payroll/HR (not in product — see [BUSINESS_ENTITY.md](./BUSINESS_ENTITY.md)) |
 
 Sort by date, then larger |amount|. Simple shows top **8** rows.
 

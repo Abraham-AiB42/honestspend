@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- **Coming up strip**: Simple Home list of cash-side bills / card payments / optional paychecks through **calendar 7–14 days** or **next 1–2 paydays** (`auto` when income known); full-window totals + truncated list; Settings picker; empty-state hint; prefs `coming_up_*`; `GET /api/coming-up` + embed on home/simple
+- **Business entity (AP Agency steals)**: versioned bill series (rent steps), pay-from cash vs card + vendor, **owner draw**, thin **payroll package** (net + employer tax), `opex_class` / `income_source`, **entity year P&L** — see [BUSINESS_ENTITY.md](docs/BUSINESS_ENTITY.md)
+- **Coming up strip**: Simple Home list of cash-side bills / card payments / optional paychecks through **calendar 7–14 days** or **next 1–2 paydays** (`auto` when income known); full-window totals + truncated list; Settings picker; empty-state hint; prefs `coming_up_*`; `GET /api/coming-up` + embed on home/simple; owner draw as outflow; payroll day legs when scheduled
 - **Statement cycles**: close day + due day + pay policy → projected **statement balance** and **next payment**; cash **pay-from** schedule so Safe to spend sees the right card outflow (no day grid; multi-entity; promo installment lines; recompute after books mutations)
 - **Pay policies + honesty**: **Pay current balance** (full books); **when cash leaves** (due day / day before close / on close) for near-zero statement strategies; utilization pay-to-target; est. interest if min; educational credit advice (not a score)
 - **Promo payoff calendar**: dynamic month span from remaining ÷ monthly (e.g. **24 mo** financing), multi-line merge; Credit UI + `GET …/promo-calendar`
@@ -10,7 +11,7 @@
 - **Statement freeze**: record bank actual vs projected (`…/statement-cycles/freeze`); Credit UI history
 - **Rewards pick**: category → best card by rates (`GET /api/rewards/pick`); Credit **Best card**
 - **Simple mode**: Home whisper only for soon card payments (within 14 days); full Credit desk stays Full books
-- Docs: [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT + SIMPLE_MODE contract
+- Docs: [BUSINESS_ENTITY.md](docs/BUSINESS_ENTITY.md), [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT + SIMPLE_MODE contract
 
 ## 1.0.55 — Trust bar + Simple mode e2e fixes + Store cert
 
