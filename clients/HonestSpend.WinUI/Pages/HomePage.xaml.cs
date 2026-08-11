@@ -1397,9 +1397,9 @@ public sealed partial class HomePage : Page
             ComingUpShowAllBtn.IsEnabled = false;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            // API caps at 50; request full window so mark-paid covers every cash outflow
+            // API caps at 50; omit mode/days so server uses AppSettings (same window as home/simple)
             var limit = _comingUpFullCount > 0 ? Math.Min(Math.Max(_comingUpFullCount, 8), 50) : 50;
-            var full = await api.GetComingUpAsync(limit: limit);
+            var full = await api.GetComingUpWithSettingsAsync(limit);
             _comingUpExpanded = true;
             BindComingUp(full, expanded: true);
         }
@@ -1465,14 +1465,21 @@ public sealed partial class HomePage : Page
 
             var name = JsonUi.Str(res, "name", label);
             var next = JsonUi.Str(res, "next_date", "");
+            var matched = res.TryGetProperty("matched", out var mt) && mt.ValueKind == JsonValueKind.True;
             var ended = res.TryGetProperty("ended", out var en) && en.ValueKind == JsonValueKind.True;
-            var msg = ended
-                ? $"{name} paid through end"
-                : string.IsNullOrEmpty(next) || next == "—"
+            string msg;
+            if (matched)
+                msg = string.IsNullOrEmpty(next) || next == "—"
+                    ? $"{name}: matched bank import — no second post"
+                    : $"{name}: matched bank import · next {next}";
+            else if (ended)
+                msg = $"{name} paid through end";
+            else
+                msg = string.IsNullOrEmpty(next) || next == "—"
                     ? $"{name} marked paid"
                     : $"{name} marked paid · next {next}";
             await RefreshAsync();
-            ShowSuccess("Marked paid", msg);
+            ShowSuccess(matched ? "Matched bank payment" : "Marked paid", msg);
         }
         catch (Exception ex)
         {

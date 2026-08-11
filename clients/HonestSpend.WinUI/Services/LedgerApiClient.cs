@@ -167,29 +167,41 @@ public sealed class LedgerApiClient : IDisposable
 
     /// <summary>
     /// Optional direct Coming up fetch (Home uses embedded <c>coming_up</c> on simple home).
+    /// When mode/calendarDays/paydayCount/showIncome are omitted (null), only limit + scope/profile
+    /// are sent so the server applies AppSettings (same window as home/simple).
     /// </summary>
     public Task<JsonElement> GetComingUpAsync(
-        string mode = "auto",
-        int calendarDays = 14,
-        int paydayCount = 1,
         int limit = 8,
-        bool showIncome = true,
+        string? mode = null,
+        int? calendarDays = null,
+        int? paydayCount = null,
+        bool? showIncome = null,
         CancellationToken ct = default)
     {
         var sc = AppState.IfppScope;
         var parts = new List<string>
         {
-            $"mode={Uri.EscapeDataString(mode)}",
-            $"calendar_days={calendarDays}",
-            $"payday_count={paydayCount}",
             $"limit={limit}",
-            $"show_income={(showIncome ? "true" : "false")}",
             $"scope={Uri.EscapeDataString(sc)}",
         };
+        if (mode is not null)
+            parts.Add($"mode={Uri.EscapeDataString(mode)}");
+        if (calendarDays is int cd)
+            parts.Add($"calendar_days={cd}");
+        if (paydayCount is int pc)
+            parts.Add($"payday_count={pc}");
+        if (showIncome is bool si)
+            parts.Add($"show_income={(si ? "true" : "false")}");
         if (AppState.SelectedProfileId is int pid && sc == "entity")
             parts.Add($"profile_id={pid}");
         return GetJsonAsync("api/coming-up?" + string.Join("&", parts), ct);
     }
+
+    /// <summary>
+    /// Coming up using AppSettings for window mode/days/income (no query overrides).
+    /// </summary>
+    public Task<JsonElement> GetComingUpWithSettingsAsync(int limit = 50, CancellationToken ct = default)
+        => GetComingUpAsync(limit: limit, ct: ct);
 
     public Task<JsonElement> FirstRunAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/onboarding/first-run", body, ct);
