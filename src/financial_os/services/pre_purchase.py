@@ -218,6 +218,8 @@ def check_purchase(
             cat_hint = f"{cat.display_name or ''} {cat.budget_group or ''}".lower()
 
     # Card paths (entity-scoped when IFPP is entity)
+    from financial_os.services.promo_installments import effective_promo_balance
+
     cq = session.query(Account).filter(Account.kind == "credit", Account.archived_at.is_(None))
     if sc == "entity" and pid is not None:
         cq = cq.filter(Account.profile_id == pid)
@@ -239,6 +241,7 @@ def check_purchase(
                 if any(k in cat_hint for k in ("food", "gas", "transport", "travel", "dining", "restaurant")):
                     score += 2
         rewards_by_id[a.id] = score
+        promo_bal = effective_promo_balance(session, a, as_of=as_of)
         cv = CardView(
             id=a.id,
             name=a.nickname,
@@ -250,7 +253,7 @@ def check_purchase(
             apr=Decimal(a.apr) if a.apr is not None else None,
             promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
             promo_end_date=a.promo_end_date,
-            promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
+            promo_balance=promo_bal,
             min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
             rewards_score=score,
         )
@@ -266,7 +269,7 @@ def check_purchase(
         reason = (
             f"Interest-free path: can charge ${safe_amt}. {plan.payoff_path if plan else ''}"
             if plan
-            else "No IFPP plan for card."
+            else "No interest-free path set up for this card yet — add due day / promo under Cards."
         )
         if cv.rewards_score > 1:
             reason += f" Rewards match score {cv.rewards_score}."

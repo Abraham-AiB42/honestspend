@@ -55,31 +55,41 @@ def simulate_ifpp(
         for a in accounts
         if a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp
     ]
-    cards = [
-        CardView(
-            id=a.id,
-            name=a.nickname,
-            balance=Decimal(a.current_balance or 0),
-            credit_limit=Decimal(a.credit_limit or 0),
-            available_credit=Decimal(a.available_credit or 0),
-            statement_close_day=a.statement_close_day,
-            payment_due_day=a.payment_due_day,
-            apr=Decimal(a.apr) if a.apr is not None else None,
-            promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
-            promo_end_date=a.promo_end_date,
-            promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
-            min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
+    from financial_os.services.promo_installments import effective_promo_balance
+
+    cards = []
+    for a in accounts:
+        if a.kind != "credit":
+            continue
+        promo_bal = effective_promo_balance(session, a, as_of=as_of)
+        cards.append(
+            CardView(
+                id=a.id,
+                name=a.nickname,
+                balance=Decimal(a.current_balance or 0),
+                credit_limit=Decimal(a.credit_limit or 0),
+                available_credit=Decimal(a.available_credit or 0),
+                statement_close_day=a.statement_close_day,
+                payment_due_day=a.payment_due_day,
+                apr=Decimal(a.apr) if a.apr is not None else None,
+                promo_apr=Decimal(a.promo_apr) if a.promo_apr is not None else None,
+                promo_end_date=a.promo_end_date,
+                promo_balance=promo_bal,
+                min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
+            )
         )
-        for a in accounts
-        if a.kind == "credit"
-    ]
     horizon_days = settings.horizon_days or 45
     horizon_end = as_of + timedelta(days=horizon_days)
     sched_q = session.query(ScheduledItem).filter(ScheduledItem.active.is_(True))
     if sc == "entity" and resolved_pid is not None:
         sched_q = sched_q.filter(ScheduledItem.profile_id == resolved_pid)
+    # Credit account ids — any bill on a card is owned by card float/balance, not cash Safe
+    credit_ids = {int(a.id) for a in accounts if a.kind == "credit"}
     scheduled: list[ScheduledView] = []
     for s in sched_q.all():
+        # Honesty: schedules on credit accounts must not also drain cash runway.
+        if svc._is_credit_account_schedule(s, credit_ids):
+            continue
         scheduled.extend(
             expand_scheduled(
                 item_id=s.id,
