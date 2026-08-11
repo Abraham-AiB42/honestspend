@@ -82,6 +82,7 @@ public sealed partial class HomePage : Page
             ApplySafeUntilWindow(_home);
             ApplyFloatWhisper(_home);
             await ApplyCardPayWhisperAsync(api);
+            await ApplyCardFixHintAsync(api);
             ApplyWhyThisNumber(_home);
             ApplyComingUp(_home);
             ApplyBudgetSummary(_home);
@@ -809,6 +810,365 @@ public sealed partial class HomePage : Page
         }
     }
 
+    /// <summary>
+    /// Simple-mode banner when credit cards exist but payment setup is incomplete
+    /// (missing due day, pay-from cash, or what-to-pay is none/empty).
+    /// </summary>
+    private async Task ApplyCardFixHintAsync(LedgerApiClient api)
+    {
+        try
+        {
+            CardFixBar.IsOpen = false;
+            if (!AppState.SimpleMode || AppState.ReadOnlySession)
+                return;
+
+            var cycles = await api.GetAccountCyclesAsync();
+            if (!cycles.TryGetProperty("items", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return;
+
+            var hasCards = false;
+            var needsSetup = false;
+            foreach (var it in arr.EnumerateArray())
+            {
+                hasCards = true;
+                if (CardNeedsPaymentSetup(it))
+                {
+                    needsSetup = true;
+                    break;
+                }
+            }
+
+            CardFixBar.IsOpen = hasCards && needsSetup;
+            if (!needsSetup && CardFixPanel.Visibility == Visibility.Visible)
+            {
+                // Keep panel open if user is mid-edit after partial save of one of several cards
+            }
+        }
+        catch
+        {
+            CardFixBar.IsOpen = false;
+        }
+    }
+
+    private static bool CardNeedsPaymentSetup(JsonElement it)
+    {
+        // Missing due day (null / 0 / absent)
+        var dueMissing = !it.TryGetProperty("payment_due_day", out var dueEl)
+            || dueEl.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined
+            || (dueEl.ValueKind == JsonValueKind.Number && dueEl.TryGetInt32(out var d) && d < 1)
+            || (dueEl.ValueKind == JsonValueKind.String
+                && (!int.TryParse(dueEl.GetString(), out var ds) || ds < 1));
+
+        // Missing pay-from cash
+        var fundId = JsonUi.Int(it, "payment_funding_account_id",
+            JsonUi.Int(it, "funding_account_id"));
+        var fundMissing = fundId <= 0;
+
+        // Nothing configured for what to pay
+        var policy = JsonUi.Str(it, "autopay_policy", JsonUi.Str(it, "policy", "")).Trim();
+        if (policy == "—") policy = "";
+        var policyNone = string.IsNullOrEmpty(policy)
+            || policy.Equals("none", StringComparison.OrdinalIgnoreCase);
+
+        return dueMissing || fundMissing || policyNone;
+    }
+
+    private async void CardFixOpen_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            CardFixMsg.Text = "";
+            CardFixPanel.Visibility = Visibility.Visible;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await LoadCardFixPanelAsync(api);
+            try { CardFixPanel.StartBringIntoView(); } catch { /* ignore */ }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void CardFixClose_Click(object sender, RoutedEventArgs e)
+    {
+        CardFixPanel.Visibility = Visibility.Collapsed;
+        CardFixMsg.Text = "";
+    }
+
+    private bool _suppressCardFixCardChange;
+
+    private async Task LoadCardFixPanelAsync(LedgerApiClient api)
+    {
+        CardFixFundingBox.Items.Clear();
+        var accounts = await api.GetAccountsAsync();
+        if (accounts.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var a in accounts.EnumerateArray())
+            {
+                var kind = JsonUi.Str(a, "kind").ToLowerInvariant();
+                var isCash = a.TryGetProperty("is_cash_for_ifpp", out var f) && f.ValueKind == JsonValueKind.True;
+                if (kind is "checking" or "savings" or "cash" || isCash)
+                {
+                    var id = a.GetProperty("id").GetInt32();
+                    var name = JsonUi.Str(a, "nickname");
+                    CardFixFundingBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"{name} · {UiCopy.AccountKind(kind)} · {JsonUi.Money(a, "current_balance")}",
+                        Tag = id,
+                    });
+                }
+            }
+        }
+        if (CardFixFundingBox.Items.Count > 0)
+            CardFixFundingBox.SelectedIndex = 0;
+
+        var cycles = await api.GetAccountCyclesAsync();
+        var prevId = SelectedCardFixCardId();
+        _suppressCardFixCardChange = true;
+        CardFixCardBox.Items.Clear();
+        var firstNeedsIdx = -1;
+        if (cycles.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            var idx = 0;
+            foreach (var it in arr.EnumerateArray())
+            {
+                var id = JsonUi.Int(it, "account_id");
+                var name = JsonUi.Str(it, "name");
+                var needs = CardNeedsPaymentSetup(it);
+                CardFixCardBox.Items.Add(new ComboBoxItem
+                {
+                    Content = needs ? $"{name} · needs setup" : name,
+                    Tag = id,
+                });
+                if (needs && firstNeedsIdx < 0)
+                    firstNeedsIdx = idx;
+                idx++;
+            }
+        }
+
+        if (CardFixCardBox.Items.Count > 0)
+        {
+            var sel = firstNeedsIdx >= 0 ? firstNeedsIdx : 0;
+            if (prevId is int keep)
+            {
+                for (var i = 0; i < CardFixCardBox.Items.Count; i++)
+                {
+                    if (CardFixCardBox.Items[i] is ComboBoxItem { Tag: int tid } && tid == keep)
+                    {
+                        sel = i;
+                        break;
+                    }
+                }
+            }
+            CardFixCardBox.SelectedIndex = sel;
+        }
+        _suppressCardFixCardChange = false;
+
+        await ApplySelectedCardFixAsync(api);
+        CardFixPolicy_Changed(CardFixPolicyBox, null!);
+    }
+
+    private int? SelectedCardFixCardId()
+    {
+        if (CardFixCardBox.SelectedItem is ComboBoxItem { Tag: int id } && id > 0)
+            return id;
+        return null;
+    }
+
+    private async void CardFixCard_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressCardFixCardChange) return;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await ApplySelectedCardFixAsync(api);
+        }
+        catch (Exception ex)
+        {
+            CardFixMsg.Text = ex.Message;
+        }
+    }
+
+    private async Task ApplySelectedCardFixAsync(LedgerApiClient api)
+    {
+        if (SelectedCardFixCardId() is not int id)
+            return;
+
+        try
+        {
+            var c = await api.GetAccountCycleAsync(id);
+            CardFixCloseDayBox.Value = ParseCardFixDay(c, "statement_close_day", 1);
+            CardFixDueDayBox.Value = ParseCardFixDay(c, "payment_due_day", 15);
+            SelectCardFixTag(CardFixPolicyBox,
+                JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy", "statement")),
+                fallback: "statement");
+            SelectCardFixTag(CardFixTimingBox,
+                JsonUi.Str(c, "payment_timing", "on_due"),
+                fallback: "on_due");
+            var fixedAmt = ParseCardFixDouble(c, "payment_fixed_amount", 0);
+            CardFixFixedBox.Value = fixedAmt;
+
+            var fundId = JsonUi.Int(c, "funding_account_id", JsonUi.Int(c, "payment_funding_account_id"));
+            SelectCardFixIntTag(CardFixFundingBox, fundId);
+            CardFixPolicy_Changed(CardFixPolicyBox, null!);
+        }
+        catch (Exception ex)
+        {
+            CardFixMsg.Text = "Could not load card: " + ex.Message;
+        }
+    }
+
+    private void CardFixPolicy_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        var policy = "statement";
+        if (CardFixPolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
+            policy = p;
+        CardFixFixedBox.Visibility = policy == "fixed" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private async void CardFixSave_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        CardFixMsg.Text = "";
+        try
+        {
+            if (SelectedCardFixCardId() is not int id)
+                throw new InvalidOperationException("Pick a credit card.");
+
+            if (CardFixFundingBox.SelectedItem is not ComboBoxItem { Tag: int fundId } || fundId <= 0)
+                throw new InvalidOperationException("Pick which cash account pays this card.");
+
+            var policy = "statement";
+            if (CardFixPolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
+                policy = p;
+            var timing = "on_due";
+            if (CardFixTimingBox.SelectedItem is ComboBoxItem { Tag: string t })
+                timing = t;
+
+            var due = double.IsNaN(CardFixDueDayBox.Value) ? 15 : (int)CardFixDueDayBox.Value;
+            var close = double.IsNaN(CardFixCloseDayBox.Value) ? 1 : (int)CardFixCloseDayBox.Value;
+            if (due is < 1 or > 31)
+                throw new InvalidOperationException("Due day must be 1–31.");
+            if (close is < 1 or > 31)
+                throw new InvalidOperationException("Close day must be 1–31.");
+
+            var body = new Dictionary<string, object?>
+            {
+                ["statement_close_day"] = close,
+                ["payment_due_day"] = due,
+                ["autopay_policy"] = policy,
+                ["payment_timing"] = timing,
+                ["payment_funding_account_id"] = fundId,
+            };
+
+            if (policy == "fixed")
+            {
+                var amt = double.IsNaN(CardFixFixedBox.Value) ? 0m : (decimal)CardFixFixedBox.Value;
+                if (amt <= 0)
+                    throw new InvalidOperationException("Enter a fixed amount greater than zero.");
+                body["payment_fixed_amount"] = amt;
+            }
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.PutAccountCycleConfigAsync(id, body);
+            CardFixMsg.Text = "Saved · next payment will update Safe to spend";
+            ShowSuccess("Card payment", "Saved · next payment will update Safe to spend");
+            await LoadCardFixPanelAsync(api);
+            await ApplyCardFixHintAsync(api);
+            await ApplyCardPayWhisperAsync(api);
+            // Soft refresh Safe / coming up so schedule changes show up
+            try
+            {
+                _home = await api.GetHomeSimpleAsync();
+                SafeText.Text = Money(_home, "safe_to_spend");
+                ApplySafeUntilWindow(_home);
+                ApplyComingUp(_home);
+            }
+            catch { /* optional */ }
+        }
+        catch (Exception ex)
+        {
+            CardFixMsg.Text = ex.Message;
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private static double ParseCardFixDay(JsonElement el, string prop, double fallback)
+    {
+        if (!el.TryGetProperty(prop, out var p) || p.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return fallback;
+        if (p.ValueKind == JsonValueKind.Number && p.TryGetDouble(out var d) && d >= 1 && d <= 31)
+            return d;
+        if (p.ValueKind == JsonValueKind.String
+            && double.TryParse(p.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var s)
+            && s >= 1 && s <= 31)
+            return s;
+        return fallback;
+    }
+
+    private static double ParseCardFixDouble(JsonElement el, string prop, double fallback)
+    {
+        if (!el.TryGetProperty(prop, out var p) || p.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return fallback;
+        if (p.ValueKind == JsonValueKind.Number && p.TryGetDouble(out var d))
+            return d;
+        if (p.ValueKind == JsonValueKind.String
+            && double.TryParse(p.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var s))
+            return s;
+        return fallback;
+    }
+
+    private static void SelectCardFixTag(ComboBox box, string value, string fallback)
+    {
+        var want = (value ?? fallback).ToLowerInvariant();
+        if (want is "none" or "" or "—")
+            want = fallback;
+        // map alternate aliases
+        if (want is "pay_current") want = "books";
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem { Tag: string t }
+                && string.Equals(t, want, StringComparison.OrdinalIgnoreCase))
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem { Tag: string t }
+                && string.Equals(t, fallback, StringComparison.OrdinalIgnoreCase))
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        if (box.Items.Count > 0)
+            box.SelectedIndex = 0;
+    }
+
+    private static void SelectCardFixIntTag(ComboBox box, int id)
+    {
+        if (id > 0)
+        {
+            for (var i = 0; i < box.Items.Count; i++)
+            {
+                if (box.Items[i] is ComboBoxItem { Tag: int t } && t == id)
+                {
+                    box.SelectedIndex = i;
+                    return;
+                }
+            }
+        }
+        if (box.Items.Count > 0)
+            box.SelectedIndex = 0;
+    }
+
     private void ApplyWhyThisNumber(JsonElement home)
     {
         try
@@ -843,6 +1203,7 @@ public sealed partial class HomePage : Page
     /// <summary>
     /// Coming up strip from home/simple <c>coming_up</c> (no extra round-trip).
     /// Rows: weekday · name · money; inflows prefixed with +.
+    /// Outflows fill ComingUpPayPick for mark-paid.
     /// </summary>
     private void ApplyComingUp(JsonElement home)
     {
@@ -851,6 +1212,7 @@ public sealed partial class HomePage : Page
             if (!home.TryGetProperty("coming_up", out var cu) || cu.ValueKind != JsonValueKind.Object)
             {
                 ComingUpCard.Visibility = Visibility.Collapsed;
+                ComingUpPayPanel.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -867,6 +1229,7 @@ public sealed partial class HomePage : Page
                 : Visibility.Visible;
 
             var lines = new List<string>();
+            ComingUpPayPick.Items.Clear();
             if (cu.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
             {
                 foreach (var it in items.EnumerateArray())
@@ -880,7 +1243,29 @@ public sealed partial class HomePage : Page
                     if (string.IsNullOrEmpty(name) || name == "—")
                         name = "Item";
                     lines.Add($"{weekday} · {name} · {money}");
+
+                    // Mark paid: outflows only, need scheduled_id
+                    if (direction != "out")
+                        continue;
+                    var sid = JsonUi.Int(it, "scheduled_id", 0);
+                    if (sid <= 0)
+                        continue;
+                    ComingUpPayPick.Items.Add(new ComboBoxItem
+                    {
+                        Content = $"{weekday} · {name} · {money}",
+                        Tag = sid,
+                    });
                 }
+            }
+
+            if (ComingUpPayPick.Items.Count > 0)
+            {
+                ComingUpPayPick.SelectedIndex = 0;
+                ComingUpPayPanel.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ComingUpPayPanel.Visibility = Visibility.Collapsed;
             }
 
             if (lines.Count == 0)
@@ -924,6 +1309,45 @@ public sealed partial class HomePage : Page
         catch
         {
             ComingUpCard.Visibility = Visibility.Collapsed;
+            ComingUpPayPanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void ComingUpMarkPaid_Click(object sender, RoutedEventArgs e)
+    {
+        if (ComingUpPayPick.SelectedItem is not ComboBoxItem pick || pick.Tag is not int scheduledId || scheduledId <= 0)
+        {
+            ErrorBar.Message = "Pick an expense to mark paid.";
+            ErrorBar.IsOpen = true;
+            return;
+        }
+
+        var label = pick.Content?.ToString() ?? "expense";
+        try
+        {
+            ComingUpMarkPaidBtn.IsEnabled = false;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.MarkSchedulePaidAsync(scheduledId, createTransaction: true);
+            var name = JsonUi.Str(res, "name", label);
+            var next = JsonUi.Str(res, "next_date", "");
+            var ended = res.TryGetProperty("ended", out var en) && en.ValueKind == JsonValueKind.True;
+            var msg = ended
+                ? $"{name} paid through end"
+                : string.IsNullOrEmpty(next) || next == "—"
+                    ? $"{name} marked paid"
+                    : $"{name} marked paid · next {next}";
+            await RefreshAsync();
+            ShowSuccess("Marked paid", msg);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = FriendlyLoadError(ex);
+            ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            ComingUpMarkPaidBtn.IsEnabled = true;
         }
     }
 
