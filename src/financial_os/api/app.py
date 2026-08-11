@@ -2309,13 +2309,25 @@ def list_scheduled(
     active_only: bool = True,
     kind: Optional[str] = None,
     profile_id: Optional[int] = None,
+    opex_class: Optional[str] = None,
+    income_source: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    """List scheduled items. Optional filters: kind, opex_class (fixed|variable), income_source."""
+    if opex_class is not None:
+        oc = opex_class.strip().lower()
+        if oc not in ("fixed", "variable"):
+            raise HTTPException(400, "opex_class must be fixed or variable")
+        opex_class = oc
     q = db.query(ScheduledItem)
     if active_only:
         q = q.filter(ScheduledItem.active.is_(True))
     if profile_id is not None:
         q = q.filter(ScheduledItem.profile_id == profile_id)
+    if opex_class is not None:
+        q = q.filter(ScheduledItem.opex_class == opex_class)
+    if income_source is not None:
+        q = q.filter(ScheduledItem.income_source == income_source)
     rows = q.order_by(ScheduledItem.next_date).all()
     out = [_enrich_scheduled(db, r) for r in rows]
     if kind:

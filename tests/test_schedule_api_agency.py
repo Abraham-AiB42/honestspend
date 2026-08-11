@@ -256,3 +256,107 @@ def test_list_series_requires_profile(client: TestClient):
 def test_list_series_profile_not_found(client: TestClient):
     r = client.get("/api/scheduled/series", params={"profile_id": 999999})
     assert r.status_code == 404
+
+
+def test_list_scheduled_filter_opex_class_and_income_source(client: TestClient):
+    """Create with opex_class / income_source; list filters return only matches."""
+    import financial_os.api.app as app_mod
+
+    pid, cash_id = _personal_and_cash(app_mod)
+
+    fixed = client.post(
+        "/api/scheduled",
+        json={
+            "profile_id": pid,
+            "name": "Office rent fixed",
+            "amount": "-2000",
+            "next_date": "2026-05-01",
+            "cadence": "monthly",
+            "kind": "expense",
+            "account_id": cash_id,
+            "opex_class": "fixed",
+        },
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["opex_class"] == "fixed"
+    fixed_id = fixed.json()["id"]
+
+    variable = client.post(
+        "/api/scheduled",
+        json={
+            "profile_id": pid,
+            "name": "Ads variable",
+            "amount": "-500",
+            "next_date": "2026-05-02",
+            "cadence": "monthly",
+            "kind": "expense",
+            "account_id": cash_id,
+            "opex_class": "variable",
+        },
+    )
+    assert variable.status_code == 200, variable.text
+    variable_id = variable.json()["id"]
+
+    income = client.post(
+        "/api/scheduled",
+        json={
+            "profile_id": pid,
+            "name": "e-Folio commissions",
+            "amount": "3000",
+            "next_date": "2026-05-15",
+            "cadence": "monthly",
+            "kind": "income",
+            "account_id": cash_id,
+            "income_source": "farmers_efolio",
+        },
+    )
+    assert income.status_code == 200, income.text
+    assert income.json()["income_source"] == "farmers_efolio"
+    income_id = income.json()["id"]
+
+    other_income = client.post(
+        "/api/scheduled",
+        json={
+            "profile_id": pid,
+            "name": "Other retainers",
+            "amount": "1000",
+            "next_date": "2026-05-20",
+            "cadence": "monthly",
+            "kind": "income",
+            "account_id": cash_id,
+            "income_source": "retainers",
+        },
+    )
+    assert other_income.status_code == 200, other_income.text
+
+    fixed_list = client.get(
+        "/api/scheduled",
+        params={"profile_id": pid, "opex_class": "fixed"},
+    )
+    assert fixed_list.status_code == 200, fixed_list.text
+    fixed_ids = {row["id"] for row in fixed_list.json()}
+    assert fixed_id in fixed_ids
+    assert variable_id not in fixed_ids
+    assert all(row.get("opex_class") == "fixed" for row in fixed_list.json())
+
+    var_list = client.get(
+        "/api/scheduled",
+        params={"profile_id": pid, "opex_class": "variable"},
+    )
+    assert var_list.status_code == 200
+    var_ids = {row["id"] for row in var_list.json()}
+    assert variable_id in var_ids
+    assert fixed_id not in var_ids
+
+    efolio = client.get(
+        "/api/scheduled",
+        params={"profile_id": pid, "income_source": "farmers_efolio"},
+    )
+    assert efolio.status_code == 200, efolio.text
+    efolio_ids = {row["id"] for row in efolio.json()}
+    assert income_id in efolio_ids
+    assert all(row.get("income_source") == "farmers_efolio" for row in efolio.json())
+    assert other_income.json()["id"] not in efolio_ids
+
+    bad = client.get("/api/scheduled", params={"opex_class": "not-a-class"})
+    assert bad.status_code == 400
