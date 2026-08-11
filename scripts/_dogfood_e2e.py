@@ -174,10 +174,23 @@ bak = must("backup", c.post("/api/backup/create", json={"as_zip": True, "note": 
 if bak.get("name"):
     ok("backup name", bak["name"])
 
-print("\n8. Can I buy + scenario")
+print("\n8. Budgets + Can I buy + scenario")
+bst = must("budget status", c.get("/api/budgets/status"))
+if "items" in bst or "reserve_total" in bst:
+    ok("budget status", f"reserve={bst.get('reserve_total', '?')}")
+else:
+    bad("budget status", str(bst)[:120])
+bsug = must("budget suggestions", c.get("/api/budgets/suggestions"))
+if "suggestions" in bsug or isinstance(bsug, dict):
+    ok("budget suggestions")
 buy = must("pre-purchase", c.post("/api/pre-purchase", json={"amount": 80, "prefer": "auto"}))
 if buy.get("verdict"):
     ok("buy verdict", buy["verdict"])
+snap = buy.get("ifpp_snapshot") or {}
+if "safe_to_spend" in snap or "cash_spendable" in snap:
+    ok("buy safe_to_spend snapshot", str(snap.get("safe_to_spend", snap.get("cash_spendable"))))
+else:
+    bad("buy ifpp_snapshot", str(snap)[:80])
 sc = must(
     "scenario quick",
     c.post("/api/scenarios/quick", json={"name": "Dogfood TV", "amount": 400}),

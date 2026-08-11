@@ -23,8 +23,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Keep package version aligned with financial_os / Inno when releasing -->
-    <ApplicationDisplayVersion>1.0.37</ApplicationDisplayVersion>
-    <ApplicationVersion>1.0.37.0</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.38</ApplicationDisplayVersion>
+    <ApplicationVersion>1.0.38.0</ApplicationVersion>
   </PropertyGroup>
 
   <ItemGroup>

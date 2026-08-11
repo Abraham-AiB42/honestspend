@@ -64,6 +64,102 @@ def test_pre_purchase_unsafe_when_broke(tmp_path: Path):
     s.close()
 
 
+def test_pre_purchase_respects_budget_reserve(tmp_path: Path):
+    """Cash path must use Safe to spend after period budget reserve (Home parity)."""
+    from financial_os.db import Category
+    from financial_os.services.budget_service import create_rule
+
+    s = _session(tmp_path)
+    settings = s.get(AppSettings, 1)
+    settings.safety_buffer = Decimal("0")
+    settings.budget_reserve_enabled = True
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Ops",
+            current_balance=Decimal("2000"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    cat = Category(
+        code="TEST_FOOD_PP",
+        display_name="Food PP",
+        scope="personal",
+        profile_id=personal.id,
+        budget_group="food",
+    )
+    s.add(cat)
+    s.flush()
+    # Reserve $1500 of the $2000 as monthly budget remaining
+    create_rule(
+        s,
+        profile_id=personal.id,
+        category_id=cat.id,
+        period="monthly",
+        amount=Decimal("1500"),
+        name="Food",
+    )
+    s.flush()
+    # $800 is under raw cash but over Safe to spend (2000-1500=500)
+    res = check_purchase(s, amount=Decimal("800"), prefer="cash", profile_id=personal.id)
+    assert res["recommended"]["safe"] is False
+    assert Decimal(res["ifpp_snapshot"]["budget_reserve"]) >= Decimal("1500")
+    assert Decimal(res["ifpp_snapshot"]["safe_to_spend"]) <= Decimal("500")
+    # $400 fits Safe to spend
+    res2 = check_purchase(s, amount=Decimal("400"), prefer="cash", profile_id=personal.id)
+    assert res2["recommended"]["safe"] is True
+    s.close()
+
+
+def test_pre_purchase_category_budget_tight(tmp_path: Path):
+    from financial_os.db import Category
+    from financial_os.services.budget_service import create_rule
+
+    s = _session(tmp_path)
+    settings = s.get(AppSettings, 1)
+    settings.safety_buffer = Decimal("0")
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=personal.id,
+            kind="checking",
+            nickname="Ops",
+            current_balance=Decimal("5000"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    cat = Category(
+        code="TEST_GAS_PP",
+        display_name="Gas PP",
+        scope="personal",
+        profile_id=personal.id,
+        budget_group="transport",
+    )
+    s.add(cat)
+    s.flush()
+    create_rule(
+        s,
+        profile_id=personal.id,
+        category_id=cat.id,
+        period="weekly",
+        amount=Decimal("40"),
+        name="Gas",
+    )
+    s.flush()
+    res = check_purchase(
+        s,
+        amount=Decimal("60"),
+        prefer="cash",
+        profile_id=personal.id,
+        category_id=cat.id,
+    )
+    assert res["verdict"] == "safe_budget_tight"
+    assert res["budget_check"]["ok"] is False
+    s.close()
+
+
 def test_promo_clock_sinking_fund(tmp_path: Path):
     s = _session(tmp_path)
     personal = s.query(Profile).filter(Profile.slug == "personal").one()

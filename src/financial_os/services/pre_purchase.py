@@ -9,8 +9,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from financial_os.db import Account
-from financial_os.engine.ifpp import CardView, recommend_card_for_purchase
+from financial_os.db import Account, Category
+from financial_os.engine.ifpp import CardView
 from financial_os.services.ifpp_service import run_ifpp
 from financial_os.services.payoff import plan_card_payoff
 
@@ -36,6 +36,62 @@ class PurchaseOption:
     card_plan_summary: str | None = None
 
 
+def _budget_check(
+    session: Session,
+    *,
+    profile_id: int | None,
+    category_id: int,
+    amount: Decimal,
+    as_of: date,
+) -> dict[str, Any]:
+    """Match period-budget remaining for a category (prefer daily if multiple)."""
+    from financial_os.services.budget_service import budgets_status
+
+    st = budgets_status(session, profile_id=profile_id, as_of=as_of)
+    match: dict[str, Any] | None = None
+    for it in st.get("items") or []:
+        if int(it.get("category_id") or 0) != int(category_id):
+            continue
+        match = it
+        if it.get("period") == "daily":
+            break
+    cat = session.get(Category, category_id)
+    cat_name = cat.display_name if cat else f"Category {category_id}"
+    if not match:
+        return {
+            "category_id": category_id,
+            "category_name": cat_name,
+            "has_rule": False,
+            "ok": True,
+            "message": f"No budget for {cat_name} — only Safe to spend applies.",
+        }
+    rem = _d(match.get("remaining"))
+    plan = _d(match.get("plan"))
+    period = str(match.get("period") or "")
+    ok = amount <= rem
+    if ok:
+        msg = (
+            f"Budget ok: {cat_name} ({period}) has ${rem} left of ${plan}; "
+            f"this ${amount} still fits."
+        )
+    else:
+        msg = (
+            f"Budget short: {cat_name} ({period}) has ${rem} left of ${plan}. "
+            f"This purchase needs ${amount}. Cut a budget or wait for the next period."
+        )
+    return {
+        "category_id": category_id,
+        "category_name": cat_name,
+        "has_rule": True,
+        "ok": ok,
+        "period": period,
+        "plan": str(plan),
+        "remaining": str(rem),
+        "status": match.get("status"),
+        "message": msg,
+    }
+
+
 def check_purchase(
     session: Session,
     *,
@@ -45,25 +101,39 @@ def check_purchase(
     as_of: date | None = None,
     profile_id: int | None = None,
     scope: str | None = None,
+    category_id: int | None = None,
 ) -> dict[str, Any]:
     as_of = as_of or date.today()
     amount = abs(_d(amount))
     ifpp = run_ifpp(session, as_of=as_of, profile_id=profile_id, scope=scope)
     options: list[PurchaseOption] = []
 
-    # Cash path
-    cash_ok = ifpp.cash_spendable >= amount
+    # Align with Home: Safe to spend = cash_spendable − period budget reserve
+    from financial_os.services.budget_service import budget_reserve_total
+
+    reserve = budget_reserve_total(session, profile_id=profile_id, as_of=as_of)
+    cash_raw = _d(ifpp.cash_spendable)
+    safe_to_spend = max(ZERO, cash_raw - reserve)
+
+    # Cash path (never-neg + budget reserve)
+    cash_ok = safe_to_spend >= amount
+    if cash_ok:
+        cash_reason = f"Safe to spend ${safe_to_spend} covers this purchase."
+        if reserve > 0:
+            cash_reason += f" (${cash_raw} cash − ${reserve} budget reserve)."
+    else:
+        cash_reason = (
+            f"Safe to spend ${safe_to_spend} is short — would risk never-neg "
+            f"or raid reserved budgets (${cash_raw} cash, ${reserve} reserved)."
+        )
     options.append(
         PurchaseOption(
             method="cash",
             account_id=None,
-            account_name="Checking / IFPP cash pool",
+            account_name="Checking / Safe to spend",
             safe=cash_ok,
-            reason=(
-                f"Cash spendable ${ifpp.cash_spendable} "
-                + ("covers this purchase." if cash_ok else "is short — would risk never-neg checking rule.")
-            ),
-            remaining_spendable=(ifpp.cash_spendable - amount) if cash_ok else ifpp.cash_spendable,
+            reason=cash_reason,
+            remaining_spendable=(safe_to_spend - amount) if cash_ok else safe_to_spend,
         )
     )
 
@@ -151,6 +221,23 @@ def check_purchase(
     elif any(o.safe for o in options):
         verdict = "safe_via_other_method"
 
+    budget_check: dict[str, Any] | None = None
+    if category_id:
+        budget_check = _budget_check(
+            session,
+            profile_id=profile_id,
+            category_id=int(category_id),
+            amount=amount,
+            as_of=as_of,
+        )
+        # Soft gate: liquidity OK but envelope short → still surface as tight
+        if (
+            budget_check.get("has_rule")
+            and not budget_check.get("ok")
+            and verdict in ("safe", "safe_via_other_method")
+        ):
+            verdict = "safe_budget_tight"
+
     return {
         "amount": str(amount),
         "as_of": as_of.isoformat(),
@@ -161,7 +248,9 @@ def check_purchase(
             "account_name": rec.account_name if rec else None,
             "safe": rec.safe if rec else False,
             "reason": rec.reason if rec else "No path",
-            "remaining_after": str(rec.remaining_spendable) if rec and rec.remaining_spendable is not None else None,
+            "remaining_after": str(rec.remaining_spendable)
+            if rec and rec.remaining_spendable is not None
+            else None,
         },
         "options": [
             {
@@ -170,18 +259,24 @@ def check_purchase(
                 "account_name": o.account_name,
                 "safe": o.safe,
                 "reason": o.reason,
-                "remaining_after": str(o.remaining_spendable) if o.remaining_spendable is not None else None,
+                "remaining_after": str(o.remaining_spendable)
+                if o.remaining_spendable is not None
+                else None,
                 "card_plan_summary": o.card_plan_summary,
             }
             for o in options
         ],
         "ifpp_snapshot": {
-            "cash_spendable": str(ifpp.cash_spendable),
+            "cash_spendable": str(cash_raw),
+            "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+            "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
             "card_float_interest_free": str(ifpp.card_float_interest_free),
             "next_red_day": ifpp.next_red_day.isoformat() if ifpp.next_red_day else None,
         },
+        "budget_check": budget_check,
         "principles": [
             "Never go negative on checking",
+            "Safe to spend subtracts remaining period budgets (reserve)",
             "Intentional 0% float OK when full interest-free payoff path exists",
             "Do not charge if it forces revolving APR",
         ],

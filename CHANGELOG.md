@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.38 — Can I buy? respects budget reserve
+
+- **Pre-purchase cash path** uses **Safe to spend** (cash − period budget reserve), same as Home
+- **`category_id`** on `POST /api/pre-purchase` → server `budget_check` + verdict `safe_budget_tight`
+- WinUI Can I buy? passes category and shows reserve snapshot
+- Response: `ifpp_snapshot.budget_reserve`, `safe_to_spend`
+
 ## 1.0.37 — Seed budgets from spend history
 
 - **`POST /api/budgets/seed-from-history`**: create daily/weekly/monthly plans from top categorized spend (food→daily, gas→weekly, rent/util→monthly)

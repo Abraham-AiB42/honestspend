@@ -1471,6 +1471,7 @@ class PrePurchaseIn(BaseModel):
     account_id: int | None = None
     profile_id: int | None = None
     scope: str | None = None
+    category_id: int | None = None
 
 
 @app.post("/api/pre-purchase")
@@ -1484,6 +1485,7 @@ def pre_purchase(body: PrePurchaseIn, db: Session = Depends(get_db)):
         account_id=body.account_id,
         profile_id=body.profile_id,
         scope=body.scope,
+        category_id=body.category_id,
     )
 
 

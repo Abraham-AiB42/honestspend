@@ -20,13 +20,15 @@ Excel **Budget.xlsx** parity: daily (workdays), weekly, and monthly **plans** wi
 - `GET/POST /api/budgets`, `DELETE /api/budgets/{id}`  
 - `GET /api/budgets/status`, `/suggestions`, `/cuts`  
 - `POST /api/budgets/cuts/apply`, `/suggestions/accept`  
-- Home: `budgets`, `budget_reserve`, `safe_to_spend_before_budgets`
+- `POST /api/budgets/seed-from-history` — top spend → daily/weekly/monthly plans (`only_if_empty` for onboarding)  
+- Home: `budgets`, `budget_reserve`, `safe_to_spend_before_budgets`, `budget_seed_hint`  
+- **Can I buy?** (`POST /api/pre-purchase`): cash path uses Safe to spend after reserve; optional `category_id` → `budget_check` / `safe_budget_tight`
 
 ## UI
 
-- Full books → **Budgets** (CRUD, **Accept** history suggestions, **apply cuts**)  
-- Simple Home → budget summary + **tappable cut chips** + reserve footnote  
-- **Can I buy?** → optional budget category; warns if short; cut → **auto re-check**  
+- Full books → **Budgets** (CRUD, **Accept** history suggestions, **Seed from spend history**, **apply cuts**)  
+- Simple Home → budget summary + **tappable cut chips** + seed tip when empty + reserve footnote  
+- **Can I buy?** → optional budget category; reserve-aware Safe to spend; cut → **auto re-check**  
 - **Settings** → reserve on/off, week start, workday checkboxes  
 
 ## Settings (app_settings)

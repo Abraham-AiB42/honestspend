@@ -68,13 +68,21 @@ public sealed partial class BuyPage : Page
                 prefer = t;
 
             var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
+            int? catId = null;
+            if (CategoryBox.SelectedIndex > 0 && CategoryBox.SelectedIndex < _categories.Count)
+            {
+                var id = _categories[CategoryBox.SelectedIndex].Id;
+                if (id > 0) catId = id;
+            }
+
             using var api = new LedgerApiClient();
-            var res = await api.PrePurchaseAsync(amount, prefer);
+            var res = await api.PrePurchaseAsync(amount, prefer, categoryId: catId);
             var verdict = res.GetProperty("verdict").GetString() ?? "";
             VerdictText.Text = verdict switch
             {
                 "safe" => "Yes — safe",
                 "safe_via_other_method" => "Yes — use the other method",
+                "safe_budget_tight" => "Maybe — cash ok, budget tight",
                 _ => "No — don't buy yet",
             };
 
@@ -85,8 +93,20 @@ public sealed partial class BuyPage : Page
             if (rec.TryGetProperty("remaining_after", out var rem) && rem.ValueKind != JsonValueKind.Null)
                 ReasonText.Text += $"\nSafe to spend after: {JsonUi.Money(rec, "remaining_after")}";
 
-            // Category budget remaining check
-            await ApplyCategoryBudgetCheckAsync(api, amount);
+            // Snapshot: raw cash vs reserve (matches Home)
+            if (res.TryGetProperty("ifpp_snapshot", out var snap) && snap.ValueKind == JsonValueKind.Object)
+            {
+                var reserve = JsonUi.Str(snap, "budget_reserve", "0");
+                var sts = JsonUi.Str(snap, "safe_to_spend");
+                if (!string.IsNullOrEmpty(sts) && sts != "—")
+                    ReasonText.Text += $"\nSafe to spend now: {JsonUi.Money(snap, "safe_to_spend")}" +
+                        (reserve is not ("0" or "0.00" or "—")
+                            ? $" (after ${reserve} budget reserve)"
+                            : "");
+            }
+
+            // Category budget from API (server-side)
+            ApplyBudgetCheckFromResponse(res);
 
             var opts = new List<string>();
             if (res.TryGetProperty("options", out var arr) && arr.ValueKind == JsonValueKind.Array)
@@ -104,7 +124,7 @@ public sealed partial class BuyPage : Page
                 $"{UiCopy.MoneyView(AppState.IfppScope)}" +
                 $" · as of {JsonUi.Str(res, "as_of")}";
 
-            // Always show cut offers when purchase is tight or category short
+            // Show cut offers when purchase is tight or category short
             var tight = verdict is not ("safe" or "safe_via_other_method");
             await LoadCutOffersAsync(api, force: tight || BudgetCheckText.Text.Contains("short", StringComparison.OrdinalIgnoreCase));
         }
@@ -115,58 +135,14 @@ public sealed partial class BuyPage : Page
         }
     }
 
-    private async Task ApplyCategoryBudgetCheckAsync(LedgerApiClient api, decimal amount)
+    private void ApplyBudgetCheckFromResponse(JsonElement res)
     {
-        if (CategoryBox.SelectedIndex <= 0 || CategoryBox.SelectedIndex >= _categories.Count)
+        if (!res.TryGetProperty("budget_check", out var bc) || bc.ValueKind != JsonValueKind.Object)
         {
             BudgetCheckText.Text = "";
             return;
         }
-        var catId = _categories[CategoryBox.SelectedIndex].Id;
-        var catName = _categories[CategoryBox.SelectedIndex].Name;
-        var st = await api.GetBudgetStatusAsync(AppState.SelectedProfileId);
-        if (!st.TryGetProperty("items", out var items) || items.ValueKind != JsonValueKind.Array)
-        {
-            BudgetCheckText.Text = $"No budget rule for {catName} — only Safe to spend applies.";
-            return;
-        }
-        JsonElement? match = null;
-        foreach (var it in items.EnumerateArray())
-        {
-            if (JsonUi.Int(it, "category_id", 0) == catId)
-            {
-                match = it;
-                // prefer daily if multiple
-                if (JsonUi.Str(it, "period") == "daily")
-                    break;
-            }
-        }
-        if (match is null)
-        {
-            BudgetCheckText.Text = $"No budget for {catName}. Consider adding one under Budgets.";
-            return;
-        }
-        var m = match.Value;
-        var rem = 0m;
-        decimal.TryParse(JsonUi.Str(m, "remaining", "0"), out rem);
-        var plan = JsonUi.Str(m, "plan");
-        var period = JsonUi.Str(m, "period");
-        var status = JsonUi.Str(m, "status");
-        if (amount > rem)
-        {
-            BudgetCheckText.Text =
-                $"Budget short: {catName} ({period}) has ${rem:0.00} left of ${plan}. " +
-                $"This purchase needs ${amount:0.00}. Cut a budget or wait for the next period.";
-            if (status != "over")
-                VerdictText.Text = VerdictText.Text.StartsWith("Yes")
-                    ? "Maybe — cash ok, budget tight"
-                    : VerdictText.Text;
-        }
-        else
-        {
-            BudgetCheckText.Text =
-                $"Budget ok: {catName} ({period}) has ${rem:0.00} left of ${plan} after this would still clear.";
-        }
+        BudgetCheckText.Text = JsonUi.Str(bc, "message");
     }
 
     private async Task LoadCutOffersAsync(LedgerApiClient api, bool force)
