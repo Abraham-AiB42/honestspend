@@ -50,16 +50,21 @@ def _notes_marker(card_id: int) -> str:
 
 
 def ensure_autopay_policy_from_payment_option(account: Account) -> str:
-    """Return effective policy; fill empty/none autopay_policy from payment_option."""
-    policy = (getattr(account, "autopay_policy", None) or "").lower().strip()
-    if policy and policy != "none":
+    """Return effective policy; backfill only when autopay_policy is null/empty.
+
+    Explicit ``autopay_policy="none"`` is sticky — do not overwrite from
+    ``payment_option``. Only null/blank policies are filled from the wizard map.
+    """
+    raw = getattr(account, "autopay_policy", None)
+    if raw is not None and str(raw).strip() != "":
+        policy = str(raw).lower().strip()
         return policy if policy in POLICIES else "none"
     opt = (getattr(account, "payment_option", None) or "").lower().strip()
     mapped = PAYMENT_OPTION_TO_POLICY.get(opt)
     if mapped:
         account.autopay_policy = mapped
         return mapped
-    return policy if policy in POLICIES else "none"
+    return "none"
 
 
 def list_autopay(
@@ -263,8 +268,12 @@ def recompute_card_payment_schedule(
     else:
         funding_id = proj.get("funding_account_id") or a.payment_funding_account_id
         if not funding_id:
+            # Policy active but no funding: end stale cash schedules so IFPP
+            # does not keep counting a ghost outflow for this card.
+            _end_card_payment_schedules(session, a.id)
             schedule_result = {
                 "ok": False,
+                "ended": True,
                 "error": "no funding account (payment_funding_account_id)",
             }
         else:
@@ -277,8 +286,8 @@ def recompute_card_payment_schedule(
                 next_date=next_due,
                 funding_account_id=int(funding_id),
             )
-        # Drop legacy Autopay · rows on the card (cash path owns the payment)
-        _end_autopay_schedules(session, a.id)
+            # Drop legacy Autopay · rows on the card (cash path owns the payment)
+            _end_autopay_schedules(session, a.id)
 
     session.flush()
     return {

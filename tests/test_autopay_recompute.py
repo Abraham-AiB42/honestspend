@@ -173,12 +173,22 @@ def test_cash_card_payment_counts_in_ifpp(tmp_path: Path, monkeypatch):
     sched = _card_payment_schedule(s, card.id)
     assert sched is not None
     assert sched.account_id == cash.id
+    assert sched.amount == Decimal("-300.00")
 
+    # Baseline without the schedule (temporarily inactive) then with it
+    sched.active = False
+    s.flush()
+    r_no = run_ifpp(s, profile_id=p.id)
+    spendable_without = r_no.cash_spendable
+
+    sched.active = True
+    s.flush()
     r = run_ifpp(s, profile_id=p.id)
     # Must not treat cash Card payment as a credit-account schedule
     assert r.details.get("skipped_card_autopay_schedules", 0) == 0
-    # Safe to spend reduced by the cash payment (~300)
-    assert r.cash_spendable <= Decimal("2000") - Decimal("250")
+    # Safe reduced by the cash card payment vs baseline without it
+    assert r.cash_spendable <= spendable_without - Decimal("250")
+    assert r.cash_spendable < spendable_without
     s.close()
 
 
@@ -206,4 +216,62 @@ def test_after_account_balance_changed_noop_for_checking(tmp_path: Path, monkeyp
     s.flush()
     out = after_account_balance_changed(s, cash.id)
     assert out.get("ok") is False or out.get("skipped") is True
+    s.close()
+
+
+def test_explicit_autopay_none_sticky_through_charge(tmp_path: Path, monkeypatch):
+    """Explicit none must not be backfilled from payment_option on recompute.
+
+    Card has payment_option=statement (or interest_saving) but user set
+    autopay_policy=none. A charge must leave policy none and no Card payment
+    schedule active.
+    """
+    s = _session(tmp_path, monkeypatch)
+    _p, cash, card = _card_and_cash(s, bal=Decimal("100.00"), policy="statement")
+    card.payment_option = "statement"
+    s.flush()
+
+    # User explicitly turns autopay off
+    set_autopay(s, account_id=card.id, policy="none", apply_schedule=True)
+    s.commit()
+    assert card.autopay_policy == "none"
+    assert _card_payment_schedule(s, card.id) is None
+
+    # Charge via apply_amount_to_account (triggers recompute hook)
+    apply_amount_to_account(card, Decimal("-50.00"))
+    s.flush()
+    assert card.current_balance == Decimal("150.00")
+    assert card.autopay_policy == "none"
+    assert _card_payment_schedule(s, card.id) is None
+
+    # interest_saving path too
+    card.payment_option = "interest_saving"
+    card.autopay_policy = "none"
+    apply_amount_to_account(card, Decimal("-10.00"))
+    s.flush()
+    assert card.autopay_policy == "none"
+    assert _card_payment_schedule(s, card.id) is None
+    s.close()
+
+
+def test_missing_funding_ends_stale_cash_schedule(tmp_path: Path, monkeypatch):
+    """Active policy + null funding ends existing card-tagged cash schedules."""
+    s = _session(tmp_path, monkeypatch)
+    _p, cash, card = _card_and_cash(s, bal=Decimal("120.00"), policy="statement")
+    as_of = date.today()
+    out = recompute_card_payment_schedule(s, card.id, as_of=as_of)
+    s.commit()
+    assert out["ok"] is True
+    assert _card_payment_schedule(s, card.id) is not None
+
+    card.payment_funding_account_id = None
+    s.flush()
+    out2 = recompute_card_payment_schedule(s, card.id, as_of=as_of)
+    s.commit()
+    assert out2.get("schedule", {}).get("ok") is False
+    assert "funding" in (out2.get("schedule") or {}).get("error", "").lower()
+    assert (out2.get("schedule") or {}).get("ended") is True
+    assert _card_payment_schedule(s, card.id) is None
+    # Caches may still reflect projection
+    assert card.next_payment_amount_cached is not None
     s.close()
