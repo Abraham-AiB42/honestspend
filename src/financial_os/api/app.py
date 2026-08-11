@@ -978,6 +978,90 @@ def account_payment_option(
         raise HTTPException(400, str(e)) from e
 
 
+@app.get("/api/setup/recurring")
+def setup_recurring_remaining(
+    profile_id: int | None = None,
+    lookback_days: int = 90,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.setup_recurring_finalize import remaining_recurring
+
+    return remaining_recurring(db, profile_id=profile_id, lookback_days=lookback_days)
+
+
+class SetupRecurringApplyIn(BaseModel):
+    accepted: list[dict] = []
+    profile_id: int | None = None
+
+
+@app.post("/api/setup/recurring/apply")
+def setup_recurring_apply(body: SetupRecurringApplyIn, db: Session = Depends(get_db)):
+    from financial_os.services.setup_recurring_finalize import apply_recurring_choices
+
+    return apply_recurring_choices(
+        db, accepted=body.accepted or [], profile_id=body.profile_id
+    )
+
+
+@app.get("/api/setup/categorize")
+def setup_categorize_status(
+    profile_id: int | None = None,
+    confirm_cap: int = 20,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.setup_categorize import categorize_status
+
+    return categorize_status(db, profile_id=profile_id, confirm_cap=confirm_cap)
+
+
+class SetupCategorizeAutoIn(BaseModel):
+    profile_id: int | None = None
+    min_confidence: float = 0.85
+    use_grok: bool = False
+    limit: int = 300
+
+
+@app.post("/api/setup/categorize/auto")
+def setup_categorize_auto(body: SetupCategorizeAutoIn | None = None, db: Session = Depends(get_db)):
+    from financial_os.services.setup_categorize import auto_apply_high_confidence, categorize_status
+
+    body = body or SetupCategorizeAutoIn()
+    res = auto_apply_high_confidence(
+        db,
+        profile_id=body.profile_id,
+        min_confidence=body.min_confidence,
+        use_grok=body.use_grok,
+        limit=body.limit,
+    )
+    res["status"] = categorize_status(db, profile_id=body.profile_id)
+    return res
+
+
+class SetupCategorizeConfirmIn(BaseModel):
+    category_id: int
+    payee_key: str | None = None
+    transaction_ids: list[int] | None = None
+    create_rule: bool = True
+    profile_id: int | None = None
+
+
+@app.post("/api/setup/categorize/confirm")
+def setup_categorize_confirm(body: SetupCategorizeConfirmIn, db: Session = Depends(get_db)):
+    from financial_os.services.setup_categorize import confirm_payee_category
+
+    try:
+        return confirm_payee_category(
+            db,
+            payee_key=body.payee_key,
+            transaction_ids=body.transaction_ids,
+            category_id=body.category_id,
+            create_rule=body.create_rule,
+            profile_id=body.profile_id,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.post("/api/onboarding/complete")
 def onboarding_complete(db: Session = Depends(get_db)):
     from financial_os.services.onboarding import complete_onboarding

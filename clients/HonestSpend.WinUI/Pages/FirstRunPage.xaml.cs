@@ -39,6 +39,13 @@ public sealed partial class FirstRunPage : Page
 
     // Discover proposals: id -> (selected, payment_option)
     private readonly Dictionary<string, (bool Selected, string? PaymentOpt, JsonElement Raw)> _discoverItems = new();
+    private readonly Dictionary<string, (bool Selected, JsonElement Raw)> _recurringItems = new();
+    private List<(int Id, string Name)> _catChips = new();
+    private string? _pendingPayeeKey;
+    private List<int>? _pendingTxnIds;
+    private string _pendingPayeeLabel = "";
+    private readonly HashSet<string> _skippedPayees = new(StringComparer.OrdinalIgnoreCase);
+    private bool _categorizeAutoRan;
 
     private TextBox? _cashName;
     private TextBox? _inst;
@@ -237,18 +244,20 @@ public sealed partial class FirstRunPage : Page
             RenderLiabilitiesHint();
             return;
         }
+        if (_phase == "recurring")
+        {
+            _ = RenderRecurringAsync();
+            return;
+        }
+        if (_phase == "categorize")
+        {
+            _ = RenderCategorizeAsync();
+            return;
+        }
 
         // Later PR placeholders
         var (title, hint, nextLabel) = _phase switch
         {
-            "recurring" => (
-                "Recurring bills",
-                "Accept detected bills and recurring investments. Coming soon.",
-                "Continue"),
-            "categorize" => (
-                "Categories",
-                "Auto-categorize + confirm top ambiguous payees. Coming soon.",
-                "Continue"),
             "budgets" => (
                 "Budgets",
                 "Seed from history and review amounts. Coming soon.",
@@ -995,6 +1004,23 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
+            if (_phase == "recurring")
+            {
+                await RecurringApplyAndAdvanceAsync();
+                return;
+            }
+
+            if (_phase == "categorize")
+            {
+                // Next = done with confirm queue → advance
+                using var api = new LedgerApiClient();
+                await api.EnsureBackendAsync();
+                var st = await api.SetupAdvanceAsync("next");
+                ApplyState(st);
+                Render();
+                return;
+            }
+
             // plaid_link + later placeholders: advance server state
             using (var api = new LedgerApiClient())
             {
@@ -1345,6 +1371,259 @@ public sealed partial class FirstRunPage : Page
             st = await api.SetupAdvanceAsync("next");
             ApplyState(st);
         }
+        Render();
+    }
+
+    private async Task RenderRecurringAsync()
+    {
+        QuestionText.Text = "Any more recurring bills?";
+        HintText.Text = "Patterns still on cash that aren’t scheduled yet. Uncheck noise; accept real bills.";
+        NextBtn.Content = "Save selected & continue";
+        _recurringItems.Clear();
+
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var rec = await api.GetSetupRecurringAsync();
+            Fields.Children.Add(new TextBlock
+            {
+                Text = $"{JsonUi.Str(rec, "message")} · active bills: {JsonUi.Int(rec, "active_bills", 0)}",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+
+            if (!rec.TryGetProperty("suggestions", out var sug) || sug.ValueKind != JsonValueKind.Array
+                || sug.GetArrayLength() == 0)
+            {
+                NextBtn.Content = "Continue";
+                return;
+            }
+
+            foreach (var s in sug.EnumerateArray())
+            {
+                var name = JsonUi.Str(s, "name");
+                var key = JsonUi.Str(s, "normalized", name);
+                _recurringItems[key] = (true, s);
+                var cb = new CheckBox
+                {
+                    Content =
+                        $"{name} · ${JsonUi.Str(s, "amount_abs")} · {JsonUi.Str(s, "cadence")} " +
+                        $"({JsonUi.Int(s, "occurrences", 0)}×)",
+                    IsChecked = true,
+                    Tag = key,
+                };
+                cb.Checked += (_, _) =>
+                {
+                    if (cb.Tag is string k && _recurringItems.TryGetValue(k, out var cur))
+                        _recurringItems[k] = (true, cur.Raw);
+                };
+                cb.Unchecked += (_, _) =>
+                {
+                    if (cb.Tag is string k && _recurringItems.TryGetValue(k, out var cur))
+                        _recurringItems[k] = (false, cur.Raw);
+                };
+                Fields.Children.Add(cb);
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = JsonUi.Str(s, "reason"),
+                    FontSize = 12,
+                    Opacity = 0.7,
+                    Margin = new Thickness(28, 0, 0, 8),
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private async Task RecurringApplyAndAdvanceAsync()
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var accepted = new List<Dictionary<string, object?>>();
+        foreach (var kv in _recurringItems)
+        {
+            if (!kv.Value.Selected) continue;
+            var s = kv.Value.Raw;
+            accepted.Add(new Dictionary<string, object?>
+            {
+                ["name"] = JsonUi.Str(s, "name"),
+                ["amount_abs"] = JsonUi.Str(s, "amount_abs"),
+                ["cadence"] = JsonUi.Str(s, "cadence", "monthly"),
+                ["suggested_next_date"] = JsonUi.Str(s, "suggested_next_date"),
+                ["selected"] = true,
+            });
+        }
+        if (accepted.Count > 0)
+        {
+            var res = await api.ApplySetupRecurringAsync(new { accepted });
+            InfoBar.Title = "Bills";
+            InfoBar.Message = JsonUi.Str(res, "message");
+            InfoBar.IsOpen = true;
+        }
+        var st = await api.SetupAdvanceAsync("next");
+        ApplyState(st);
+        Render();
+    }
+
+    private async Task RenderCategorizeAsync()
+    {
+        QuestionText.Text = "Categorize spending";
+        HintText.Text =
+            "We’ll auto-apply high-confidence rules, then ask about your top remaining payees. " +
+            "Tap a category chip — creates a rule for next time.";
+        NextBtn.Content = "Done categorizing — continue";
+
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+
+            if (!_categorizeAutoRan)
+            {
+                var auto = await api.SetupCategorizeAutoAsync(useGrok: false);
+                _categorizeAutoRan = true;
+                InfoBar.Title = "Auto-categorize";
+                InfoBar.Message = JsonUi.Str(auto, "message");
+                InfoBar.IsOpen = true;
+            }
+
+            var st = await api.GetSetupCategorizeAsync();
+            Fields.Children.Add(new TextBlock
+            {
+                Text = JsonUi.Str(st, "message") + $" ({JsonUi.Str(st, "categorized_pct")}%)",
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+
+            _catChips.Clear();
+            if (st.TryGetProperty("category_chips", out var chips) && chips.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in chips.EnumerateArray())
+                    _catChips.Add((JsonUi.Int(c, "id", 0), JsonUi.Str(c, "name")));
+            }
+
+            JsonElement? first = null;
+            if (st.TryGetProperty("confirm_queue", out var q) && q.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in q.EnumerateArray())
+                {
+                    var key = JsonUi.Str(item, "payee_key");
+                    if (!string.IsNullOrEmpty(key) && _skippedPayees.Contains(key))
+                        continue;
+                    first = item;
+                    break;
+                }
+            }
+
+            if (first is null)
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = "Nothing left to confirm — continue to budgets.",
+                    TextWrapping = TextWrapping.Wrap,
+                });
+                _pendingPayeeKey = null;
+                return;
+            }
+
+            var f = first.Value;
+            _pendingPayeeKey = JsonUi.Str(f, "payee_key");
+            _pendingPayeeLabel = JsonUi.Str(f, "payee");
+            _pendingTxnIds = new List<int>();
+            if (f.TryGetProperty("transaction_ids", out var ids) && ids.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var id in ids.EnumerateArray())
+                    if (id.TryGetInt32(out var n)) _pendingTxnIds.Add(n);
+            }
+
+            Fields.Children.Add(new TextBlock
+            {
+                Text =
+                    $"Payee: {_pendingPayeeLabel}\n" +
+                    $"{JsonUi.Int(f, "count", 0)} transactions · ${JsonUi.Str(f, "total_abs")} total",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+
+            var chipPanel = new StackPanel { Spacing = 6 };
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+            var col = 0;
+            foreach (var (cid, cname) in _catChips.Take(16))
+            {
+                if (cid <= 0) continue;
+                var b = new Button
+                {
+                    Content = cname,
+                    Tag = cid,
+                    Padding = new Thickness(10, 6, 10, 6),
+                };
+                b.Click += async (_, _) =>
+                {
+                    try { await ConfirmPayeeCategoryAsync(cid); }
+                    catch (Exception ex)
+                    {
+                        ErrorBar.Message = ex.Message;
+                        ErrorBar.IsOpen = true;
+                    }
+                };
+                row.Children.Add(b);
+                col++;
+                if (col >= 4)
+                {
+                    chipPanel.Children.Add(row);
+                    row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                    col = 0;
+                }
+            }
+            if (row.Children.Count > 0)
+                chipPanel.Children.Add(row);
+            Fields.Children.Add(chipPanel);
+
+            var skipPayee = new Button
+            {
+                Content = "Skip this payee",
+                Margin = new Thickness(0, 12, 0, 0),
+            };
+            skipPayee.Click += (_, _) =>
+            {
+                if (!string.IsNullOrEmpty(_pendingPayeeKey))
+                    _skippedPayees.Add(_pendingPayeeKey);
+                Render();
+            };
+            Fields.Children.Add(skipPayee);
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private async Task ConfirmPayeeCategoryAsync(int categoryId)
+    {
+        if (string.IsNullOrEmpty(_pendingPayeeKey) && (_pendingTxnIds is null || _pendingTxnIds.Count == 0))
+            return;
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var res = await api.SetupCategorizeConfirmAsync(new
+        {
+            category_id = categoryId,
+            payee_key = _pendingPayeeKey,
+            transaction_ids = _pendingTxnIds,
+            create_rule = true,
+        });
+        InfoBar.Title = "Categorized";
+        InfoBar.Message =
+            $"{JsonUi.Int(res, "updated", 0)} txns → {JsonUi.Str(res, "category_name")}" +
+            (JsonUi.Int(res, "rule_id", 0) > 0 ? " · rule saved" : "");
+        InfoBar.IsOpen = true;
+        _pendingPayeeKey = null;
+        _pendingTxnIds = null;
         Render();
     }
 

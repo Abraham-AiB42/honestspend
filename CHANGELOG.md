@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.43 — Setup recurring finalize + categorize confirm (PR5)
+
+- **`GET/POST /api/setup/recurring`** — remaining bill patterns; accept selected
+- **`GET /api/setup/categorize`**, **`POST .../auto`**, **`POST .../confirm`** — high-conf auto + top payee chips
+- Confirm creates category rule (“apply to all like this”)
+- Wizard: recurring checklist; categorize queue (cap ~20) with skip payee
+- Cap confirm friction; rest stays for Sort charges
+
 ## 1.0.42 — Setup discover liabilities (PR4)
 
 - **Schema v15**: `payment_option` + `payment_fixed_amount` on accounts (minimum / fixed / statement / interest_saving)

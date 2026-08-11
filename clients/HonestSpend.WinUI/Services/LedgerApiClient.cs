@@ -512,6 +512,21 @@ public sealed class LedgerApiClient : IDisposable
             payment_fixed_amount = fixedAmount,
         }, ct);
 
+    public Task<JsonElement> GetSetupRecurringAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/setup/recurring", ct);
+
+    public Task<JsonElement> ApplySetupRecurringAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/recurring/apply", body, ct);
+
+    public Task<JsonElement> GetSetupCategorizeAsync(int confirmCap = 20, CancellationToken ct = default)
+        => GetJsonAsync($"api/setup/categorize?confirm_cap={confirmCap}", ct);
+
+    public Task<JsonElement> SetupCategorizeAutoAsync(bool useGrok = false, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/categorize/auto", new { use_grok = useGrok, min_confidence = 0.85 }, ct);
+
+    public Task<JsonElement> SetupCategorizeConfirmAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/categorize/confirm", body, ct);
+
     public Task<JsonElement> CompleteOnboardingAsync(CancellationToken ct = default)
         => PostJsonAsync("api/onboarding/complete", new { }, ct);
 
