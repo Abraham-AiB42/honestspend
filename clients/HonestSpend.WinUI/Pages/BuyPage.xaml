@@ -15,6 +15,9 @@
 
             <NumberBox x:Name="AmountBox" Header="Amount ($)" Minimum="0.01"
                        SpinButtonPlacementMode="Inline" Value="100" />
+            <ComboBox x:Name="CategoryBox" Header="Budget category (optional)"
+                      PlaceholderText="Any / uncategorized"
+                      HorizontalAlignment="Stretch" />
             <ComboBox x:Name="PreferBox" Header="Prefer" SelectedIndex="0" MinWidth="280">
                 <ComboBoxItem Content="Auto (card float if safe, else cash)" Tag="auto" />
                 <ComboBoxItem Content="Cash first" Tag="cash" />
@@ -34,8 +37,11 @@
                     <TextBlock x:Name="VerdictText" FontSize="24" FontWeight="SemiBold" Text="—" />
                     <TextBlock x:Name="RecText" FontSize="16" TextWrapping="Wrap" />
                     <TextBlock x:Name="ReasonText" Opacity="0.85" TextWrapping="Wrap" />
+                    <TextBlock x:Name="BudgetCheckText" Opacity="0.85" TextWrapping="Wrap" />
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Options" Margin="0,8,0,0" />
                     <ItemsControl x:Name="OptionsList" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Free cash from budgets" Margin="0,8,0,0" />
+                    <StackPanel x:Name="CutPanel" Spacing="6" />
                     <TextBlock x:Name="ScopeText" Opacity="0.6" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock x:Name="SimText" Opacity="0.85" TextWrapping="Wrap" />
                 </StackPanel>

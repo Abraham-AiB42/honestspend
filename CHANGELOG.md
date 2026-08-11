@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.35 — Budget cuts apply + workweek settings + Can I buy? category check
+
+- **Home / Budgets**: tap cut chips to apply (skip workdays, scale week, release month)
+- **Settings**: budget reserve toggle, week start, workday checkboxes (Mon–Sun bitmask)
+- **Can I buy?**: optional budget category; warns if over remaining; shows cut offers when tight
+- Settings API: `budget_reserve_enabled`, `budget_week_starts_on`, `budget_workdays`
+
 ## 1.0.34 — Period budgets (daily / weekly / monthly)
 
 - **Budget rules** per entity: daily (workdays), weekly, monthly — Excel Budget.xlsx parity

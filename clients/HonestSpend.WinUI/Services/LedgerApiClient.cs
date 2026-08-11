@@ -559,6 +559,23 @@ public sealed class LedgerApiClient : IDisposable
             },
             ct);
 
+    public Task<JsonElement> ApplyBudgetCutAsync(
+        int budgetRuleId,
+        string kind,
+        object? paramsObj = null,
+        string? note = null,
+        CancellationToken ct = default)
+        => PostJsonAsync(
+            "api/budgets/cuts/apply",
+            new
+            {
+                budget_rule_id = budgetRuleId,
+                kind,
+                @params = paramsObj,
+                note,
+            },
+            ct);
+
     public Task<JsonElement> GetLicenseAsync(CancellationToken ct = default)
         => GetJsonAsync("api/license", ct);
 

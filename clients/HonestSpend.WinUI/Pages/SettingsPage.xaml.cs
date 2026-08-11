@@ -548,10 +548,61 @@ public sealed partial class SettingsPage : Page
             AutoCatBox.IsChecked = !s.TryGetProperty("auto_categorize_on_import", out var ac) || ac.GetBoolean();
             ClearedOnlyBox.IsChecked = !s.TryGetProperty("ifpp_cleared_only", out var co) || co.GetBoolean();
             SelectTag(IfppScopeDefaultBox, JsonUi.Str(s, "ifpp_scope", "entity"));
+
+            BudgetReserveBox.IsChecked = !s.TryGetProperty("budget_reserve_enabled", out var br)
+                || br.ValueKind != JsonValueKind.False;
+            var wstart = JsonUi.Int(s, "budget_week_starts_on", 0);
+            SelectTag(WeekStartBox, wstart.ToString());
+            var mask = JsonUi.Int(s, "budget_workdays", 31);
+            WdMon.IsChecked = (mask & 1) != 0;
+            WdTue.IsChecked = (mask & 2) != 0;
+            WdWed.IsChecked = (mask & 4) != 0;
+            WdThu.IsChecked = (mask & 8) != 0;
+            WdFri.IsChecked = (mask & 16) != 0;
+            WdSat.IsChecked = (mask & 32) != 0;
+            WdSun.IsChecked = (mask & 64) != 0;
         }
         catch (Exception ex)
         {
             StatusText.Text += " · fiscal: " + ex.Message;
+        }
+    }
+
+    private int WorkdayMaskFromUi()
+    {
+        var m = 0;
+        if (WdMon.IsChecked == true) m |= 1;
+        if (WdTue.IsChecked == true) m |= 2;
+        if (WdWed.IsChecked == true) m |= 4;
+        if (WdThu.IsChecked == true) m |= 8;
+        if (WdFri.IsChecked == true) m |= 16;
+        if (WdSat.IsChecked == true) m |= 32;
+        if (WdSun.IsChecked == true) m |= 64;
+        return m == 0 ? 31 : m;
+    }
+
+    private async void SaveBudgetSettings_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var weekStart = 0;
+            if (int.TryParse(TagOf(WeekStartBox), out var ws))
+                weekStart = ws;
+            await api.PatchSettingsAsync(new Dictionary<string, object?>
+            {
+                ["budget_reserve_enabled"] = BudgetReserveBox.IsChecked == true,
+                ["budget_week_starts_on"] = weekStart,
+                ["budget_workdays"] = WorkdayMaskFromUi(),
+            });
+            StatusText.Text = "Budget workweek & reserve settings saved.";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
         }
     }
 

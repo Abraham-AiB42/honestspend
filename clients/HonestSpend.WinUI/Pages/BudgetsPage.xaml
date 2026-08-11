@@ -68,7 +68,7 @@
             <ItemsControl x:Name="SuggestList" />
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Free cash (cuts)" />
-            <ItemsControl x:Name="CutList" />
+            <StackPanel x:Name="CutPanel" Spacing="6" />
         </StackPanel>
     </ScrollViewer>
 </Page>

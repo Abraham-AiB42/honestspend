@@ -57,7 +57,9 @@
                     <StackPanel Spacing="8">
                         <TextBlock Opacity="0.7" Text="Budgets this period" />
                         <ItemsControl x:Name="BudgetSummaryList" />
-                        <ItemsControl x:Name="BudgetCutList" />
+                        <TextBlock Opacity="0.65" FontSize="12" Text="Free cash (tap to apply)"
+                                   Margin="0,4,0,0" />
+                        <StackPanel x:Name="BudgetCutPanel" Spacing="6" />
                         <Button Content="Manage budgets" HorizontalAlignment="Left" Click="BudgetsManage_Click" />
                     </StackPanel>
                 </Border>

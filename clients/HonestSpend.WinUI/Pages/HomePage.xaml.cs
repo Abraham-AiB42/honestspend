@@ -514,7 +514,8 @@ public sealed partial class HomePage : Page
         }
 
         var lines = new List<string>();
-        var cuts = new List<string>();
+        BudgetCutPanel.Children.Clear();
+        var cutCount = 0;
         if (home.TryGetProperty("budgets", out var b) && b.ValueKind == JsonValueKind.Object)
         {
             if (b.TryGetProperty("summary", out var sum) && sum.ValueKind == JsonValueKind.Array)
@@ -530,17 +531,65 @@ public sealed partial class HomePage : Page
             {
                 foreach (var o in co.EnumerateArray())
                 {
-                    cuts.Add($"{JsonUi.Str(o, "label")} · free ${JsonUi.Str(o, "free_amount")}");
-                    if (cuts.Count >= 3)
+                    var ruleId = JsonUi.Int(o, "budget_rule_id", 0);
+                    var kind = JsonUi.Str(o, "kind");
+                    var label = JsonUi.Str(o, "label");
+                    var free = JsonUi.Str(o, "free_amount");
+                    if (ruleId <= 0 || string.IsNullOrEmpty(kind))
+                        continue;
+                    var dict = new Dictionary<string, object?>();
+                    if (o.TryGetProperty("params", out var pr) && pr.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var prop in pr.EnumerateObject())
+                        {
+                            dict[prop.Name] = prop.Value.ValueKind switch
+                            {
+                                JsonValueKind.Number when prop.Value.TryGetInt32(out var i) => i,
+                                JsonValueKind.Number => prop.Value.GetDouble(),
+                                JsonValueKind.String => prop.Value.GetString(),
+                                JsonValueKind.True => true,
+                                JsonValueKind.False => false,
+                                _ => prop.Value.GetRawText(),
+                            };
+                        }
+                    }
+                    var btn = new Button
+                    {
+                        Content = $"{label} · free ${free}",
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                        Tag = (ruleId, kind, dict),
+                    };
+                    btn.Click += BudgetCut_Click;
+                    BudgetCutPanel.Children.Add(btn);
+                    cutCount++;
+                    if (cutCount >= 4)
                         break;
                 }
             }
         }
         BudgetSummaryList.ItemsSource = lines;
-        BudgetCutList.ItemsSource = cuts;
-        BudgetCard.Visibility = lines.Count > 0 || cuts.Count > 0
+        BudgetCard.Visibility = lines.Count > 0 || cutCount > 0
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    private async void BudgetCut_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not ValueTuple<int, string, Dictionary<string, object?>> tag)
+            return;
+        var (ruleId, kind, paramsObj) = tag;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.ApplyBudgetCutAsync(ruleId, kind, paramsObj, "Applied from Home");
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private static bool ShouldShowBankTip()

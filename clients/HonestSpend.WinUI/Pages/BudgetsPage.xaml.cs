@@ -110,17 +110,63 @@ public sealed partial class BudgetsPage : Page
 
     private void ApplyCuts(JsonElement cuts)
     {
-        var list = new List<string>();
+        CutPanel.Children.Clear();
+        var n = 0;
         if (cuts.TryGetProperty("offers", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
             foreach (var o in arr.EnumerateArray())
             {
-                list.Add($"{JsonUi.Str(o, "label")} → free ${JsonUi.Str(o, "free_amount")}");
+                var ruleId = JsonUi.Int(o, "budget_rule_id", 0);
+                var kind = JsonUi.Str(o, "kind");
+                if (ruleId <= 0)
+                    continue;
+                var dict = new Dictionary<string, object?>();
+                if (o.TryGetProperty("params", out var pr) && pr.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var prop in pr.EnumerateObject())
+                    {
+                        dict[prop.Name] = prop.Value.ValueKind switch
+                        {
+                            JsonValueKind.Number when prop.Value.TryGetInt32(out var i) => i,
+                            JsonValueKind.Number => prop.Value.GetDouble(),
+                            JsonValueKind.String => prop.Value.GetString(),
+                            _ => prop.Value.GetRawText(),
+                        };
+                    }
+                }
+                var btn = new Button
+                {
+                    Content = $"{JsonUi.Str(o, "label")} · free ${JsonUi.Str(o, "free_amount")}",
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Tag = (ruleId, kind, dict),
+                };
+                btn.Click += async (_, _) =>
+                {
+                    try
+                    {
+                        using var api = new LedgerApiClient();
+                        await api.EnsureBackendAsync();
+                        await api.ApplyBudgetCutAsync(ruleId, kind, dict, "Applied from Budgets");
+                        MsgBar.Title = "Cut applied";
+                        MsgBar.Message = "Safe to spend reserve updated.";
+                        MsgBar.Severity = InfoBarSeverity.Success;
+                        MsgBar.IsOpen = true;
+                        await LoadAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        MsgBar.Message = ex.Message;
+                        MsgBar.Severity = InfoBarSeverity.Error;
+                        MsgBar.IsOpen = true;
+                    }
+                };
+                CutPanel.Children.Add(btn);
+                if (++n >= 8)
+                    break;
             }
         }
-        if (list.Count == 0)
-            list.Add("No cut offers (add budgets with remaining first).");
-        CutList.ItemsSource = list;
+        if (n == 0)
+            CutPanel.Children.Add(new TextBlock { Text = "No cut offers (add budgets with remaining first).", Opacity = 0.7 });
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)

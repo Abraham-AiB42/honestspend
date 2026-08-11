@@ -111,6 +111,27 @@
             </ComboBox>
             <Button Content="Save safety settings" Click="SaveFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
 
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Budgets (workweek &amp; reserve)" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Daily budgets use your workdays. Remaining budgets reserve cash so Safe to spend does not double-count grocery money." />
+            <CheckBox x:Name="BudgetReserveBox" Content="Reserve remaining budgets in Safe to spend" IsChecked="True" />
+            <ComboBox x:Name="WeekStartBox" Header="Week starts on" SelectedIndex="0" HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Monday" Tag="0" IsSelected="True" />
+                <ComboBoxItem Content="Sunday" Tag="6" />
+                <ComboBoxItem Content="Saturday" Tag="5" />
+            </ComboBox>
+            <TextBlock Opacity="0.7" Text="Workdays for daily budgets" />
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <CheckBox x:Name="WdMon" Content="Mon" IsChecked="True" />
+                <CheckBox x:Name="WdTue" Content="Tue" IsChecked="True" />
+                <CheckBox x:Name="WdWed" Content="Wed" IsChecked="True" />
+                <CheckBox x:Name="WdThu" Content="Thu" IsChecked="True" />
+                <CheckBox x:Name="WdFri" Content="Fri" IsChecked="True" />
+                <CheckBox x:Name="WdSat" Content="Sat" />
+                <CheckBox x:Name="WdSun" Content="Sun" />
+            </StackPanel>
+            <Button Content="Save budget settings" Click="SaveBudgetSettings_Click" Style="{StaticResource AccentButtonStyle}" />
+
             <Expander Header="Advanced (power user)" IsExpanded="False" HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Stretch">
                 <StackPanel Spacing="12" Padding="0,12,0,0">

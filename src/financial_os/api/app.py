@@ -420,6 +420,9 @@ class SettingsIn(BaseModel):
     import_reminder_focus: str | None = None  # transactions | statements | both
     import_last_at: datetime | None = None
     import_reminder_snooze_until: date | None = None
+    budget_reserve_enabled: bool | None = None
+    budget_week_starts_on: int | None = None
+    budget_workdays: int | None = None
 
 
 class SettingsPatch(BaseModel):
@@ -463,6 +466,9 @@ class SettingsPatch(BaseModel):
     import_reminder_focus: str | None = None
     import_last_at: datetime | None = None
     import_reminder_snooze_until: date | None = None
+    budget_reserve_enabled: bool | None = None
+    budget_week_starts_on: int | None = None
+    budget_workdays: int | None = None
 
 
 class SettingsOut(BaseModel):
@@ -506,6 +512,9 @@ class SettingsOut(BaseModel):
     import_reminder_focus: str = "transactions"
     import_last_at: datetime | None = None
     import_reminder_snooze_until: date | None = None
+    budget_reserve_enabled: bool = True
+    budget_week_starts_on: int = 0
+    budget_workdays: int = 31
 
 
 class QuickSetupIn(BaseModel):
