@@ -1,4 +1,4 @@
-﻿# Solid A grades SDD progress
+# Solid A grades SDD progress
 
 Plan: docs/superpowers/plans/2026-08-11-solid-a-grades.md
 Branch: feature/statement-cycles
@@ -28,3 +28,5 @@ Task 2.2: complete (68e1c30, WinUI Debug x64 green)
 Task 2.2: complete (8c04fb5)
 
 Task 2.3: complete (1a497db, docs soft until + Simple language)
+
+Task 2.4: complete (76b1957, shared NeverNegUi; Home + Bills mark-paid; WinUI Debug x64 green)

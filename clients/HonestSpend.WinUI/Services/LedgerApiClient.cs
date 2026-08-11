@@ -506,14 +506,16 @@ public sealed class LedgerApiClient : IDisposable
     /// <summary>
     /// Mark one scheduled expense occurrence paid (optional cleared txn + advance next_date).
     /// Only valid for outflows / expense schedules.
+    /// When never-neg would trip checking, pass confirmUnsafe=true after user confirms (warn mode).
     /// </summary>
     public Task<JsonElement> MarkSchedulePaidAsync(
         int id,
         bool createTransaction = true,
+        bool confirmUnsafe = false,
         CancellationToken ct = default)
         => PostJsonAsync(
             $"api/scheduled/{id}/mark-paid",
-            new { create_transaction = createTransaction },
+            new { create_transaction = createTransaction, confirm_unsafe = confirmUnsafe },
             ct);
 
     /// <summary>

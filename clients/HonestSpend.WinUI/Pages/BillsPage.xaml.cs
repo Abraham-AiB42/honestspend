@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using HonestSpend_WinUI.Helpers;
 using HonestSpend_WinUI.Services;
@@ -138,12 +139,15 @@ public sealed partial class BillsPage : Page
                 if (!active) sub += " · ENDED";
 
                 var canStep = active && !string.IsNullOrWhiteSpace(seriesId);
+                // Mark paid: active expense outflows only (amount < 0)
+                var canMarkPaid = active && IsExpenseOutflow(s);
                 rows.Add(new BillRow(
                     id,
                     title,
                     sub,
                     active ? Visibility.Visible : Visibility.Collapsed,
-                    canStep ? Visibility.Visible : Visibility.Collapsed));
+                    canStep ? Visibility.Visible : Visibility.Collapsed,
+                    canMarkPaid ? Visibility.Visible : Visibility.Collapsed));
             }
             BillList.ItemsSource = rows;
             MsgText.Text = $"{rows.Count} recurring items";
@@ -431,10 +435,101 @@ public sealed partial class BillsPage : Page
         }
     }
 
+    private async void MarkPaid_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not int id) return;
+        ErrorBar.IsOpen = false;
+        SuccessBar.IsOpen = false;
+        try
+        {
+            btn.IsEnabled = false;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            JsonElement res;
+            try
+            {
+                res = await api.MarkSchedulePaidAsync(id, createTransaction: true);
+            }
+            catch (Exception ex) when (NeverNegUi.TryParseWouldGoNegative(ex, out var confirmRequired, out var engMsg))
+            {
+                var friendly = NeverNegUi.FriendlyMessage(engMsg);
+                if (!confirmRequired)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                var dlg = new ContentDialog
+                {
+                    Title = "Checking would go negative",
+                    Content = "This would make checking negative. Mark paid anyway?",
+                    PrimaryButtonText = "Yes",
+                    CloseButtonText = "No",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = XamlRoot,
+                };
+                if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                res = await api.MarkSchedulePaidAsync(id, createTransaction: true, confirmUnsafe: true);
+            }
+
+            var name = JsonUi.Str(res, "name", "Bill");
+            var next = JsonUi.Str(res, "next_date", "");
+            var matched = res.TryGetProperty("matched", out var mt) && mt.ValueKind == JsonValueKind.True;
+            var ended = res.TryGetProperty("ended", out var en) && en.ValueKind == JsonValueKind.True;
+            string msg;
+            if (matched)
+                msg = string.IsNullOrEmpty(next) || next == "—"
+                    ? $"{name}: matched bank import — no second post"
+                    : $"{name}: matched bank import · next {next}";
+            else if (ended)
+                msg = $"{name} paid through end";
+            else
+                msg = string.IsNullOrEmpty(next) || next == "—"
+                    ? $"{name} marked paid"
+                    : $"{name} marked paid · next {next}";
+
+            SuccessBar.Title = matched ? "Matched bank payment" : "Marked paid";
+            SuccessBar.Message = msg;
+            SuccessBar.IsOpen = true;
+            MsgText.Text = msg;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            btn.IsEnabled = true;
+        }
+    }
+
+    private static bool IsExpenseOutflow(JsonElement s)
+    {
+        var kind = JsonUi.Str(s, "kind", "").ToLowerInvariant();
+        if (kind is "income")
+            return false;
+        // Prefer signed amount: expenses/owner_draw stored negative
+        var raw = JsonUi.Str(s, "amount", "0");
+        if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            return d < 0;
+        // Fallback: treat expense / owner_draw kinds as outflows
+        return kind is "expense" or "owner_draw" or "bill" or "";
+    }
+
     private sealed record BillRow(
         int Id,
         string Title,
         string Subtitle,
         Visibility EndVisible,
-        Visibility StepVisible);
+        Visibility StepVisible,
+        Visibility MarkPaidVisible);
 }

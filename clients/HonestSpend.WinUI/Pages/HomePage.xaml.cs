@@ -1392,7 +1392,40 @@ public sealed partial class HomePage : Page
             ComingUpMarkPaidBtn.IsEnabled = false;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var res = await api.MarkSchedulePaidAsync(scheduledId, createTransaction: true);
+            JsonElement res;
+            try
+            {
+                res = await api.MarkSchedulePaidAsync(scheduledId, createTransaction: true);
+            }
+            catch (Exception ex) when (NeverNegUi.TryParseWouldGoNegative(ex, out var confirmRequired, out var engMsg))
+            {
+                var friendly = NeverNegUi.FriendlyMessage(engMsg);
+                if (!confirmRequired)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                var dlg = new ContentDialog
+                {
+                    Title = "Checking would go negative",
+                    Content = "This would make checking negative. Mark paid anyway?",
+                    PrimaryButtonText = "Yes",
+                    CloseButtonText = "No",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = XamlRoot,
+                };
+                if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                res = await api.MarkSchedulePaidAsync(scheduledId, createTransaction: true, confirmUnsafe: true);
+            }
+
             var name = JsonUi.Str(res, "name", label);
             var next = JsonUi.Str(res, "next_date", "");
             var ended = res.TryGetProperty("ended", out var en) && en.ValueKind == JsonValueKind.True;
