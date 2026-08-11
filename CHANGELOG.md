@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.36 — Accept budget suggestions + Can I buy? cut re-check
+
+- **Budgets**: one-tap **Accept** suggestion sets plan from long trailing average; auto-load suggestions; unbudgeted top-spend categories get proposals
+- **Can I buy?**: applying a budget cut **auto re-checks** purchase
+- `POST /api/budgets/suggestions/accept` wired in WinUI client
+
 ## 1.0.35 — Budget cuts apply + workweek settings + Can I buy? category check
 
 - **Home / Budgets**: tap cut chips to apply (skip workdays, scale week, release month)

@@ -576,6 +576,25 @@ public sealed class LedgerApiClient : IDisposable
             },
             ct);
 
+    public Task<JsonElement> AcceptBudgetSuggestionAsync(
+        int profileId,
+        int categoryId,
+        string period,
+        decimal? amount = null,
+        string? name = null,
+        CancellationToken ct = default)
+        => PostJsonAsync(
+            "api/budgets/suggestions/accept",
+            new
+            {
+                profile_id = profileId,
+                category_id = categoryId,
+                period,
+                amount,
+                name,
+            },
+            ct);
+
     public Task<JsonElement> GetLicenseAsync(CancellationToken ct = default)
         => GetJsonAsync("api/license", ct);
 

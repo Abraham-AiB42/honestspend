@@ -210,14 +210,21 @@ public sealed partial class BuyPage : Page
                 {
                     try
                     {
+                        btn.IsEnabled = false;
                         await api.ApplyBudgetCutAsync(ruleId, kind, dict, "Applied from Can I buy?");
-                        ScenarioMsg.Text = "Cut applied — re-check purchase.";
+                        ScenarioMsg.Text = "Cut applied — re-checking purchase…";
+                        // Auto re-check Safe to spend + budget remaining
                         Check_Click(btn, new RoutedEventArgs());
+                        ScenarioMsg.Text = "Cut applied and purchase re-checked.";
                     }
                     catch (Exception ex)
                     {
                         ErrorBar.Message = ex.Message;
                         ErrorBar.IsOpen = true;
+                    }
+                    finally
+                    {
+                        btn.IsEnabled = true;
                     }
                 };
                 CutPanel.Children.Add(btn);

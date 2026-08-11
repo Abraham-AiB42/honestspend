@@ -434,6 +434,7 @@ def suggestions(
     week_start = int(getattr(settings, "budget_week_starts_on", DEFAULT_WEEK_START) or 0)
 
     items = []
+    ruled: set[tuple[int, str]] = set()
     for rule in list_rules(session, pid):
         sug = suggest_for_category(
             session,
@@ -446,7 +447,56 @@ def suggestions(
         )
         sug["budget_rule_id"] = rule.id
         sug["current_amount"] = str(_d(rule.amount).quantize(Decimal("0.01")))
+        sug["has_rule"] = True
         items.append(sug)
+        ruled.add((rule.category_id, rule.period))
+
+    # Top spend categories without a rule — propose daily/weekly/monthly from history
+    lookback_start = as_of - timedelta(days=DAILY_LOOKBACK_DAYS)
+    rows = (
+        session.query(
+            Transaction.category_id,
+            func.coalesce(func.sum(Transaction.amount), 0),
+        )
+        .filter(
+            Transaction.profile_id == pid,
+            Transaction.txn_date >= lookback_start,
+            Transaction.txn_date <= as_of,
+            Transaction.is_transfer.is_(False),
+            Transaction.amount < 0,
+            Transaction.category_id.isnot(None),
+        )
+        .group_by(Transaction.category_id)
+        .order_by(func.sum(Transaction.amount).asc())  # most negative first
+        .limit(12)
+        .all()
+    )
+    for cat_id, raw_sum in rows:
+        if cat_id is None:
+            continue
+        cid = int(cat_id)
+        # Prefer weekly suggestion for new categories (most common Excel habit after daily food)
+        for period in ("daily", "weekly", "monthly"):
+            if (cid, period) in ruled:
+                continue
+            sug = suggest_for_category(
+                session,
+                profile_id=pid,
+                category_id=cid,
+                period=period,
+                as_of=as_of,
+                active_weekdays=mask,
+                week_starts_on=week_start,
+            )
+            if _d(sug.get("suggested_amount")) <= 0:
+                continue
+            sug["budget_rule_id"] = None
+            sug["current_amount"] = None
+            sug["has_rule"] = False
+            items.append(sug)
+            ruled.add((cid, period))
+            break  # one period suggestion per unbudgeted category
+
     return {"as_of": as_of.isoformat(), "profile_id": pid, "items": items}
 
 

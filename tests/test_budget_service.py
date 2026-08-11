@@ -224,3 +224,27 @@ def test_home_safe_to_spend_subtracts_reserve(db):
     assert reserve == Decimal("100.00")
     assert after == before - reserve
     assert "budgets" in home
+
+
+def test_suggestions_include_unbudgeted_top_spend(db):
+    p = db.query(Profile).first()
+    gas = db.query(Category).filter(Category.code == "TEST_GAS").one()
+    acct = db.query(Account).first()
+    # gas spend history, no gas budget rule
+    for i in range(4):
+        db.add(
+            Transaction(
+                profile_id=p.id,
+                account_id=acct.id,
+                category_id=gas.id,
+                txn_date=date(2026, 8, 3) + timedelta(days=i * 7),
+                amount=Decimal("-40"),
+                payee="Pump",
+            )
+        )
+    db.commit()
+    sug = bs.suggestions(db, profile_id=p.id, as_of=date(2026, 8, 20))
+    gas_items = [i for i in sug["items"] if i.get("category_id") == gas.id]
+    assert len(gas_items) >= 1
+    assert gas_items[0].get("has_rule") is False
+    assert Decimal(gas_items[0]["suggested_amount"]) > 0

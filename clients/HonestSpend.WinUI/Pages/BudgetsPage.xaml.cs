@@ -36,6 +36,8 @@ public sealed partial class BudgetsPage : Page
             ApplyStatus(st);
             var cuts = await api.GetBudgetCutsAsync(AppState.SelectedProfileId);
             ApplyCuts(cuts);
+            var sug = await api.GetBudgetSuggestionsAsync(AppState.SelectedProfileId);
+            ApplySuggestions(sug);
         }
         catch (Exception ex)
         {
@@ -220,20 +222,129 @@ public sealed partial class BudgetsPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var sug = await api.GetBudgetSuggestionsAsync(AppState.SelectedProfileId);
-            var list = new List<string>();
+            ApplySuggestions(sug);
+        }
+        catch (Exception ex)
+        {
+            MsgBar.Message = ex.Message;
+            MsgBar.IsOpen = true;
+        }
+    }
+
+    private void ApplySuggestions(JsonElement sug)
+    {
+        SuggestPanel.Children.Clear();
+        var n = 0;
+        if (sug.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var it in arr.EnumerateArray())
+            {
+                var catId = JsonUi.Int(it, "category_id", 0);
+                var period = JsonUi.Str(it, "period");
+                var suggested = JsonUi.Str(it, "suggested_amount", "0");
+                var current = JsonUi.Str(it, "current_amount", "—");
+                var name = JsonUi.Str(it, "category_name");
+                var trend = JsonUi.Str(it, "trend");
+                var window = JsonUi.Str(it, "window");
+                if (catId <= 0 || string.IsNullOrEmpty(period))
+                    continue;
+
+                var row = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 8) };
+                row.Children.Add(new TextBlock
+                {
+                    Text =
+                        $"{name} · {period}: suggest ${suggested} " +
+                        $"(now {current}) · {window} · trend {trend}",
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.9,
+                });
+                var accept = new Button
+                {
+                    Content = $"Accept ${suggested}",
+                    Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Tag = (catId, period, suggested, name),
+                };
+                accept.Click += AcceptSuggestion_Click;
+                row.Children.Add(accept);
+                SuggestPanel.Children.Add(row);
+                if (++n >= 15)
+                    break;
+            }
+        }
+        if (n == 0)
+        {
+            SuggestPanel.Children.Add(new TextBlock
+            {
+                Text = "No suggestions yet — categorize spend history, then refresh.",
+                Opacity = 0.7,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private async void AcceptSuggestion_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button btn || btn.Tag is not ValueTuple<int, string, string, string> tag)
+            return;
+        var (catId, period, suggestedStr, name) = tag;
+        if (!decimal.TryParse(suggestedStr, out var amt))
+            return;
+        try
+        {
+            var pid = AppState.SelectedProfileId ?? 1;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.AcceptBudgetSuggestionAsync(pid, catId, period, amt, name);
+            MsgBar.Title = "Accepted";
+            MsgBar.Message = $"Set {name} {period} plan to ${amt:0.00} from history.";
+            MsgBar.Severity = InfoBarSeverity.Success;
+            MsgBar.IsOpen = true;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            MsgBar.Title = "Error";
+            MsgBar.Message = ex.Message;
+            MsgBar.Severity = InfoBarSeverity.Error;
+            MsgBar.IsOpen = true;
+        }
+    }
+
+    private async void FillSuggestIntoForm_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (CategoryBox.SelectedIndex < 0 || CategoryBox.SelectedIndex >= _categories.Count)
+            {
+                MsgBar.Message = "Pick a category first.";
+                MsgBar.IsOpen = true;
+                return;
+            }
+            var catId = _categories[CategoryBox.SelectedIndex].Id;
+            var period = "monthly";
+            if (PeriodBox.SelectedItem is ComboBoxItem cbi && cbi.Tag is string tag)
+                period = tag;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var sug = await api.GetBudgetSuggestionsAsync(AppState.SelectedProfileId);
             if (sug.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
             {
                 foreach (var it in arr.EnumerateArray())
                 {
-                    list.Add(
-                        $"{JsonUi.Str(it, "category_name")} {JsonUi.Str(it, "period")}: " +
-                        $"suggest ${JsonUi.Str(it, "suggested_amount")} " +
-                        $"(now ${JsonUi.Str(it, "current_amount")}) · {JsonUi.Str(it, "window")} · trend {JsonUi.Str(it, "trend")}");
+                    if (JsonUi.Int(it, "category_id", 0) == catId
+                        && JsonUi.Str(it, "period") == period)
+                    {
+                        AmountBox.Text = JsonUi.Str(it, "suggested_amount");
+                        MsgBar.Message = $"Filled ${AmountBox.Text} from {JsonUi.Str(it, "window")} average.";
+                        MsgBar.IsOpen = true;
+                        return;
+                    }
                 }
             }
-            if (list.Count == 0)
-                list.Add("No suggestions yet — add budgets and categorize spend history.");
-            SuggestList.ItemsSource = list;
+            // no matching row — still try accept path for suggestion engine via create with period
+            MsgBar.Message = "No matching suggestion row; save after entering an amount, or refresh suggestions.";
+            MsgBar.IsOpen = true;
         }
         catch (Exception ex)
         {
