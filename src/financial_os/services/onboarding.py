@@ -109,9 +109,7 @@ def apply_quick_setup(
         promo_end = None
         if card_promo_end:
             promo_end = date_cls.fromisoformat(card_promo_end[:10])
-        # Defaults so interest-free IFPP path works day one
-        due = card_due_day if card_due_day is not None else 15
-        close = card_close_day if card_close_day is not None else 1
+        # Close/due from body if present; cycle defaults fill policy/funding (1/15 else)
         card = Account(
             profile_id=profile.id,
             kind="credit",
@@ -120,14 +118,25 @@ def apply_quick_setup(
             current_balance=bal,
             credit_limit=limit if limit else None,
             available_credit=avail,
-            statement_close_day=close,
-            payment_due_day=due,
+            statement_close_day=card_close_day,
+            payment_due_day=card_due_day,
             promo_apr=card_promo_apr,
             promo_end_date=promo_end,
             promo_balance=bal if card_promo_apr is not None and card_promo_apr == 0 else None,
             is_cash_for_ifpp=False,
         )
         session.add(card)
+        session.flush()
+        from financial_os.services.cycle_config import apply_credit_cycle_defaults
+
+        apply_credit_cycle_defaults(
+            session,
+            card,
+            source="default",
+            statement_close_day=card_close_day,
+            payment_due_day=card_due_day,
+            payment_funding_account_id=int(cash.id) if cash else None,
+        )
         created["card_account"] = card_name
 
     if not getattr(settings, "setup_path", None):

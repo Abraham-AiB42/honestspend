@@ -1526,7 +1526,20 @@ def create_account(body: AccountIn, db: Session = Depends(get_db)):
     row = Account(**body.model_dump())
     db.add(row)
     db.flush()
-    db.refresh(row)
+    # New credit: statement policy, first checking funding, close/due body or 1/15
+    if (row.kind or "").lower() == "credit":
+        from financial_os.services.cycle_config import apply_credit_cycle_defaults
+
+        apply_credit_cycle_defaults(
+            db,
+            row,
+            source="default",
+            statement_close_day=body.statement_close_day,
+            payment_due_day=body.payment_due_day,
+        )
+        db.refresh(row)
+    else:
+        db.refresh(row)
     return row
 
 

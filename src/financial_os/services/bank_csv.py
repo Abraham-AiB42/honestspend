@@ -625,6 +625,17 @@ def import_bank_csv(
         except Exception:
             pass
 
+    # Credit: fill missing close/due/funding/policy only (never if cycle_config_source=user)
+    if (acct.kind or "").lower() == "credit" and (
+        result.transactions_created > 0 or result.institution_balance_set
+    ):
+        try:
+            from financial_os.services.cycle_config import apply_credit_cycle_defaults
+
+            apply_credit_cycle_defaults(session, acct, source="import")
+        except Exception:
+            pass
+
     if auto_categorize and result.transactions_created:
         applied = categorize_uncategorized(
             session,

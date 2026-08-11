@@ -198,6 +198,10 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
                         str(current)
                     )
                 existing.is_cash_for_ifpp = False
+                # Fill missing cycle config only; never overwrite cycle_config_source=user
+                from financial_os.services.cycle_config import apply_credit_cycle_defaults
+
+                apply_credit_cycle_defaults(session, existing, source="plaid")
             elif current is not None:
                 existing.is_cash_for_ifpp = kind in ("checking", "savings", "cash")
             existing.plaid_item_pk = item.id
@@ -231,6 +235,11 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
             external_id=f"plaid:{plaid_aid}",
         )
         session.add(row)
+        session.flush()
+        if kind == "credit":
+            from financial_os.services.cycle_config import apply_credit_cycle_defaults
+
+            apply_credit_cycle_defaults(session, row, source="plaid")
         out.append(row)
     session.flush()
     return out, missing_current

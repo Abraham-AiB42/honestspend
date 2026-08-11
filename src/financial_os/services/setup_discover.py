@@ -252,11 +252,11 @@ def discover_liabilities(
                 "suggested_next_date": next_due.isoformat(),
                 "reason": reason,
                 "default_payment_option": default_payment,
-                # Pre-check credit/loan at mid conf; bills only at high conf (less noise)
+                # Conservative auto-select: credit/loan need ≥2 hits + higher conf (less false cards)
                 "selected": (
                     conf >= 0.75
                     if prop_type == "bill"
-                    else conf >= 0.65
+                    else (conf >= 0.75 and len(txns) >= 2)
                     if prop_type in ("credit", "loan")
                     else conf >= 0.8
                 ),
@@ -302,7 +302,8 @@ def discover_liabilities(
                 or (as_of + timedelta(days=14)).isoformat(),
                 "reason": s.get("reason") or "Detected recurring bill pattern",
                 "default_payment_option": None,
-                "selected": True,
+                # Conservative: user must opt-in (avoids fake bills polluting Safe to spend)
+                "selected": False,
             }
         )
         seen.add(payee)
@@ -401,6 +402,17 @@ def apply_discoveries(
                 fixed = amt
             bal = abs(_d(item.get("balance") or item.get("current_balance") or 0))
             limit = abs(_d(item.get("credit_limit") or 0)) or None
+            # Close/due from body if present else leave null for cycle defaults (1/15)
+            close_raw = item.get("statement_close_day")
+            due_raw = item.get("payment_due_day")
+            try:
+                close_day = int(close_raw) if close_raw is not None else None
+            except (TypeError, ValueError):
+                close_day = None
+            try:
+                due_day = int(due_raw) if due_raw is not None else None
+            except (TypeError, ValueError):
+                due_day = None
             row = Account(
                 profile_id=pid,
                 kind="credit",
@@ -410,8 +422,8 @@ def apply_discoveries(
                 credit_limit=limit,
                 available_credit=(limit - bal) if limit is not None else None,
                 is_cash_for_ifpp=False,
-                payment_due_day=15,
-                statement_close_day=1,
+                payment_due_day=due_day,
+                statement_close_day=close_day,
                 payment_option=opt,
                 payment_fixed_amount=fixed if opt == "fixed" else None,
                 # min_payment only when fixed plan (known $) — never median historical payment
@@ -420,6 +432,18 @@ def apply_discoveries(
             )
             session.add(row)
             session.flush()
+            # Funding + missing cycle fields; never overwrites cycle_config_source=user
+            from financial_os.services.cycle_config import apply_credit_cycle_defaults
+
+            apply_credit_cycle_defaults(
+                session,
+                row,
+                source="import",
+                statement_close_day=close_day,
+                payment_due_day=due_day,
+                autopay_policy=row.autopay_policy,
+                payment_funding_account_id=int(cash.id) if cash else None,
+            )
             # Do NOT also schedule "{name} payment" — IFPP uses card balance/payoff path.
             # Double schedule would drain Safe to spend twice.
             created.append(
