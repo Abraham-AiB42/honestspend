@@ -130,13 +130,14 @@ def check_purchase(
         bal = _d(a.current_balance)
         abuf = _d(getattr(a, "safety_buffer", None) or 0)
         avail = max(ZERO, bal - abuf)
-        # Also respect global safe_to_spend ceiling
-        avail_eff = min(avail, safe_to_spend) if a.is_cash_for_ifpp else avail
-        ok = avail_eff >= amount and (not a.is_cash_for_ifpp or safe_to_spend >= amount)
+        # Cap EVERY cash option by aggregate Safe to spend (never-neg + total/per-acct + budget reserve)
+        avail_eff = min(avail, safe_to_spend)
+        ok = avail_eff >= amount and safe_to_spend >= amount
         reason = (
-            f"{a.nickname}: ${avail_eff} available after ${abuf} account buffer."
+            f"{a.nickname}: ${avail_eff} available after account buffer "
+            f"(capped by Safe to spend ${safe_to_spend})."
             if ok
-            else f"{a.nickname}: only ${avail_eff} after buffers (need ${amount})."
+            else f"{a.nickname}: only ${avail_eff} after buffers / Safe to spend (need ${amount})."
         )
         opt = PurchaseOption(
             method="cash",
@@ -147,8 +148,18 @@ def check_purchase(
             remaining_spendable=(avail_eff - amount) if ok else avail_eff,
         )
         options.append(opt)
-        if ok and (best_cash is None or _d(opt.remaining_spendable) > _d(best_cash.remaining_spendable or 0)):
-            best_cash = opt
+        if ok:
+            if best_cash is None:
+                best_cash = opt
+            else:
+                prev = next((x for x in cash_accounts if x.id == best_cash.account_id), None)
+                # Prefer IFPP primary; else higher remaining
+                if a.is_cash_for_ifpp and (prev is None or not prev.is_cash_for_ifpp):
+                    best_cash = opt
+                elif (prev is None or prev.is_cash_for_ifpp == a.is_cash_for_ifpp) and _d(
+                    opt.remaining_spendable
+                ) > _d(best_cash.remaining_spendable or 0):
+                    best_cash = opt
 
     # Aggregate cash path (for prefer=cash without picking account)
     cash_ok = safe_to_spend >= amount

@@ -25,7 +25,11 @@ public sealed partial class FirstRunPage : Page
 
     // Manual path local steps (legacy first-run)
     private int _manualStep;
-    private const int ManualMax = 6;
+    /// <summary>Manual steps 0..4 review, 5 done screen (6 labels = of 6).</summary>
+    private const int ManualLastReview = 4;
+    private const int ManualDoneStep = 5;
+    private string _phaseTitle = "Welcome";
+    private bool _canComplete;
 
     // CSV cash loop: hub | type | details | guide | import
     private string _cashUi = "hub";
@@ -107,25 +111,50 @@ public sealed partial class FirstRunPage : Page
         try
         {
             using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
+            // Retry engine so we don't bounce to empty Home
+            Exception? last = null;
+            for (var i = 0; i < 8; i++)
+            {
+                try
+                {
+                    await api.EnsureBackendAsync();
+                    if (await api.HealthAsync())
+                    {
+                        last = null;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                }
+                await Task.Delay(400);
+            }
+            if (last is not null)
+                throw last;
             var st = await api.GetSetupStateAsync();
             ApplyState(st);
             Render();
         }
         catch (Exception ex)
         {
-            // Offline: fall back to local welcome
             _phase = "welcome";
-            StepLabel.Text = "Engine starting…";
-            ErrorBar.Message = ex.Message;
+            StepLabel.Text = "Starting engine…";
+            ErrorBar.Message = "Waiting for the money engine. " + ex.Message;
             ErrorBar.IsOpen = true;
-            Render();
+            QuestionText.Text = "Almost ready";
+            HintText.Text = "HonestSpend is starting the local engine. Tap Next to retry.";
+            Fields.Children.Clear();
+            NextBtn.Content = "Retry";
+            NextBtn.IsEnabled = true;
         }
     }
 
     private void ApplyState(JsonElement st)
     {
         _phase = JsonUi.Str(st, "phase", "welcome");
+        if (_phase == "liabilities")
+            _phase = "discover"; // removed intermediate phase
         _path = st.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
             ? p.GetString()
             : null;
@@ -133,24 +162,35 @@ public sealed partial class FirstRunPage : Page
         if (st.TryGetProperty("progress_pct", out var pct) && pct.TryGetInt32(out var n))
             _progress = n;
         ProgressBar.Value = _progress;
-        if (_phase == "manual" && _manualStep == 0)
-            _manualStep = 0;
+        _phaseTitle = JsonUi.Str(st, "phase_title", _phase.Replace('_', ' '));
+        _canComplete = st.TryGetProperty("can_complete", out var cc) && cc.ValueKind == JsonValueKind.True;
         if (_phase == "done")
         {
             AppState.ShowSetupNav = false;
+            NotifyShellChrome();
         }
+    }
+
+    private static void NotifyShellChrome()
+    {
+        try
+        {
+            if (App.MainWindowInstance is MainWindow mw)
+                mw.RefreshSimpleChrome();
+        }
+        catch { /* ignore */ }
     }
 
     private void Render()
     {
-        ErrorBar.IsOpen = false;
+        // Don't clear ErrorBar here — callers control it (avoids race flash)
         InfoBar.IsOpen = false;
         Fields.Children.Clear();
         BackBtn.IsEnabled = _phase is not ("welcome" or "done");
         NextBtn.Content = "Next";
         NextBtn.IsEnabled = true;
         ProgressBar.Value = _progress;
-        StepLabel.Text = $"{_phase.Replace('_', ' ')} · {_progress}%";
+        StepLabel.Text = $"{_phaseTitle} · {_progress}%";
 
         if (_phase == "done")
         {
@@ -163,12 +203,12 @@ public sealed partial class FirstRunPage : Page
 
         if (_phase == "welcome")
         {
-            QuestionText.Text = "We'll answer one question";
+            QuestionText.Text = "What can you safely spend?";
             HintText.Text =
-                "What can you safely spend without bouncing checking or paying dumb interest?\n\n" +
-                "About 15–40 minutes if you import bank history — or 2 minutes for a quick manual start. " +
-                "You can pause anytime; we remember where you left off.";
-            NextBtn.Content = "Let's go";
+                "About 2 minutes to a Safe-to-spend number. " +
+                "Import bank history later for smarter bills and budgets.\n\n" +
+                "We never store bank passwords. You can leave anytime — setup stays open until you finish.";
+            NextBtn.Content = "Get my number";
             return;
         }
 
@@ -240,11 +280,6 @@ public sealed partial class FirstRunPage : Page
         if (_phase == "discover")
         {
             _ = RenderDiscoverAsync();
-            return;
-        }
-        if (_phase == "liabilities")
-        {
-            RenderLiabilitiesHint();
             return;
         }
         if (_phase == "recurring")
@@ -320,6 +355,7 @@ public sealed partial class FirstRunPage : Page
         QuestionText.Text = "Link your banks";
         HintText.Text = "Opens Plaid Link in your browser. After connecting, return here and press Next.";
         NextBtn.Content = "I've linked — continue";
+        NextBtn.IsEnabled = false;
         Fields.Children.Clear();
         try
         {
@@ -355,11 +391,20 @@ public sealed partial class FirstRunPage : Page
                 HorizontalAlignment = HorizontalAlignment.Left,
                 IsEnabled = enabled && !(st.TryGetProperty("at_item_limit", out var l2) && l2.GetBoolean()),
             };
-            open.Click += (_, _) =>
+            open.Click += async (_, _) =>
             {
                 try
                 {
                     Process.Start(new ProcessStartInfo(_linkUrl) { UseShellExecute = true });
+                    await Task.Delay(1500);
+                    // Refresh item count after user returns
+                    using var api2 = new LedgerApiClient();
+                    var st2 = await api2.GetPlaidStatusAsync();
+                    var n2 = JsonUi.Int(st2, "item_count", 0);
+                    NextBtn.IsEnabled = n2 > 0 || !enabled;
+                    if (n2 > 0)
+                        InfoBar.Message = $"Linked {n2} institution(s). Press Continue.";
+                    InfoBar.IsOpen = true;
                 }
                 catch (Exception ex)
                 {
@@ -368,16 +413,32 @@ public sealed partial class FirstRunPage : Page
                 }
             };
             Fields.Children.Add(open);
+            var contWithout = new Button
+            {
+                Content = "Continue without banks",
+                Margin = new Thickness(0, 8, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            contWithout.Click += (_, _) =>
+            {
+                NextBtn.IsEnabled = true;
+                InfoBar.Message = "You can link banks later in Settings.";
+                InfoBar.IsOpen = true;
+            };
+            Fields.Children.Add(contWithout);
+            // Allow continue if already linked
+            NextBtn.IsEnabled = n > 0 || !enabled;
             Fields.Children.Add(new TextBlock
             {
                 Opacity = 0.75,
                 TextWrapping = TextWrapping.Wrap,
-                Text = "Sandbox: use Plaid's test credentials in Link. Production: real banks with your Production keys.",
+                Text = "Sandbox: use Plaid's test credentials in Link. Or continue without banks and use CSV later.",
             });
         }
         catch (Exception ex)
         {
             Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+            NextBtn.IsEnabled = true;
         }
     }
 
@@ -385,15 +446,15 @@ public sealed partial class FirstRunPage : Page
     {
         QuestionText.Text = "AI helpers (optional)";
         HintText.Text =
-            "After Plaid, you can add BYOK keys for smarter categorize later. " +
-            "Grok (xAI) is first-class; OpenAI, Anthropic, or custom are stored too. All local-only. Skip anytime.";
+            "Optional: your own LLM key for smarter categorize. " +
+            "Grok (xAI) is used today; other providers are stored for later. Local only — or Skip this step.";
         NextBtn.Content = "Save & continue (or skip empty)";
 
         _aiProvider = new ComboBox { Header = "Provider", HorizontalAlignment = HorizontalAlignment.Stretch };
-        AddCombo(_aiProvider, "xai", "Grok (xAI)", true);
-        AddCombo(_aiProvider, "openai", "OpenAI", false);
-        AddCombo(_aiProvider, "anthropic", "Anthropic", false);
-        AddCombo(_aiProvider, "custom", "Other / custom", false);
+        AddCombo(_aiProvider, "xai", "Grok (xAI) — used for categorize", true);
+        AddCombo(_aiProvider, "openai", "OpenAI (stored for future)", false);
+        AddCombo(_aiProvider, "anthropic", "Anthropic (stored for future)", false);
+        AddCombo(_aiProvider, "custom", "Other / custom (stored for future)", false);
         _aiKey = new TextBox { Header = "API key", PlaceholderText = "sk-… or xai-…" };
         Fields.Children.Add(_aiProvider);
         Fields.Children.Add(_aiKey);
@@ -401,7 +462,7 @@ public sealed partial class FirstRunPage : Page
         {
             Opacity = 0.75,
             TextWrapping = TextWrapping.Wrap,
-            Text = "Leave blank and press Next to skip. You can add keys later in Settings when that ships.",
+            Text = "Leave blank and press Next to skip. Edit keys anytime under Settings → BYOK connections.",
         });
     }
 
@@ -754,8 +815,8 @@ public sealed partial class FirstRunPage : Page
 
     private void RenderManual()
     {
-        StepLabel.Text = $"Quick manual · step {_manualStep + 1} of {ManualMax + 1}";
-        NextBtn.Content = _manualStep >= ManualMax ? "Finish" : "Next";
+        StepLabel.Text = $"Quick manual · step {_manualStep + 1} of {ManualDoneStep + 1}";
+        NextBtn.Content = _manualStep >= ManualLastReview ? "Finish" : "Next";
         BackBtn.IsEnabled = _manualStep > 0 || _phase != "welcome";
 
         switch (_manualStep)
@@ -887,8 +948,10 @@ public sealed partial class FirstRunPage : Page
 
     private async Task ChoosePathAsync(string path)
     {
+        if (_loading) return;
         try
         {
+            _loading = true;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var st = await api.SetupAdvanceAsync("set_path", path: path);
@@ -900,6 +963,10 @@ public sealed partial class FirstRunPage : Page
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 
@@ -1058,21 +1125,22 @@ public sealed partial class FirstRunPage : Page
         if (_manualStep == 2 && _wantBillV && _billAmtV <= 0)
             throw new InvalidOperationException("Bill amount must be greater than zero.");
 
-        if (_manualStep < 4)
+        if (_manualStep < ManualLastReview)
         {
             _manualStep++;
             Render();
             return;
         }
 
-        if (_manualStep == 4)
+        if (_manualStep == ManualLastReview)
         {
             await SubmitManualAsync();
-            _manualStep = 5;
+            _manualStep = ManualDoneStep;
             Render();
             return;
         }
 
+        NotifyShellChrome();
         Frame?.Navigate(typeof(HomePage));
     }
 
@@ -1113,6 +1181,7 @@ public sealed partial class FirstRunPage : Page
         var st = await api.GetSetupStateAsync();
         ApplyState(st);
         AppState.ShowSetupNav = false;
+        NotifyShellChrome();
     }
 
     private async Task SavePlaidKeysAndAdvanceAsync()
@@ -1315,25 +1384,6 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
-    private void RenderLiabilitiesHint()
-    {
-        QuestionText.Text = "Debts & payment plans";
-        HintText.Text =
-            "Accounts you accepted are created. You can change payment plans anytime under Accounts. " +
-            "Next reviews remaining recurring suggestions.";
-        NextBtn.Content = "Continue";
-        Fields.Children.Add(new TextBlock
-        {
-            TextWrapping = TextWrapping.Wrap,
-            Text =
-                "Payment options:\n" +
-                "• Interest-saving — prioritize full promo / interest-free path (default)\n" +
-                "• Statement balance — pay the statement each cycle\n" +
-                "• Fixed — set a fixed dollar payment\n" +
-                "• Minimum — min only (APR risk warning later)",
-        });
-    }
-
     private async Task DiscoverApplyAndAdvanceAsync()
     {
         using var api = new LedgerApiClient();
@@ -1370,12 +1420,6 @@ public sealed partial class FirstRunPage : Page
 
         var st = await api.SetupAdvanceAsync("next");
         ApplyState(st);
-        // Skip empty liabilities intermediate if we already applied
-        if (_phase == "liabilities")
-        {
-            st = await api.SetupAdvanceAsync("next");
-            ApplyState(st);
-        }
         Render();
     }
 
@@ -1490,7 +1534,27 @@ public sealed partial class FirstRunPage : Page
 
             if (!_categorizeAutoRan)
             {
-                var auto = await api.SetupCategorizeAutoAsync(useGrok: false);
+                var useGrok = false;
+                try
+                {
+                    var ai = await api.GetAiCredentialsAsync();
+                    if (ai.TryGetProperty("grok_enabled", out var ge) && ge.GetBoolean())
+                        useGrok = true;
+                    else if (ai.TryGetProperty("providers", out var prov) && prov.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var pr in prov.EnumerateArray())
+                        {
+                            if (JsonUi.Str(pr, "id") == "xai"
+                                && pr.TryGetProperty("configured", out var cf) && cf.GetBoolean())
+                            {
+                                useGrok = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch { /* optional */ }
+                var auto = await api.SetupCategorizeAutoAsync(useGrok: useGrok);
                 _categorizeAutoRan = true;
                 InfoBar.Title = "Auto-categorize";
                 InfoBar.Message = JsonUi.Str(auto, "message");
@@ -1645,7 +1709,8 @@ public sealed partial class FirstRunPage : Page
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var rev = await api.GetSetupBudgetsAsync(seedIfEmpty: true);
+            await api.SeedSetupBudgetsAsync();
+            var rev = await api.GetSetupBudgetsAsync(seedIfEmpty: false);
             Fields.Children.Add(new TextBlock
             {
                 Text = JsonUi.Str(rev, "message"),
@@ -1789,36 +1854,51 @@ public sealed partial class FirstRunPage : Page
             total_buffer = total,
             account_buffers = acctBufs,
         });
-        // Mark setup complete
-        var st = await api.SetupAdvanceAsync("complete");
-        ApplyState(st);
+        try
+        {
+            var st = await api.SetupAdvanceAsync("complete");
+            ApplyState(st);
+        }
+        catch (Exception ex)
+        {
+            // Server requires cash — force_empty only if user explicitly abandons
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+            return;
+        }
         AppState.ShowSetupNav = false;
+        NotifyShellChrome();
         MsgText.Text = "Setup complete — Home is ready with Safe to spend, bills, and budgets.";
         Render();
     }
 
     private async void Skip_Click(object sender, RoutedEventArgs e)
     {
+        if (_loading) return;
         try
         {
+            _loading = true;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            // On path phases, skip phase not whole setup when mid-plaid
-            if (_phase is "ai_keys" or "plaid_link" or "plaid_keys")
+            // Skip this step only — never mark setup complete from Skip
+            if (_phase is "welcome" or "path" or "done")
             {
-                var st = await api.SetupAdvanceAsync("skip_phase");
-                ApplyState(st);
-                Render();
+                // Leave for later: Home while needs_setup stays true
+                Frame?.Navigate(typeof(HomePage));
                 return;
             }
-            await api.SetupCompleteAsync("skipped-from-wizard");
-            AppState.ShowSetupNav = false;
-            Frame?.Navigate(typeof(HomePage));
+            var st = await api.SetupAdvanceAsync("skip_phase");
+            ApplyState(st);
+            Render();
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 }

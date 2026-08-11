@@ -18,12 +18,14 @@ Resumable multi-phase onboarding (v1.0.39+). Goal: cash books → liabilities �
 3b. **Plaid Link** — app opens `/static/plaid-link.html`  
 3c. **AI keys** — Grok / OpenAI / Anthropic / custom (optional)  
 4. **Cash loop** — type → nickname/bank → guide → import  
-5. **Discover** — cards, loans, bills, recurring investments; card payment plans  
+5. **Discover** — cards, loans, bills, recurring investments; card payment plans (no double-schedule on cards)  
 6. **Recurring** — remaining bill patterns  
 7. **Categorize** — high-conf auto + top payee chips (rules learned)  
 8. **Budgets** — seed from history, edit amounts  
-9. **Buffers** — total floor + per-account reserves  
+9. **Buffers** — total floor + per-account reserves (IFPP pool–aligned)  
 10. **Done** → Simple Home  
+
+**Skip this step** advances one phase only. Finishing requires ≥1 cash account unless `force_empty`.
 
 ## APIs (summary)
 

@@ -357,6 +357,7 @@ def apply_discoveries(
         )
 
     created: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     for item in accepted:
         if item.get("selected") is False:
             continue
@@ -371,83 +372,139 @@ def apply_discoveries(
             next_d = date.today() + timedelta(days=14)
 
         if ptype == "credit":
+            # Idempotent: skip if credit with same normalized nickname exists
+            existing_acct = (
+                session.query(Account)
+                .filter(
+                    Account.profile_id == pid,
+                    Account.kind == "credit",
+                    Account.archived_at.is_(None),
+                )
+                .all()
+            )
+            if any(normalize_payee(a.nickname) == normalize_payee(name) for a in existing_acct):
+                skipped.append({"type": "credit", "name": name, "reason": "already_exists"})
+                continue
             opt = (item.get("payment_option") or item.get("default_payment_option") or "interest_saving")
             if opt not in PAYMENT_OPTIONS:
                 opt = "interest_saving"
-            fixed = _d(item.get("payment_fixed_amount") or amt) if opt == "fixed" else None
+            # Only set fixed amount when user chose fixed; do NOT invent min from median payment
+            fixed = _d(item.get("payment_fixed_amount")) if opt == "fixed" else None
+            if opt == "fixed" and fixed <= 0 and amt > 0:
+                fixed = amt
+            bal = abs(_d(item.get("balance") or item.get("current_balance") or 0))
+            limit = abs(_d(item.get("credit_limit") or 0)) or None
             row = Account(
                 profile_id=pid,
                 kind="credit",
                 nickname=name,
                 institution=name,
-                current_balance=ZERO,
+                current_balance=bal,
+                credit_limit=limit,
+                available_credit=(limit - bal) if limit is not None else None,
                 is_cash_for_ifpp=False,
                 payment_due_day=15,
                 statement_close_day=1,
                 payment_option=opt,
-                payment_fixed_amount=fixed,
-                min_payment=fixed if opt == "fixed" else (amt if amt > 0 else None),
+                payment_fixed_amount=fixed if opt == "fixed" else None,
+                # min_payment only when fixed plan (known $) — never median historical payment
+                min_payment=fixed if opt == "fixed" and fixed and fixed > 0 else None,
                 autopay_policy=_AUTOPAY_MAP.get(opt),
             )
             session.add(row)
             session.flush()
-            # Also schedule payment as bill so IFPP sees it
-            if amt > 0:
-                session.add(
-                    ScheduledItem(
-                        profile_id=pid,
-                        account_id=cash.id if cash else None,
-                        name=f"{name} payment",
-                        amount=-amt,
-                        next_date=next_d,
-                        cadence=cadence if cadence in ("weekly", "biweekly", "monthly", "yearly") else "monthly",
-                        certainty="expected",
-                        kind="expense",
-                        active=True,
-                        notes=f"Card payment plan ({opt}) from setup discover",
-                    )
-                )
-            created.append({"type": "credit", "id": row.id, "name": name, "payment_option": opt})
+            # Do NOT also schedule "{name} payment" — IFPP uses card balance/payoff path.
+            # Double schedule would drain Safe to spend twice.
+            created.append(
+                {
+                    "type": "credit",
+                    "id": row.id,
+                    "name": name,
+                    "payment_option": opt,
+                    "scheduled_payment": False,
+                }
+            )
 
         elif ptype == "loan":
+            existing_loan = (
+                session.query(Account)
+                .filter(
+                    Account.profile_id == pid,
+                    Account.kind == "loan",
+                    Account.archived_at.is_(None),
+                )
+                .all()
+            )
+            if any(normalize_payee(a.nickname) == normalize_payee(name) for a in existing_loan):
+                skipped.append({"type": "loan", "name": name, "reason": "already_exists"})
+                continue
             opt = (item.get("payment_option") or "fixed")
             if opt not in PAYMENT_OPTIONS:
                 opt = "fixed"
-            fixed = _d(item.get("payment_fixed_amount") or amt)
+            fixed = _d(item.get("payment_fixed_amount") or amt) if opt == "fixed" else None
+            if opt == "fixed" and (fixed is None or fixed <= 0) and amt > 0:
+                fixed = amt
+            bal = abs(_d(item.get("balance") or item.get("current_balance") or 0))
             row = Account(
                 profile_id=pid,
                 kind="loan",
                 nickname=name,
                 institution=name,
-                current_balance=ZERO,
+                current_balance=bal,
                 is_cash_for_ifpp=False,
                 payment_option=opt,
                 payment_fixed_amount=fixed if opt == "fixed" else None,
-                min_payment=fixed if fixed > 0 else None,
+                min_payment=fixed if opt == "fixed" and fixed and fixed > 0 else None,
                 autopay_policy=_AUTOPAY_MAP.get(opt, "min"),
             )
             session.add(row)
             session.flush()
-            if amt > 0:
-                session.add(
-                    ScheduledItem(
-                        profile_id=pid,
-                        account_id=cash.id if cash else None,
-                        name=f"{name} payment",
-                        amount=-amt,
-                        next_date=next_d,
-                        cadence=cadence if cadence in ("weekly", "biweekly", "monthly", "yearly") else "monthly",
-                        certainty="fixed",
-                        kind="expense",
-                        active=True,
-                        notes="Loan payment from setup discover",
+            # Loan payments: schedule only if user provided a fixed amount (known obligation).
+            # Avoid inventing bills from median without balance linkage that double-count IFPP.
+            if opt == "fixed" and fixed and fixed > 0:
+                pay_name = f"{name} payment"
+                exist_bill = (
+                    session.query(ScheduledItem)
+                    .filter(
+                        ScheduledItem.profile_id == pid,
+                        ScheduledItem.active.is_(True),
+                        ScheduledItem.name == pay_name,
                     )
+                    .first()
                 )
+                if not exist_bill:
+                    session.add(
+                        ScheduledItem(
+                            profile_id=pid,
+                            account_id=cash.id if cash else None,
+                            name=pay_name,
+                            amount=-fixed,
+                            next_date=next_d,
+                            cadence=cadence
+                            if cadence in ("weekly", "biweekly", "monthly", "yearly")
+                            else "monthly",
+                            certainty="fixed",
+                            kind="expense",
+                            active=True,
+                            notes="Loan fixed payment from setup discover (linked liability account)",
+                        )
+                    )
             created.append({"type": "loan", "id": row.id, "name": name, "payment_option": opt})
 
         elif ptype == "recurring_investment":
-            # Recurring budget debit — scheduled expense
             label = name if "invest" in name.lower() else f"{name} (Recurring Investments)"
+            exist_bill = (
+                session.query(ScheduledItem)
+                .filter(
+                    ScheduledItem.profile_id == pid,
+                    ScheduledItem.active.is_(True),
+                    ScheduledItem.name == label[:128],
+                )
+                .first()
+            )
+            if exist_bill:
+                skipped.append({"type": "recurring_investment", "name": label, "reason": "already_exists"})
+                continue
             bill = ScheduledItem(
                 profile_id=pid,
                 account_id=cash.id if cash else None,
@@ -466,6 +523,18 @@ def apply_discoveries(
 
         else:
             # bill
+            exist_bill = (
+                session.query(ScheduledItem)
+                .filter(
+                    ScheduledItem.profile_id == pid,
+                    ScheduledItem.active.is_(True),
+                    ScheduledItem.name == name,
+                )
+                .first()
+            )
+            if exist_bill:
+                skipped.append({"type": "bill", "name": name, "reason": "already_exists"})
+                continue
             bill = ScheduledItem(
                 profile_id=pid,
                 account_id=cash.id if cash else None,
@@ -486,8 +555,14 @@ def apply_discoveries(
     return {
         "ok": True,
         "created": created,
+        "skipped": skipped,
         "count": len(created),
-        "message": f"Created {len(created)} account(s)/bill(s) from your selections.",
+        "skipped_count": len(skipped),
+        "message": (
+            f"Created {len(created)} account(s)/bill(s)"
+            + (f", skipped {len(skipped)} already present" if skipped else "")
+            + "."
+        ),
     }
 
 

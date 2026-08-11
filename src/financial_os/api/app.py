@@ -872,15 +872,19 @@ def setup_advance(body: SetupAdvanceIn, db: Session = Depends(get_db)):
 
 class SetupSkipIn(BaseModel):
     note: str | None = "skipped"
+    force_empty: bool = False  # allow complete without cash (explicit abandon)
 
 
 @app.post("/api/setup/complete")
 def setup_complete(body: SetupSkipIn | None = None, db: Session = Depends(get_db)):
-    """Mark setup done (skip remaining phases)."""
+    """Mark setup done. Requires cash unless force_empty=true."""
     from financial_os.services.setup_wizard import mark_setup_done
 
     body = body or SetupSkipIn()
-    return mark_setup_done(db, note=body.note)
+    try:
+        return mark_setup_done(db, note=body.note, force_empty=body.force_empty)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/setup/cash")
@@ -1067,12 +1071,20 @@ def setup_categorize_confirm(body: SetupCategorizeConfirmIn, db: Session = Depen
 @app.get("/api/setup/budgets")
 def setup_budgets_review(
     profile_id: int | None = None,
-    seed_if_empty: bool = True,
+    seed_if_empty: bool = False,
     db: Session = Depends(get_db),
 ):
+    """Review budgets. Seeding is opt-in (seed_if_empty=true) — GET stays non-mutating by default."""
     from financial_os.services.setup_budgets import budgets_review
 
     return budgets_review(db, profile_id=profile_id, seed_if_empty=seed_if_empty)
+
+
+@app.post("/api/setup/budgets/seed")
+def setup_budgets_seed(profile_id: int | None = None, db: Session = Depends(get_db)):
+    from financial_os.services.setup_budgets import budgets_review
+
+    return budgets_review(db, profile_id=profile_id, seed_if_empty=True)
 
 
 class SetupBudgetEditsIn(BaseModel):

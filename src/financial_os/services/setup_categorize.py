@@ -204,7 +204,8 @@ def confirm_payee_category(
             q = q.filter(Transaction.profile_id == pid)
         for t in q.limit(500).all():
             nk = normalize_payee(t.payee) or (t.payee or "").strip().lower()
-            if nk == key or (key and key in nk):
+            # Exact normalized match only — avoid short-key substring mis-tags
+            if nk == key:
                 t.category_id = category_id
                 t.confidence = Decimal("1")
                 updated += 1

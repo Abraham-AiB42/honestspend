@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from financial_os.config import settings
-from financial_os.db import AppSettings, init_db
+from financial_os.db import Account, AppSettings, Profile, init_db
 from financial_os.seed import seed_all
 from financial_os.services import setup_wizard as sw
 from financial_os.services.onboarding import apply_quick_setup, get_onboarding_status
@@ -73,7 +73,14 @@ def test_manual_path_and_complete(tmp_path: Path, monkeypatch):
     sw.advance_setup(s, action="next")
     st = sw.advance_setup(s, action="set_path", path="manual")
     assert st["phase"] == "manual"
-    st = sw.mark_setup_done(s, note="test")
+    # Cannot complete without cash
+    try:
+        sw.mark_setup_done(s, note="test")
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+    st = sw.mark_setup_done(s, note="test", force_empty=True)
     assert st["phase"] == "done"
     assert st["needs_setup"] is False
     assert st["onboarding_complete"] is True
@@ -110,4 +117,33 @@ def test_payload_merge(tmp_path: Path, monkeypatch):
     )
     assert st["payload"].get("seen_welcome") is True
     assert st["payload"].get("checking_draft") == 1
+    s.close()
+
+
+def test_csv_path_has_no_liabilities_phase(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    sw.advance_setup(s, action="next")
+    st = sw.advance_setup(s, action="set_path", path="csv")
+    ids = [x["id"] for x in st["steps"]]
+    assert "liabilities" not in ids
+    assert "discover" in ids
+    s.close()
+
+
+def test_complete_with_cash(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=p.id,
+            kind="checking",
+            nickname="Ops",
+            current_balance=Decimal("1000"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    s.commit()
+    st = sw.mark_setup_done(s)
+    assert st["phase"] == "done"
+    assert st["can_complete"] is True
     s.close()

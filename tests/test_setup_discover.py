@@ -134,10 +134,33 @@ def test_apply_creates_card_with_payment_option(tmp_path: Path, monkeypatch):
     card = s.query(Account).filter(Account.kind == "credit").one()
     assert card.payment_option == "interest_saving"
     assert card.autopay_policy == "promo_sink"
+    # Card must NOT create a scheduled "{name} payment" (IFPP double-count)
+    pay_bills = (
+        s.query(ScheduledItem)
+        .filter(ScheduledItem.active.is_(True), ScheduledItem.name == "Capital One payment")
+        .all()
+    )
+    assert pay_bills == []
     bills = s.query(ScheduledItem).filter(ScheduledItem.active.is_(True)).all()
-    assert len(bills) >= 2
+    assert len(bills) >= 2  # investment + netflix only
     invest = [b for b in bills if "invest" in (b.name or "").lower() or "Vanguard" in (b.name or "")]
     assert invest
+    # Idempotent re-apply
+    res2 = apply_discoveries(
+        s,
+        profile_id=p.id,
+        accepted=[
+            {
+                "type": "credit",
+                "name": "Capital One",
+                "median_amount": "220",
+                "payment_option": "interest_saving",
+                "selected": True,
+            }
+        ],
+    )
+    assert res2["skipped_count"] >= 1
+    assert s.query(Account).filter(Account.kind == "credit").count() == 1
     s.close()
 
 

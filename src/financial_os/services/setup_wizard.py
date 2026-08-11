@@ -43,7 +43,6 @@ PATH_PHASES: dict[str, list[str]] = {
         "plaid_link",
         "ai_keys",
         "discover",
-        "liabilities",
         "recurring",
         "categorize",
         "budgets",
@@ -56,7 +55,6 @@ PATH_PHASES: dict[str, list[str]] = {
         "cash_loop",
         "import_cash",
         "discover",
-        "liabilities",
         "recurring",
         "categorize",
         "budgets",
@@ -139,47 +137,47 @@ def _path_phases(path: str | None) -> list[str]:
 
 
 def get_setup_state(session: Session) -> dict[str, Any]:
+    """Read-only setup status (no DB writes — GET must stay pure)."""
     settings = _settings(session)
     phase = _phase(settings)
     path = _path(settings)
-    # Already completed via old onboarding
+    # Reflect legacy complete without mutating (migration / write paths set phase=done)
     if bool(getattr(settings, "onboarding_complete", False)) and phase != "done":
         phase = "done"
-        settings.setup_phase = "done"
-        session.flush()
 
     seq = _path_phases(path)
-    # If current phase not in seq (e.g. switched path), clamp
+    # Clamp orphan phases (e.g. removed "liabilities") onto path sequence
     if phase not in seq and phase != "done":
-        if phase in PHASE_ORDER and path:
-            # keep phase if still valid globally
-            pass
+        if phase == "liabilities" and "discover" in seq:
+            phase = "discover"
         elif "welcome" in seq:
-            phase = "welcome"
+            phase = seq[0] if phase not in PHASE_ORDER else phase
+            if phase not in seq:
+                phase = "welcome"
 
     try:
         idx = seq.index(phase) if phase in seq else 0
     except ValueError:
         idx = 0
-    total = max(1, len(seq) - 1)  # exclude counting only
+    total = max(1, len(seq) - 1)
     progress = 100 if phase == "done" else int(round(100 * idx / total))
 
     phase_meta = next((p for p in ALL_PHASES if p["id"] == phase), ALL_PHASES[0])
     steps = []
-    for pid in seq:
-        meta = next((p for p in ALL_PHASES if p["id"] == pid), {"id": pid, "title": pid, "blurb": ""})
+    for sid in seq:
+        meta = next((p for p in ALL_PHASES if p["id"] == sid), {"id": sid, "title": sid, "blurb": ""})
         steps.append(
             {
                 **meta,
-                "current": pid == phase,
-                "done": seq.index(pid) < idx if pid in seq else False,
+                "current": sid == phase,
+                "done": seq.index(sid) < idx if sid in seq else False,
             }
         )
 
     complete = phase == "done" or bool(getattr(settings, "onboarding_complete", False))
     checklist = _checklist(session)
-    # needs_setup: wizard not finished
     needs_setup = phase != "done" and not bool(getattr(settings, "onboarding_complete", False))
+    can_complete = bool(checklist.get("has_cash"))
 
     return {
         "phase": phase,
@@ -192,11 +190,12 @@ def get_setup_state(session: Session) -> dict[str, Any]:
         "checklist": checklist,
         "needs_setup": needs_setup,
         "onboarding_complete": complete,
+        "can_complete": can_complete,
         "can_resume": needs_setup and phase not in ("welcome",),
         "product_name": getattr(settings, "product_name", None) or "HonestSpend",
-        "plaid_item_limit": 10,  # trial Item cap (institutions)
+        "plaid_item_limit": 10,
         "hints": {
-            "welcome": "About 15–40 minutes. You can pause anytime — we’ll remember where you left off.",
+            "welcome": "About 2 minutes to a Safe-to-spend number. Import later for smarter bills.",
             "path": "Plaid uses your free trial keys (up to 10 bank connections). CSV never needs bank passwords in our app.",
             "manual": "Fast path: one checking, optional card and bill. You can import later.",
         },
@@ -223,9 +222,14 @@ def set_phase(
         data = _payload(settings)
         data.update(merge_payload)
         _save_payload(settings, data)
-    settings.setup_phase = phase
     if phase == "done":
-        settings.onboarding_complete = True
+        force = bool((merge_payload or {}).get("force_empty"))
+        return mark_setup_done(
+            session,
+            note=(merge_payload or {}).get("note"),
+            force_empty=force,
+        )
+    settings.setup_phase = phase
     session.flush()
     return get_setup_state(session)
 
@@ -253,14 +257,14 @@ def advance_setup(
         _save_payload(settings, data)
 
     if action == "complete" or target_phase == "done":
-        return set_phase(session, "done", merge_payload=payload)
+        force = bool((payload or {}).get("force_empty") or (payload or {}).get("force"))
+        return mark_setup_done(session, note=(payload or {}).get("note"), force_empty=force)
 
     if action == "set_path" or (action == "next" and phase == "path"):
         chosen = (path or (payload or {}).get("path") or cur_path or "").strip().lower()
         if chosen not in VALID_PATHS:
             raise ValueError("Choose path: plaid, csv, or manual")
         settings.setup_path = chosen
-        # First phase after path
         nxt = {
             "plaid": "plaid_keys",
             "csv": "cash_loop",
@@ -270,20 +274,33 @@ def advance_setup(
         session.flush()
         return get_setup_state(session)
 
-    if action == "jump" and target_phase:
-        return set_phase(session, target_phase, path=path, merge_payload=payload)
-
-    seq = _path_phases(cur_path if phase != "path" else cur_path)
+    seq = _path_phases(cur_path)
     if phase == "welcome" and action == "next":
         settings.setup_phase = "path"
         session.flush()
         return get_setup_state(session)
 
-    if phase not in seq:
+    # Map removed phases
+    if phase == "liabilities":
+        phase = "discover" if "discover" in seq else (seq[0] if seq else "welcome")
+        settings.setup_phase = phase
+        session.flush()
+
+    if phase not in seq and phase != "done":
         seq = _path_phases(cur_path)
+        phase = seq[0] if seq else "welcome"
+
+    if action == "jump" and target_phase:
+        tp = (target_phase or "").strip().lower()
+        if tp == "done":
+            force = bool((payload or {}).get("force_empty") or (payload or {}).get("force"))
+            return mark_setup_done(session, note=(payload or {}).get("note"), force_empty=force)
+        if tp not in seq and tp != "welcome":
+            raise ValueError(f"Cannot jump to {tp} on path {cur_path or 'unset'}")
+        return set_phase(session, tp, path=path, merge_payload=payload)
 
     try:
-        idx = seq.index(phase)
+        idx = seq.index(phase) if phase in seq else 0
     except ValueError:
         idx = 0
 
@@ -294,24 +311,44 @@ def advance_setup(
         return get_setup_state(session)
 
     if action in ("next", "skip_phase"):
+        # skip_phase never auto-completes without cash
         new_idx = min(len(seq) - 1, idx + 1)
-        settings.setup_phase = seq[new_idx]
-        if settings.setup_phase == "done":
-            settings.onboarding_complete = True
+        next_phase = seq[new_idx]
+        if next_phase == "done":
+            force = action == "skip_phase"  # skipping into done still needs cash unless force
+            if action == "skip_phase":
+                # Stay on last real phase — use complete action for finish
+                return get_setup_state(session)
+            return mark_setup_done(session, note=None, force_empty=False)
+        settings.setup_phase = next_phase
         session.flush()
         return get_setup_state(session)
 
     raise ValueError(f"Unknown action: {action}")
 
 
-def mark_setup_done(session: Session, *, note: str | None = None) -> dict[str, Any]:
-    """Force complete (skip wizard)."""
+def mark_setup_done(
+    session: Session,
+    *,
+    note: str | None = None,
+    force_empty: bool = False,
+) -> dict[str, Any]:
+    """Mark wizard complete. Requires cash unless force_empty (explicit abandon)."""
     settings = _settings(session)
+    checklist = _checklist(session)
+    if not checklist.get("has_cash") and not force_empty:
+        raise ValueError(
+            "Add at least one cash account before finishing setup. "
+            "Or pass force_empty=true to leave books incomplete."
+        )
     settings.setup_phase = "done"
     settings.onboarding_complete = True
-    if note:
+    if note or force_empty:
         data = _payload(settings)
-        data["skip_note"] = note
+        if note:
+            data["skip_note"] = note
+        if force_empty:
+            data["force_empty"] = True
         _save_payload(settings, data)
     session.flush()
     try:

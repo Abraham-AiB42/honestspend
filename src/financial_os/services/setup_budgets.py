@@ -99,21 +99,49 @@ def apply_budget_edits(
 
 
 def buffers_status(session: Session, *, profile_id: int | None = None) -> dict[str, Any]:
+    """Buffer status aligned with IFPP pool (is_cash_for_ifpp + never_negative_scope)."""
+    from financial_os.engine.ifpp import CashAccountView, effective_safety_buffer
+
     settings = session.get(AppSettings, 1) or AppSettings(id=1)
     pid = _pid(session, profile_id)
+    scope = (getattr(settings, "never_negative_scope", None) or "checking").lower()
     q = session.query(Account).filter(
         Account.archived_at.is_(None),
         Account.kind.in_(("checking", "savings", "cash")),
     )
     if pid is not None:
         q = q.filter(Account.profile_id == pid)
+    rows = q.order_by(Account.id).all()
+    views = [
+        CashAccountView(
+            id=a.id,
+            name=a.nickname,
+            balance=_d(a.current_balance),
+            is_cash_for_ifpp=bool(a.is_cash_for_ifpp),
+            kind=a.kind or "checking",
+            safety_buffer=_d(getattr(a, "safety_buffer", None) or 0),
+        )
+        for a in rows
+    ]
+    eff = effective_safety_buffer(
+        views,
+        total_buffer=_d(settings.safety_buffer),
+        never_negative_scope=scope,
+    )
+    # Display all cash accounts; mark which are in IFPP pool
+    if scope == "checking":
+        pool_ids = {v.id for v in views if v.is_cash_for_ifpp and v.kind == "checking"}
+        if not pool_ids:
+            pool_ids = {v.id for v in views if v.is_cash_for_ifpp}
+    else:
+        pool_ids = {v.id for v in views if v.is_cash_for_ifpp}
+
     accounts = []
-    per_sum = ZERO
-    for a in q.order_by(Account.id).all():
+    for a in rows:
         buf = _d(getattr(a, "safety_buffer", None) or 0)
         bal = _d(a.current_balance)
         reserved = min(buf, max(ZERO, bal)) if buf > 0 else ZERO
-        per_sum += reserved
+        in_pool = a.id in pool_ids
         accounts.append(
             {
                 "id": a.id,
@@ -122,18 +150,22 @@ def buffers_status(session: Session, *, profile_id: int | None = None) -> dict[s
                 "balance": str(bal),
                 "safety_buffer": str(buf) if getattr(a, "safety_buffer", None) is not None else None,
                 "is_cash_for_ifpp": bool(a.is_cash_for_ifpp),
+                "in_ifpp_pool": in_pool,
                 "available_after_buffer": str(max(ZERO, bal - reserved)),
             }
         )
-    total = _d(settings.safety_buffer)
-    effective = max(total, per_sum)
+    total = eff["total_floor"]
+    per_sum = eff["per_account_sum"]
+    effective = eff["effective"]
     return {
         "total_buffer": str(total),
         "per_account_sum": str(per_sum),
         "effective_buffer": str(effective),
+        "never_negative_scope": scope,
+        "pool_account_ids": sorted(pool_ids),
         "accounts": accounts,
         "message": (
-            f"Total floor ${total} · per-account reserved ${per_sum} · "
+            f"Total floor ${total} · per-account in IFPP pool ${per_sum} · "
             f"IFPP uses max = ${effective}."
         ),
     }

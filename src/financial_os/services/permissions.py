@@ -67,6 +67,8 @@ WRITE_CAPS = {
     "/api/rules": "categorize",
     "/api/import": "write_txns",
     "/api/plaid": "connect_banks",
+    "/api/setup": "write_settings",
+    "/api/ai": "write_settings",
     "/api/permissions/users": "manage_users",
     "/api/tax": "tax_export",
     "/api/profiles": "write_settings",

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.46 — Setup honesty + UX fixes (review RC)
+
+- **No IFPP double-count**: credit discover creates account + payment plan only (no scheduled card payment bill)
+- **Idempotent discover apply** (skip existing names)
+- **Complete requires cash** unless `force_empty=true`
+- **Skip this step** = `skip_phase` only (never force-complete)
+- **Buffer status** uses same IFPP pool as engine
+- **Can I buy** caps every cash option by Safe to spend
+- **Removed liabilities phase**; categorize exact payee match; permissions for `/api/setup` + `/api/ai`
+- WinUI: engine retry gate, phase titles, Plaid item gate, useGrok when key present, chrome refresh
+- Budgets GET no longer seeds by default (`POST /api/setup/budgets/seed`)
+
 ## 1.0.45 — Setup wizard polish (PR7)
 
 - **docs/SETUP_WIZARD.md** — full phase map, APIs, buffers, secrets

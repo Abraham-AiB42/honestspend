@@ -190,9 +190,12 @@ if "suggestions" in srec:
 scat = must("setup categorize", c.get("/api/setup/categorize"))
 if "uncategorized_count" in scat or "confirm_queue" in scat:
     ok("setup categorize", f"uncat={scat.get('uncategorized_count')}")
-sbud = must("setup budgets", c.get("/api/setup/budgets?seed_if_empty=true"))
+sbud = must("setup budgets", c.get("/api/setup/budgets"))
 if "rules" in sbud or "count" in sbud:
     ok("setup budgets", f"rules={sbud.get('count', 0)}")
+seedb = must("setup budgets seed", c.post("/api/setup/budgets/seed", json={}))
+if "rules" in seedb or "count" in seedb or "seed" in seedb:
+    ok("setup budgets seed")
 sbuf = must("setup buffers", c.get("/api/setup/buffers"))
 if "total_buffer" in sbuf or "effective_buffer" in sbuf:
     ok("setup buffers", f"eff={sbuf.get('effective_buffer')}")

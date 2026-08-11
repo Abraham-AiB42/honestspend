@@ -78,15 +78,33 @@ public sealed partial class MainWindow : Window
         await LoadShellEntitiesAsync();
         ApplySimpleChrome();
 
-        try
+        // Wait for engine so we don't land on empty Home instead of setup
+        JsonElement? ob = null;
+        for (var attempt = 0; attempt < 10; attempt++)
         {
-            using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
-            var ob = await api.GetOnboardingAsync();
-            var needs = ob.TryGetProperty("needs_setup", out var n) && n.GetBoolean();
+            try
+            {
+                using var api = new LedgerApiClient();
+                await api.EnsureBackendAsync();
+                if (!await api.HealthAsync())
+                {
+                    await Task.Delay(500);
+                    continue;
+                }
+                ob = await api.GetOnboardingAsync();
+                break;
+            }
+            catch
+            {
+                await Task.Delay(500);
+            }
+        }
+
+        if (ob is JsonElement onboard)
+        {
+            var needs = onboard.TryGetProperty("needs_setup", out var n) && n.GetBoolean();
             AppState.ShowSetupNav = needs;
             ApplySimpleChrome();
-            // Deep-link overrides first-run only when setup is already done
             var deep = WinUiPaths.ConsumeNavigateRequest() ?? AppConfig.OpenPage;
             if (!string.IsNullOrWhiteSpace(deep) && !(needs && !AppState.ReadOnlySession))
             {
@@ -100,7 +118,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
         }
-        catch
+        else
         {
             // Engine offline — still show home; Settings can start it.
             var deepOffline = WinUiPaths.ConsumeNavigateRequest() ?? AppConfig.OpenPage;
