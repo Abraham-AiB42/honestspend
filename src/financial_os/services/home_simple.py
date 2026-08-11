@@ -261,13 +261,16 @@ def build_home_simple(
         profile_id=pid,
         scope=sc,
     )
-    # Soft line: runway start − Coming up window outflows (not a replacement for STS)
+    # Soft line: post-reserve cash base (same as STS), minus Coming up outflows,
+    # capped at Safe to spend so soft never exceeds the primary Home number.
     safe_until_window = build_safe_until_window(
         session,
         as_of=as_of,
         profile_id=pid,
         scope=sc,
         coming_up=coming_up,
+        starting_cash=cash,
+        cap_at=cash,
     )
 
     return {

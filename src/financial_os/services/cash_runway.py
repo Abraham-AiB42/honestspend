@@ -119,11 +119,17 @@ def build_safe_until_window(
     profile_id: int | None = None,
     scope: str | None = None,
     coming_up: dict[str, Any] | None = None,
+    cap_at: Decimal | None = None,
+    starting_cash: Decimal | None = None,
 ) -> dict[str, Any]:
     """Soft cash left after window outflows (does not replace safe_to_spend).
 
-    Uses the same starting cash as cash_runway and the Coming up window
-    (auto/paydays/calendar) + cash-side outflow total.
+    Default start is runway cash (after buffer/tax vault). When ``starting_cash``
+    is set (Home post-budget-reserve Safe to spend), that value is the base so
+    soft can sit below STS when Coming up still has outflows.
+
+    When ``cap_at`` is set (typically Home Safe to spend after budgets), soft
+    amount never exceeds that primary number — one cash spine for Simple Home.
     """
     as_of = as_of or date.today()
     if coming_up is None:
@@ -144,18 +150,29 @@ def build_safe_until_window(
         window_end = as_of
 
     outflows = _q(_d(coming_up.get("outflow_total")))
-    start, _pid, _sc, _det = runway_starting_cash(
-        session, profile_id=profile_id, scope=scope
-    )
-    amount = _q(max(ZERO, start - outflows))
+    if starting_cash is not None:
+        start = _q(_d(starting_cash))
+    else:
+        start, _pid, _sc, _det = runway_starting_cash(
+            session, profile_id=profile_id, scope=scope
+        )
+    raw_amount = _q(max(ZERO, start - outflows))
+    capped = False
+    amount = raw_amount
+    if cap_at is not None:
+        cap_q = _q(max(ZERO, _d(cap_at)))
+        if raw_amount > cap_q:
+            amount = cap_q
+            capped = True
 
     end_label = _label_window_end(window_end)
     mode_eff = (window.get("mode_effective") or "calendar").lower()
     if mode_eff == "paydays":
         if window.get("window_capped"):
-            reason = "horizon cap"
+            # Plain English — never "horizon" in user-facing labels
+            reason = "next few weeks · waiting on another payday"
             if window.get("paydays") and len(window.get("paydays") or []) == 1:
-                reason = "next payday · window capped"
+                reason = "next payday · looking only a few weeks out"
             label = f"Safe until {end_label} ({reason})"
         else:
             pd = int(window.get("payday_count") or 1)
@@ -172,9 +189,13 @@ def build_safe_until_window(
             label = f"Safe until {end_label} (next {cal} days · no paycheck scheduled)"
         else:
             label = f"Safe until {end_label} (next {cal} days)"
+    if capped:
+        label = f"{label} · within Safe to spend"
 
     return {
         "amount": str(amount),
+        "raw_amount": str(raw_amount),
+        "capped_to_safe_to_spend": capped,
         "window_end": window_end.isoformat(),
         "label": label,
         "starting_cash": str(start),
