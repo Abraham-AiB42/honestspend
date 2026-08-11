@@ -146,9 +146,50 @@ class Account(Base):
     payment_fixed_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
     # Per-account rainy-day floor (cash accounts); total floor remains AppSettings.safety_buffer
     safety_buffer: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    # Cash/checking that funds card payments (statement cycle / autopay)
+    payment_funding_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    # user | import | plaid | default — who last set close/due/funding/policy
+    cycle_config_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Cached open-cycle projected statement + next payment under policy
+    statement_balance_cached: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
+    next_payment_amount_cached: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True
+    )
+    next_payment_date_cached: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="accounts")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
+
+
+class StatementCycle(Base):
+    """Credit statement cycle window + projected/actual balances and payment.
+
+    status: open | closed | paid
+    source: projected | import | plaid | user
+    cycle_end is the statement close date.
+    """
+
+    __tablename__ = "statement_cycles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    cycle_start: Mapped[date] = mapped_column(Date)
+    cycle_end: Mapped[date] = mapped_column(Date)  # close date
+    due_date: Mapped[date] = mapped_column(Date)
+    projected_balance: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    actual_balance: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    payment_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    payment_funding_account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(16), default="open")  # open|closed|paid
+    source: Mapped[str] = mapped_column(
+        String(32), default="projected"
+    )  # projected|import|plaid|user
 
 
 class Transaction(Base):

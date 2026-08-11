@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -303,6 +303,50 @@ def _mig_16_account_safety_buffer(conn) -> None:
     )
 
 
+def _mig_17_statement_cycles(conn) -> None:
+    """Funding account + cycle cache on accounts; statement_cycles history table."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN payment_funding_account_id INTEGER",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN cycle_config_source VARCHAR(32)",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN statement_balance_cached NUMERIC(14,2)",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN next_payment_amount_cached NUMERIC(14,2)",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN next_payment_date_cached DATE",
+    )
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS statement_cycles ("
+            "id INTEGER PRIMARY KEY,"
+            "account_id INTEGER NOT NULL,"
+            "cycle_start DATE NOT NULL,"
+            "cycle_end DATE NOT NULL,"
+            "due_date DATE NOT NULL,"
+            "projected_balance NUMERIC(14,2),"
+            "actual_balance NUMERIC(14,2),"
+            "payment_amount NUMERIC(14,2),"
+            "payment_funding_account_id INTEGER,"
+            "status VARCHAR(16) DEFAULT 'open',"
+            "source VARCHAR(32) DEFAULT 'projected')"
+        )
+    )
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_statement_cycles_account ON statement_cycles(account_id)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -321,6 +365,7 @@ MIGRATIONS: dict[int, Callable] = {
     14: _mig_14_setup_wizard,
     15: _mig_15_payment_option,
     16: _mig_16_account_safety_buffer,
+    17: _mig_17_statement_cycles,
 }
 
 
