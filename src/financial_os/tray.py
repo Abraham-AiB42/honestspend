@@ -237,39 +237,52 @@ def run_tray(*, poll_seconds: int = 60) -> None:
             pass
 
     def refresh_now(icon=None, item=None):
-        data = _get("/api/ifpp")
+        # Prefer Home Simple Safe (post-reserve); fall back to glance then raw IFPP
+        data = _get("/api/home/simple") or _get("/api/glance") or _get("/api/ifpp")
         if not data:
-            state["title"] = "HonestSpend — server offline\nStart: financial-os serve"
+            # Locked / offline
+            health = _get("/api/health") or {}
+            if health.get("needs_unlock"):
+                state["title"] = "HonestSpend — books locked\nUnlock in the app"
+            else:
+                state["title"] = "HonestSpend — server offline\nStart: financial-os serve"
             if icon:
                 icon.title = state["title"]
                 try:
                     icon.icon = make_icon_image(alert=True)
                 except Exception:
                     pass
-                if not state["offline_notified"]:
+                if not state["offline_notified"] and not health.get("needs_unlock"):
                     notify(icon, "HonestSpend", "Engine offline on :7420")
                     state["offline_notified"] = True
             return
 
         state["offline_notified"] = False
-        combined = _money(data.get("combined_purchasing_power", 0))
-        cash = _money(data.get("cash_spendable", 0))
-        card = _money(data.get("card_float_interest_free", 0))
-        red = data.get("next_red_day") or "none"
-        mode = data.get("mode", "")
+        # Home/glance: safe_to_spend; IFPP fallback: cash_spendable
+        safe = data.get("safe_to_spend") or data.get("cash_spendable") or 0
+        cash_raw = data.get("safe_to_spend_before_budgets") or data.get("cash_spendable") or safe
+        card = data.get("can_charge_no_interest") or data.get("card_float_interest_free") or 0
+        red = data.get("next_risk_day") or data.get("next_red_day") or "none"
+        reserve = data.get("budget_reserve")
 
         dig = _get("/api/digest") or {}
         alerts = dig.get("alerts") if isinstance(dig, dict) else None
         alerts = alerts or []
+        # Home also embeds alerts
+        if not alerts and isinstance(data.get("alerts"), list):
+            alerts = data["alerts"]
         critical = [a for a in alerts if a.get("level") == "critical"]
         warn = [a for a in alerts if a.get("level") == "warn"]
         alert_line = dig.get("message") if isinstance(dig, dict) else ""
         if not alert_line:
-            alert_line = "All clear" if not alerts else f"{len(alerts)} alert(s)"
+            alert_line = data.get("digest_message") or (
+                "All clear" if not alerts else f"{len(alerts)} alert(s)"
+            )
 
+        reserve_bit = f" · budgets −{_money(reserve)}" if reserve and str(reserve) not in ("0", "0.00") else ""
         state["title"] = (
-            f"Safe to spend {combined}\n"
-            f"Cash {cash} · Can charge {card}\n"
+            f"Safe to spend {_money(safe)}\n"
+            f"Cash {_money(cash_raw)}{reserve_bit} · Can charge {_money(card)}\n"
             f"Next risk {red}\n"
             f"{alert_line}"
         )
@@ -332,6 +345,6 @@ def run_tray(*, poll_seconds: int = 60) -> None:
         t = threading.Thread(target=poll_loop, args=(icon,), daemon=True)
         t.start()
 
-    print(f"HonestSpend tray — polling {_base()}/api/ifpp + digest")
+    print(f"HonestSpend tray — polling {_base()}/api/home/simple (Safe to spend) + digest")
     print("Hover for Safe to spend. Critical alerts toast once.")
     icon.run(setup=setup)

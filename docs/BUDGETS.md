@@ -12,7 +12,8 @@ Excel **Budget.xlsx** parity: daily (workdays), weekly, and monthly **plans** wi
 
 - **Actual** = sum of expense txns in category (excludes transfers).  
 - **Remaining** = max(0, plan − actual); **no carryover**.  
-- **Reserve** = sum of remaining on active budgets → subtracted from Safe to spend when `budget_reserve_enabled` (default on).  
+- **Reserve** (Safe to spend) = for each category, **max remaining across periods** (daily/weekly/monthly — not stacked), then sum those maxima.  
+- **Fixed obligations** (`housing`, `utilities`, `insurance`, `debt`, …) do **not** reserve again — IFPP already subtracts those bills from cash runway.  
 - **Cuts** free reserve: skip N workdays, scale weekly remaining, release monthly remaining.
 
 ## API
@@ -21,8 +22,9 @@ Excel **Budget.xlsx** parity: daily (workdays), weekly, and monthly **plans** wi
 - `GET /api/budgets/status`, `/suggestions`, `/cuts`  
 - `POST /api/budgets/cuts/apply`, `/suggestions/accept`  
 - `POST /api/budgets/seed-from-history` — top spend → daily/weekly/monthly plans (`only_if_empty` for onboarding)  
-- Home: `budgets`, `budget_reserve`, `safe_to_spend_before_budgets`, `budget_seed_hint`  
-- **Can I buy?** (`POST /api/pre-purchase`): cash path uses Safe to spend after reserve; optional `category_id` → `budget_check` / `safe_budget_tight`
+- Home: `budgets`, `budget_reserve`, `safe_to_spend_before_budgets`, `why_this_number`, `budget_seed_hint`  
+- Glance / tray: same **`safe_to_spend`** as Home (post-reserve)  
+- **Can I buy?** (`POST /api/pre-purchase`): auto prefers **cash** when Safe to spend covers; card capped by Safe to spend; optional `category_id` → `budget_check` / `safe_budget_tight`
 
 ## UI
 

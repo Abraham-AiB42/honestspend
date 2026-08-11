@@ -41,6 +41,8 @@ def test_glance_shape(client: TestClient):
     assert r.status_code == 200, r.text
     body = r.json()
     assert "cash_spendable" in body
+    assert "safe_to_spend" in body  # Home parity (post budget reserve)
+    assert "budget_reserve" in body
     assert "alerts" in body
     assert "pending" in body
     assert body.get("client_hint")

@@ -252,6 +252,13 @@ def check_purchase(
                 f"Not safe: only ${safe_amt} interest-free capacity. "
                 f"Charging ${amount} risks revolving/APR. {plan.payoff_path if plan else ''}"
             )
+        # Card payoff still needs Safe-to-spend cash (post-reserve)
+        if safe and safe_to_spend < amount:
+            safe = False
+            reason = (
+                f"Interest-free capacity ${safe_amt}, but Safe to spend ${safe_to_spend} "
+                f"is short of ${amount} (would raid envelopes or buffer)."
+            )
         options.append(
             PurchaseOption(
                 method="card",
@@ -264,7 +271,7 @@ def check_purchase(
             )
         )
 
-    # Recommendation
+    # Recommendation — auto: cash first when both safe (envelope-honest)
     rec = None
     if prefer == "cash":
         rec = best_cash if best_cash and best_cash.safe else next(
@@ -277,15 +284,23 @@ def check_purchase(
         safe_cards.sort(key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True)
         rec = safe_cards[0] if safe_cards else next((o for o in options if o.method == "card"), None)
     else:
-        # auto: best rewards among safe cards, else best cash account
-        safe_cards = [o for o in options if o.method == "card" and o.safe]
-        safe_cards.sort(key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True)
-        if safe_cards:
-            rec = safe_cards[0]
-        elif best_cash and best_cash.safe:
+        if best_cash and best_cash.safe:
             rec = best_cash
         else:
-            rec = next((o for o in options if o.method == "cash" and o.account_id is None), None)
+            any_cash = next(
+                (o for o in options if o.method == "cash" and o.account_id is None and o.safe),
+                None,
+            )
+            if any_cash:
+                rec = any_cash
+            else:
+                safe_cards = [o for o in options if o.method == "card" and o.safe]
+                safe_cards.sort(
+                    key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True
+                )
+                rec = safe_cards[0] if safe_cards else next(
+                    (o for o in options if o.method == "cash" and o.account_id is None), None
+                )
 
     verdict = "do_not_buy"
     if rec and rec.safe:
@@ -302,18 +317,25 @@ def check_purchase(
             amount=amount,
             as_of=as_of,
         )
-        # Soft gate: liquidity OK but envelope short → still surface as tight
         if (
             budget_check.get("has_rule")
             and not budget_check.get("ok")
             and verdict in ("safe", "safe_via_other_method")
         ):
             verdict = "safe_budget_tight"
+            if rec and rec.safe:
+                rec.reason = (
+                    (rec.reason or "")
+                    + " · Category budget is short — stay in budget or raid envelope."
+                ).strip()
 
     return {
         "amount": str(amount),
         "as_of": as_of.isoformat(),
         "verdict": verdict,
+        "prefer_applied": prefer,
+        "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
+        "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
         "recommended": {
             "method": rec.method if rec else None,
             "account_id": rec.account_id if rec else None,
@@ -348,8 +370,8 @@ def check_purchase(
         "budget_check": budget_check,
         "principles": [
             "Never go negative on checking",
-            "Safe to spend subtracts remaining period budgets (reserve)",
-            "Intentional 0% float OK when full interest-free payoff path exists",
-            "Do not charge if it forces revolving APR",
+            "Safe to spend subtracts remaining discretionary budgets (reserve)",
+            "Auto prefers cash when Safe to spend covers",
+            "Card only if interest-free payoff path exists and Safe to spend covers",
         ],
     }

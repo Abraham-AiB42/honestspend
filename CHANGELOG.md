@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.53 — P1: one Safe number everywhere
+
+- **Glance** exposes `safe_to_spend` (post budget reserve) matching Home
+- **Tray** polls `/api/home/simple` (fallback glance/IFPP); shows Home Safe + locked state
+- **Can I buy auto** prefers cash when Safe to spend covers; card capped by Safe to spend
+- **DataDir match** fail-closed when `FOS_DATA_DIR` / AppConfig.DataDir is set
+- **Discover** higher select thresholds (bills ≥0.75; credit/loan ≥0.65)
+- **docs/BUDGETS.md** max-per-category + fixed-obligation skip
+
 ## 1.0.52 — P0: crypto side-channels + Safe honesty
 
 - **CLI/tray** refuse offline DB open when encrypted/sealed (no empty plaintext next to vault)

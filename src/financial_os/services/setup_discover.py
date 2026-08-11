@@ -252,7 +252,14 @@ def discover_liabilities(
                 "suggested_next_date": next_due.isoformat(),
                 "reason": reason,
                 "default_payment_option": default_payment,
-                "selected": conf >= 0.55,
+                # Pre-check credit/loan at mid conf; bills only at high conf (less noise)
+                "selected": (
+                    conf >= 0.75
+                    if prop_type == "bill"
+                    else conf >= 0.65
+                    if prop_type in ("credit", "loan")
+                    else conf >= 0.8
+                ),
             }
         )
 

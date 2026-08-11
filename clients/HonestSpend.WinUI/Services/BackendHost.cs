@@ -87,28 +87,39 @@ public sealed class BackendHost : IDisposable
         return false;
     }
 
-    /// <summary>True if engine data_dir matches AppConfig.DataDir (or both default).</summary>
+    /// <summary>
+    /// True if engine data_dir matches AppConfig.DataDir.
+    /// Fail-closed when DataDir is explicitly set but health lacks/mismatches path.
+    /// </summary>
     private static async Task<bool> DataDirMatchesAsync(LedgerApiClient api, CancellationToken ct)
     {
+        var wantRaw = string.IsNullOrWhiteSpace(AppConfig.DataDir)
+            ? null
+            : AppConfig.DataDir!.Trim();
         try
         {
             var h = await api.GetHealthDetailsAsync(ct);
-            if (h is null) return true; // old engine without field — allow
+            if (h is null)
+            {
+                // Explicit DataDir set but cannot read health → do not trust peer
+                return wantRaw is null;
+            }
             if (!h.Value.TryGetProperty("data_dir", out var dd) || dd.ValueKind != System.Text.Json.JsonValueKind.String)
-                return true;
+            {
+                return wantRaw is null; // old engine without field only OK for default
+            }
             var engineDir = (dd.GetString() ?? "").Trim().TrimEnd('\\', '/');
-            var want = string.IsNullOrWhiteSpace(AppConfig.DataDir)
-                ? WinUiPaths.DataDirRoot()
-                : AppConfig.DataDir!.Trim();
+            var want = wantRaw ?? WinUiPaths.DataDirRoot();
             want = Path.GetFullPath(want).TrimEnd('\\', '/');
             try { engineDir = Path.GetFullPath(engineDir).TrimEnd('\\', '/'); }
             catch { /* keep raw */ }
-            if (string.IsNullOrEmpty(engineDir)) return true;
+            if (string.IsNullOrEmpty(engineDir))
+                return wantRaw is null;
             return string.Equals(engineDir, want, StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
-            return true;
+            return wantRaw is null;
         }
     }
 
