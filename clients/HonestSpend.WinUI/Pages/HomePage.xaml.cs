@@ -96,29 +96,12 @@ public sealed partial class HomePage : Page
                 _ => new SolidColorBrush(Color.FromArgb(255, 80, 200, 120)),
             };
 
+            // One cash spine: risk day from home/IFPP only (same path as Safe to spend).
+            // Do not override with a separate cash-runway call (different reserves).
             var risk = JsonUi.Str(_home, "next_risk_day", "");
             RiskLine.Text = string.IsNullOrEmpty(risk) || risk == "—"
-                ? "No near-term cash crunch day"
-                : $"{UiCopy.NextRisk}: {risk}";
-            try
-            {
-                var runway = await api.GetCashRunwayAsync(45);
-                var firstRed = JsonUi.Str(runway, "first_red_day", "");
-                var start = JsonUi.Money(runway, "starting_cash");
-                var hi = 0;
-                if (runway.TryGetProperty("highlight_days", out var hd) && hd.ValueKind == JsonValueKind.Array)
-                    hi = hd.GetArrayLength();
-                if (!string.IsNullOrEmpty(firstRed) && firstRed != "—")
-                    RiskLine.Text =
-                        $"{UiCopy.NextRisk}: {firstRed} · runway starts {start} · {hi} busy days in view";
-                else
-                    RiskLine.Text =
-                        $"Cash runway clear ({JsonUi.Int(runway, "horizon_days", 45)}d) · starts {start}";
-            }
-            catch
-            {
-                /* optional strip */
-            }
+                ? "No near-term cash crunch"
+                : $"{UiCopy.NextRisk}: {FormatPlainWeekdayDate(risk)} — cash may run short around then";
 
             var pend = JsonUi.Str(_home, "pending_warning", "");
             PendingLine.Text = (string.IsNullOrEmpty(pend) || pend == "—") ? "" : pend;
@@ -1349,6 +1332,21 @@ public sealed partial class HomePage : Page
         {
             ComingUpMarkPaidBtn.IsEnabled = true;
         }
+    }
+
+    /// <summary>
+    /// ISO date (yyyy-MM-dd) → plain English short weekday like Coming up, e.g. "Fri Mar 6".
+    /// Unparseable values pass through unchanged.
+    /// </summary>
+    private static string FormatPlainWeekdayDate(string isoOrDate)
+    {
+        if (string.IsNullOrWhiteSpace(isoOrDate))
+            return isoOrDate;
+        if (DateOnly.TryParse(isoOrDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d))
+            return d.ToString("ddd MMM d", CultureInfo.InvariantCulture);
+        if (DateTime.TryParse(isoOrDate, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+            return dt.ToString("ddd MMM d", CultureInfo.InvariantCulture);
+        return isoOrDate;
     }
 
     private static string FormatComingUpMoney(JsonElement it, string direction)

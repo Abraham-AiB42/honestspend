@@ -15,3 +15,8 @@ Task 1.3: complete (ef8927a, tests 27 pass)
 Task 1.3: complete (cfa2e89)
 
 Task 1.4: complete (1ec48d0, tests 20 pass)
+
+Task 1.4: complete (30b60e3)
+Phase 1 Engine tasks complete
+
+Task 2.1: complete (fix(ui): plain weekday risk day on Home; WinUI Debug x64 green)
