@@ -181,6 +181,45 @@ def test_set_payment_option_fixed(tmp_path: Path, monkeypatch):
     )
     s.commit()
     assert out["payment_option"] == "fixed"
+    assert out["autopay_policy"] == "fixed"
     s.refresh(card)
     assert card.payment_fixed_amount == Decimal("150")
+    assert card.autopay_policy == "fixed"
+    assert card.payment_option == "fixed"
+    s.close()
+
+
+def test_apply_default_credit_policy_is_statement(tmp_path: Path, monkeypatch):
+    """Discover accept without payment_option → autopay_policy=statement (authority)."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    s.add(
+        Account(
+            profile_id=p.id,
+            kind="checking",
+            nickname="Checking",
+            current_balance=Decimal("3000"),
+            is_cash_for_ifpp=True,
+        )
+    )
+    s.commit()
+    res = apply_discoveries(
+        s,
+        profile_id=p.id,
+        accepted=[
+            {
+                "type": "credit",
+                "name": "Chase Sapphire",
+                "median_amount": "100",
+                "cadence": "monthly",
+                "suggested_next_date": "2026-09-01",
+                "selected": True,
+            }
+        ],
+    )
+    s.commit()
+    assert res["count"] == 1
+    card = s.query(Account).filter(Account.kind == "credit").one()
+    assert card.autopay_policy == "statement"
+    assert card.payment_option == "statement"  # alias mirror only
     s.close()

@@ -22,7 +22,7 @@
 | **Close the month** | `month_close` — fees · charges · promo · tax · reconcile · backup |
 | **Move money** | Add → Playbooks (reimburse · pay myself · fund biz · kid allowance) |
 
-**Full books** (shell toggle) restores the full nav for month-end / CPA / power users — including the **Credit** desk (statement close/due, pay policy, pay-from cash, projected statement balance, next payment, promo installment lines). Simple never shows that desk; cash next payments still feed **Safe to spend** in the background.
+**Full books** (shell toggle) restores the full nav for month-end / CPA / power users — including the **Credit** desk (statement close/due, pay policy = `autopay_policy`, pay-from cash, projected statement balance, next payment, promo installment lines). Simple never shows that desk; cash next payments still feed **Safe to spend** in the background.
 
 See [STATEMENT_CYCLES.md](./STATEMENT_CYCLES.md).
 

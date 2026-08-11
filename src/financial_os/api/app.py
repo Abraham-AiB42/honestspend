@@ -1595,11 +1595,26 @@ def list_accounts(
     return q.order_by(Account.id).all()
 
 
+def _apply_payment_option_alias(row: Account) -> None:
+    """If deprecated payment_option was set, write autopay_policy (sole authority)."""
+    from financial_os.services.autopay import PAYMENT_OPTION_TO_POLICY
+
+    opt = (getattr(row, "payment_option", None) or "").lower().strip()
+    if not opt:
+        return
+    mapped = PAYMENT_OPTION_TO_POLICY.get(opt)
+    if mapped:
+        row.autopay_policy = mapped
+
+
 @app.post("/api/accounts", response_model=AccountOut)
 def create_account(body: AccountIn, db: Session = Depends(get_db)):
     if not db.get(Profile, body.profile_id):
         raise HTTPException(404, "Profile not found")
     row = Account(**body.model_dump())
+    # Wizard alias → policy before cycle defaults (so interest_saving is not
+    # overwritten by DEFAULT_POLICY=statement when policy was blank).
+    _apply_payment_option_alias(row)
     db.add(row)
     db.flush()
     # New credit: statement policy, first checking funding, close/due body or 1/15
@@ -1612,6 +1627,7 @@ def create_account(body: AccountIn, db: Session = Depends(get_db)):
             source="default",
             statement_close_day=body.statement_close_day,
             payment_due_day=body.payment_due_day,
+            autopay_policy=row.autopay_policy,
         )
         db.refresh(row)
     else:
@@ -1626,6 +1642,7 @@ def update_account(account_id: int, body: AccountIn, db: Session = Depends(get_d
         raise HTTPException(404, "Account not found")
     for k, v in body.model_dump().items():
         setattr(row, k, v)
+    _apply_payment_option_alias(row)
     _sync_credit_available(row)
     db.flush()
     db.refresh(row)
@@ -1637,8 +1654,11 @@ def patch_account(account_id: int, body: AccountPatch, db: Session = Depends(get
     row = db.get(Account, account_id)
     if not row:
         raise HTTPException(404, "Account not found")
-    for k, v in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    for k, v in data.items():
         setattr(row, k, v)
+    if "payment_option" in data:
+        _apply_payment_option_alias(row)
     _sync_credit_available(row)
     db.flush()
     db.refresh(row)
@@ -1887,7 +1907,11 @@ def put_account_cycle_config(
     db: Session = Depends(get_db),
 ):
     """Update cycle/autopay settings; marks source=user and recomputes payment schedule."""
-    from financial_os.services.autopay import POLICIES, recompute_card_payment_schedule
+    from financial_os.services.autopay import (
+        POLICIES,
+        recompute_card_payment_schedule,
+        sync_payment_option_from_policy,
+    )
 
     row = db.get(Account, account_id)
     if not row:
@@ -1944,6 +1968,9 @@ def put_account_cycle_config(
     for k, v in data.items():
         setattr(row, k, v)
     row.cycle_config_source = "user"
+    # Keep wizard payment_option in lockstep when policy is written
+    if "autopay_policy" in data and data["autopay_policy"] is not None:
+        sync_payment_option_from_policy(row)
     db.flush()
 
     result = recompute_card_payment_schedule(db, account_id)

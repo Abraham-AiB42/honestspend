@@ -11,15 +11,18 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from financial_os.db import Account, Profile, ScheduledItem, Transaction
+from financial_os.services.autopay import PAYMENT_OPTION_TO_POLICY
 from financial_os.services.recurring_detect import detect_recurring, normalize_payee
 
 ZERO = Decimal("0")
 
+# Deprecated wizard aliases — map via PAYMENT_OPTION_TO_POLICY → autopay_policy.
 PAYMENT_OPTIONS = (
     "minimum",
     "fixed",
     "statement",
     "interest_saving",
+    "books",
 )
 
 # Card payment patterns (cash account paying a card)
@@ -54,14 +57,6 @@ _INVEST = re.compile(
     r")\b",
     re.I,
 )
-
-_AUTOPAY_MAP = {
-    "minimum": "min",
-    "fixed": "min",  # fixed amount still uses min_payment field for amount
-    "statement": "statement",
-    "interest_saving": "promo_sink",
-}
-
 
 def _d(v: Any) -> Decimal:
     if v is None:
@@ -198,7 +193,7 @@ def discover_liabilities(
             prop_type = "credit"
             conf = min(0.95, 0.55 + 0.1 * len(txns))
             reason = f"Looks like a card payment ({len(txns)}× from cash, ~${med})"
-            default_payment = "interest_saving"
+            default_payment = "statement"
         elif kind_hint == "loan":
             prop_type = "loan"
             conf = min(0.92, 0.5 + 0.1 * len(txns))
@@ -317,8 +312,9 @@ def discover_liabilities(
         "payment_options": [
             {"id": "minimum", "label": "Minimum payment"},
             {"id": "fixed", "label": "Fixed payment"},
-            {"id": "statement", "label": "Statement balance"},
-            {"id": "interest_saving", "label": "Interest-saving (recommended)"},
+            {"id": "statement", "label": "Pay statement in full (recommended)"},
+            {"id": "interest_saving", "label": "0% promo monthly set-aside"},
+            {"id": "books", "label": "Pay current balance"},
         ],
         "message": (
             f"Found {len(proposals[:25])} possible card/loan/bill/investment pattern(s). "
@@ -392,9 +388,12 @@ def apply_discoveries(
             if any(normalize_payee(a.nickname) == normalize_payee(name) for a in existing_acct):
                 skipped.append({"type": "credit", "name": name, "reason": "already_exists"})
                 continue
-            opt = (item.get("payment_option") or item.get("default_payment_option") or "interest_saving")
+            # Default: pay statement in full (matches cycle_config DEFAULT_POLICY)
+            opt = (item.get("payment_option") or item.get("default_payment_option") or "statement")
             if opt not in PAYMENT_OPTIONS:
-                opt = "interest_saving"
+                opt = "statement"
+            # Sole authority: autopay_policy; payment_option is deprecated alias
+            policy = PAYMENT_OPTION_TO_POLICY.get(opt) or "statement"
             # Only set fixed amount when user chose fixed; do NOT invent min from median payment
             fixed = _d(item.get("payment_fixed_amount")) if opt == "fixed" else None
             if opt == "fixed" and fixed <= 0 and amt > 0:
@@ -423,11 +422,11 @@ def apply_discoveries(
                 is_cash_for_ifpp=False,
                 payment_due_day=due_day,
                 statement_close_day=close_day,
-                payment_option=opt,
+                autopay_policy=policy,
+                payment_option=opt,  # deprecated alias write-through
                 payment_fixed_amount=fixed if opt == "fixed" else None,
                 # min_payment only when fixed plan (known $) — never median historical payment
                 min_payment=fixed if opt == "fixed" and fixed and fixed > 0 else None,
-                autopay_policy=_AUTOPAY_MAP.get(opt),
             )
             session.add(row)
             session.flush()
@@ -471,6 +470,7 @@ def apply_discoveries(
             opt = (item.get("payment_option") or "fixed")
             if opt not in PAYMENT_OPTIONS:
                 opt = "fixed"
+            policy = PAYMENT_OPTION_TO_POLICY.get(opt) or "min"
             fixed = _d(item.get("payment_fixed_amount") or amt) if opt == "fixed" else None
             if opt == "fixed" and (fixed is None or fixed <= 0) and amt > 0:
                 fixed = amt
@@ -482,10 +482,10 @@ def apply_discoveries(
                 institution=name,
                 current_balance=bal,
                 is_cash_for_ifpp=False,
-                payment_option=opt,
+                autopay_policy=policy,
+                payment_option=opt,  # deprecated alias write-through
                 payment_fixed_amount=fixed if opt == "fixed" else None,
                 min_payment=fixed if opt == "fixed" and fixed and fixed > 0 else None,
-                autopay_policy=_AUTOPAY_MAP.get(opt, "min"),
             )
             session.add(row)
             session.flush()
@@ -603,16 +603,29 @@ def set_account_payment_option(
     payment_option: str,
     payment_fixed_amount: Decimal | None = None,
 ) -> dict[str, Any]:
+    """Deprecated wizard edge: map payment_option → autopay_policy (sole authority).
+
+    Still accepts wizard strings for one release; writes policy first, then
+    mirrors the alias on ``payment_option``. Amount math never reads the alias.
+    """
     opt = (payment_option or "").strip().lower()
     if opt not in PAYMENT_OPTIONS:
-        raise ValueError("payment_option must be minimum, fixed, statement, or interest_saving")
+        raise ValueError(
+            "payment_option must be minimum, fixed, statement, interest_saving, or books"
+        )
+    policy = PAYMENT_OPTION_TO_POLICY.get(opt)
+    if not policy:
+        raise ValueError(
+            "payment_option must be minimum, fixed, statement, interest_saving, or books"
+        )
     row = session.get(Account, account_id)
     if not row:
         raise ValueError("Account not found")
     if row.kind not in ("credit", "loan"):
         raise ValueError("payment_option only applies to credit or loan accounts")
+    # Policy first (authority), then deprecated alias write-through
+    row.autopay_policy = policy
     row.payment_option = opt
-    row.autopay_policy = _AUTOPAY_MAP.get(opt)
     if opt == "fixed":
         row.payment_fixed_amount = _d(payment_fixed_amount) if payment_fixed_amount is not None else row.min_payment
         if row.payment_fixed_amount:

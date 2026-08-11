@@ -23,6 +23,7 @@ No client-side balance math. The engine owns cycle windows, payment amount, and 
 | **Safe to spend** | Cash you can use without bouncing checking (after bills, buffers, budget reserve, tax vault, …) |
 | **Statement balance** | What we expect the open cycle to bill (books balance minus open promo principal still on plan) |
 | **Next payment** | Cash that should leave the **pay-from** account on the next due date under the card’s pay policy |
+| **Pay policy** | `autopay_policy` is the sole engine field for **what to pay** (`none` / `min` / `statement` / `promo_sink` / `fixed` / `books`). Wizard `payment_option` is a deprecated alias only. |
 | **Pay from** | Checking/cash account that funds the card payment |
 | **Close day / Due day** | Statement closes this day of month; payment is due this day of month |
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -15,11 +15,15 @@ from financial_os.seed import seed_all
 from financial_os.services.account_balance import apply_amount_to_account
 from financial_os.services.autopay import (
     after_account_balance_changed,
+    list_autopay,
     recompute_all_card_payments,
     recompute_card_payment_schedule,
     set_autopay,
+    _suggested_amount,
 )
 from financial_os.services.ifpp_service import run_ifpp
+from financial_os.services.promo_installments import create_promo_line, open_promo_totals
+from financial_os.services.statement_cycle import project_card_payment
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -130,6 +134,10 @@ def test_set_autopay_creates_cash_funded_schedule(tmp_path: Path, monkeypatch):
     s.commit()
     assert r["ok"] is True
     assert r["policy"] == "statement"
+    # Reverse-sync: autopay_policy statement → payment_option statement
+    s.refresh(card)
+    assert card.autopay_policy == "statement"
+    assert card.payment_option == "statement"
     sched = _card_payment_schedule(s, card.id)
     assert sched is not None
     assert sched.account_id == cash.id
@@ -156,9 +164,15 @@ def test_policy_none_ends_card_payment_schedule(tmp_path: Path, monkeypatch):
     s.commit()
     assert _card_payment_schedule(s, card.id) is not None
 
+    card.payment_option = "statement"
+    s.flush()
     set_autopay(s, account_id=card.id, policy="none", apply_schedule=True)
     s.commit()
     assert _card_payment_schedule(s, card.id) is None
+    # none leaves payment_option as-is (no invented wizard state)
+    s.refresh(card)
+    assert card.autopay_policy == "none"
+    assert card.payment_option == "statement"
     s.close()
 
 
@@ -318,3 +332,153 @@ def test_archive_credit_ends_card_payment_schedule(tmp_path: Path, monkeypatch):
         assert card.next_payment_amount_cached is None
         assert card.statement_balance_cached is None
         assert card.next_payment_date_cached is None
+
+
+def test_promo_sink_suggested_matches_open_line_monthly(tmp_path: Path, monkeypatch):
+    """promo_sink suggested_amount uses open_promo_totals monthly (not balloon/months)."""
+    s = _session(tmp_path, monkeypatch)
+    as_of = date(2026, 6, 10)
+    _p, cash, card = _card_and_cash(s, bal=Decimal("1800.00"), policy="promo_sink")
+    card.promo_balance = Decimal("1800")
+    card.promo_end_date = date(2026, 12, 10)  # ~6 months → balloon/mo would be ~300
+    s.flush()
+    create_promo_line(
+        s,
+        card.id,
+        name="Fridge 0%",
+        principal_remaining=Decimal("1800"),
+        monthly_payment=Decimal("75"),
+        start_date=as_of - timedelta(days=30),
+        end_date=date(2026, 12, 10),
+    )
+    s.commit()
+
+    _principal, monthly = open_promo_totals(s, card.id, as_of=as_of)
+    assert monthly == Decimal("75.00")
+
+    sug = _suggested_amount(card, "promo_sink", session=s, as_of=as_of)
+    assert sug == Decimal("75.00")
+
+    proj = project_card_payment(s, card.id, as_of=as_of)
+    assert Decimal(str(proj["next_payment"])) == Decimal("75.00")
+    assert Decimal(str(proj["promo_due"])) == Decimal("75.00")
+
+    out = recompute_card_payment_schedule(s, card.id, as_of=as_of)
+    s.commit()
+    assert Decimal(str(out["next_payment"])) == Decimal("75.00")
+    sched = _card_payment_schedule(s, card.id)
+    assert sched is not None
+    assert sched.account_id == cash.id
+    assert sched.name == "Card payment · Visa"
+    assert sched.amount == Decimal("-75.00")
+
+    items = list_autopay(s)["items"]
+    row = next(i for i in items if i["account_id"] == card.id)
+    assert Decimal(row["suggested_amount"]) == Decimal("75.00")
+    s.close()
+
+
+def test_promo_sink_with_funding_does_not_create_card_side_sink(
+    tmp_path: Path, monkeypatch
+):
+    """set_autopay promo_sink + funding → cash Card payment; never card-side 0% sink."""
+    s = _session(tmp_path, monkeypatch)
+    as_of = date(2026, 7, 5)
+    _p, cash, card = _card_and_cash(s, bal=Decimal("1200.00"), policy="none")
+    create_promo_line(
+        s,
+        card.id,
+        name="Sofa",
+        principal_remaining=Decimal("1200"),
+        monthly_payment=Decimal("100"),
+        start_date=as_of - timedelta(days=5),
+    )
+    s.commit()
+
+    r = set_autopay(
+        s, account_id=card.id, policy="promo_sink", apply_schedule=True, as_of=as_of
+    )
+    s.commit()
+    assert r["ok"] is True
+    assert r["policy"] == "promo_sink"
+    assert Decimal(r["suggested_amount"]) == Decimal("100.00")
+
+    sched = _card_payment_schedule(s, card.id)
+    assert sched is not None
+    assert sched.account_id == cash.id
+    assert "Card payment ·" in sched.name
+    assert sched.amount == Decimal("-100.00")
+
+    card_side_sink = (
+        s.query(ScheduledItem)
+        .filter(
+            ScheduledItem.active.is_(True),
+            ScheduledItem.account_id == card.id,
+            ScheduledItem.name.like("0% sink ·%"),
+        )
+        .count()
+    )
+    assert card_side_sink == 0
+    s.close()
+
+
+def test_promo_sink_no_funding_can_use_legacy_card_sink(tmp_path: Path, monkeypatch):
+    """Without funding, set_autopay promo_sink may create legacy card-side 0% sink."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date.today()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="NoFund Card",
+        current_balance=Decimal("3000"),
+        credit_limit=Decimal("10000"),
+        available_credit=Decimal("7000"),
+        promo_apr=Decimal("0"),
+        promo_end_date=as_of + timedelta(days=90),
+        promo_balance=Decimal("3000"),
+        payment_due_day=15,
+        statement_close_day=1,
+        autopay_policy="none",
+        payment_funding_account_id=None,
+        is_cash_for_ifpp=False,
+    )
+    s.add(card)
+    s.commit()
+
+    r = set_autopay(
+        s, account_id=card.id, policy="promo_sink", apply_schedule=True, as_of=as_of
+    )
+    s.commit()
+    assert r["ok"] is True
+    # Recompute ends with no funding; fallback creates 0% sink on card
+    assert r.get("schedule") and r["schedule"].get("ok") is True
+    sink = (
+        s.query(ScheduledItem)
+        .filter(
+            ScheduledItem.active.is_(True),
+            ScheduledItem.account_id == card.id,
+            ScheduledItem.name.like("0% sink ·%"),
+        )
+        .first()
+    )
+    assert sink is not None
+    assert sink.amount < 0
+    s.close()
+
+
+def test_promo_sink_suggested_falls_back_to_balloon_months(
+    tmp_path: Path, monkeypatch
+):
+    """With no open lines, suggested uses effective_promo_balance / months-to-end."""
+    s = _session(tmp_path, monkeypatch)
+    as_of = date(2026, 1, 1)
+    _p, _cash, card = _card_and_cash(s, bal=Decimal("1200.00"), policy="promo_sink")
+    card.promo_balance = Decimal("1200")
+    card.promo_end_date = date(2026, 5, 1)  # 120 days → 4 months
+    s.commit()
+
+    sug = _suggested_amount(card, "promo_sink", session=s, as_of=as_of)
+    # 1200 / 4 = 300
+    assert sug == Decimal("300.00")
+    s.close()

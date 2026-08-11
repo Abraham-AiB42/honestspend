@@ -14,6 +14,10 @@ from sqlalchemy.orm import Session
 
 from financial_os.db import Account, ScheduledItem
 from financial_os.engine.ifpp import next_due_date
+from financial_os.services.promo_installments import (
+    effective_promo_balance,
+    open_promo_totals,
+)
 from financial_os.services.promo_sink import create_promo_sink_bill
 from financial_os.services.statement_cycle import project_card_payment
 
@@ -27,6 +31,14 @@ PAYMENT_OPTION_TO_POLICY = {
     "interest_saving": "promo_sink",
     "books": "books",
     "pay_current": "books",
+}
+# autopay_policy → payment_option (invert; ``none`` does not invent wizard state)
+POLICY_TO_PAYMENT_OPTION = {
+    "min": "minimum",
+    "statement": "statement",
+    "fixed": "fixed",
+    "promo_sink": "interest_saving",
+    "books": "books",
 }
 CARD_PAYMENT_NOTES_AUTO = "auto=statement_cycle"
 
@@ -53,10 +65,11 @@ def _notes_marker(card_id: int) -> str:
 
 
 def ensure_autopay_policy_from_payment_option(account: Account) -> str:
-    """Return effective policy; backfill only when autopay_policy is null/empty.
+    """Return effective pay policy; sole authority for what-to-pay amounts.
 
-    Explicit ``autopay_policy="none"`` is sticky — do not overwrite from
-    ``payment_option``. Only null/blank policies are filled from the wizard map.
+    Reads ``autopay_policy`` only for decisions. Backfills from deprecated wizard
+    field ``payment_option`` **only** when policy is null/blank. Explicit
+    ``autopay_policy="none"`` is sticky — never overwritten from the alias.
     """
     raw = getattr(account, "autopay_policy", None)
     if raw is not None and str(raw).strip() != "":
@@ -68,6 +81,24 @@ def ensure_autopay_policy_from_payment_option(account: Account) -> str:
         account.autopay_policy = mapped
         return mapped
     return "none"
+
+
+def sync_payment_option_from_policy(account: Account) -> str | None:
+    """Mirror ``autopay_policy`` onto deprecated wizard ``payment_option`` (display).
+
+    Amount math never reads ``payment_option``. Maps min→minimum, statement→
+    statement, fixed→fixed, promo_sink→interest_saving, books→books. Policy
+    ``none`` leaves ``payment_option`` unchanged (no invented wizard state).
+    Returns the payment_option written, or None if skipped.
+    """
+    policy = (getattr(account, "autopay_policy", None) or "").lower().strip()
+    if not policy or policy == "none" or policy not in POLICIES:
+        return None
+    mapped = POLICY_TO_PAYMENT_OPTION.get(policy)
+    if not mapped:
+        return None
+    account.payment_option = mapped
+    return mapped
 
 
 def list_autopay(
@@ -83,7 +114,8 @@ def list_autopay(
         q = q.filter(Account.profile_id == profile_id)
     items = []
     for a in q.order_by(Account.id).all():
-        policy = (getattr(a, "autopay_policy", None) or "none").lower()
+        # Amount authority: policy (null/blank may backfill from deprecated alias)
+        policy = ensure_autopay_policy_from_payment_option(a)
         if policy not in POLICIES:
             policy = "none"
         bal = _d(a.current_balance)
@@ -100,7 +132,9 @@ def list_autopay(
                 "min_payment": str(mn),
                 "payment_due_day": a.payment_due_day,
                 "policy": policy,
-                "suggested_amount": str(_suggested_amount(a, policy)),
+                "suggested_amount": str(
+                    _suggested_amount(a, policy, session=session)
+                ),
                 "funding_account_id": a.payment_funding_account_id,
                 "next_payment_cached": (
                     str(a.next_payment_amount_cached)
@@ -117,7 +151,13 @@ def list_autopay(
     }
 
 
-def _suggested_amount(a: Account, policy: str) -> Decimal:
+def _suggested_amount(
+    a: Account,
+    policy: str,
+    *,
+    session: Session | None = None,
+    as_of: date | None = None,
+) -> Decimal:
     bal = max(ZERO, _d(a.current_balance))
     if policy == "min":
         if a.min_payment is not None:
@@ -130,10 +170,19 @@ def _suggested_amount(a: Account, policy: str) -> Decimal:
             return _d(a.payment_fixed_amount)
         return ZERO
     if policy == "promo_sink":
-        # approximate monthly if promo bal set
-        promo = _d(a.promo_balance) if a.promo_balance is not None else bal
+        # Prefer open installment monthly (promo_due) — matches project_card_payment /
+        # recompute when lines are open. Else balloon ÷ months-to-end (legacy).
+        as_of_d = as_of or date.today()
+        if session is not None:
+            _principal, monthly_due = open_promo_totals(session, a.id, as_of=as_of_d)
+            if monthly_due > ZERO:
+                return monthly_due
+            eff = effective_promo_balance(session, a, as_of=as_of_d)
+            promo = _d(eff) if eff is not None else bal
+        else:
+            promo = _d(a.promo_balance) if a.promo_balance is not None else bal
         if a.promo_end_date:
-            days = max(1, (a.promo_end_date - date.today()).days)
+            days = max(1, (a.promo_end_date - as_of_d).days)
             months = max(1, days // 30)
             return (promo / Decimal(months)).quantize(Decimal("0.01"))
         return (promo / Decimal("12")).quantize(Decimal("0.01"))
@@ -156,6 +205,7 @@ def set_autopay(
     if not a or a.kind != "credit":
         raise ValueError("Credit account not found")
     a.autopay_policy = policy
+    sync_payment_option_from_policy(a)
     session.flush()
 
     schedule_result = None
@@ -167,10 +217,15 @@ def set_autopay(
             a.next_payment_date_cached = None
             session.flush()
         elif policy == "promo_sink":
-            # Prefer cash recompute; fall back to legacy promo sink bill if amount is 0
+            # Prefer cash Card payment · via recompute (statement projection).
+            # Only fall back to legacy card-side "0% sink" when no funding account
+            # exists — cash path owns the payment when funding is set.
             recomputed = recompute_card_payment_schedule(session, a.id, as_of=as_of)
             schedule_result = recomputed.get("schedule")
-            if not schedule_result or not schedule_result.get("ok"):
+            funding_id = (
+                recomputed.get("funding_account_id") or a.payment_funding_account_id
+            )
+            if (not schedule_result or not schedule_result.get("ok")) and not funding_id:
                 try:
                     schedule_result = create_promo_sink_bill(
                         session, account_id=a.id, as_of=as_of
@@ -186,7 +241,9 @@ def set_autopay(
         "account_id": a.id,
         "name": a.nickname,
         "policy": policy,
-        "suggested_amount": str(_suggested_amount(a, policy)),
+        "suggested_amount": str(
+            _suggested_amount(a, policy, session=session, as_of=as_of)
+        ),
         "schedule": schedule_result,
     }
 
@@ -290,8 +347,9 @@ def recompute_card_payment_schedule(
                 funding_account_id=int(funding_id),
                 timing=proj.get("payment_timing"),
             )
-            # Drop legacy Autopay · rows on the card (cash path owns the payment)
+            # Drop legacy card-side Autopay · / 0% sink · (cash path owns the payment)
             _end_autopay_schedules(session, a.id)
+            _end_promo_sink_schedules(session, a.id)
 
     session.flush()
     return {
@@ -328,6 +386,23 @@ def _end_autopay_schedules(session: Session, account_id: int) -> None:
     session.flush()
 
 
+def _end_promo_sink_schedules(session: Session, account_id: int) -> None:
+    """End legacy card-side 0% sink · schedules (cash Card payment owns funding)."""
+    rows = (
+        session.query(ScheduledItem)
+        .filter(
+            ScheduledItem.account_id == account_id,
+            ScheduledItem.active.is_(True),
+            ScheduledItem.name.like("0% sink ·%"),
+        )
+        .all()
+    )
+    for r in rows:
+        r.active = False
+        r.ended_reason = "cash card payment owns schedule"
+    session.flush()
+
+
 def _end_card_payment_schedules(session: Session, card_account_id: int) -> None:
     """End cash-funded Card payment schedules tagged for this card + legacy Autopay."""
     marker = _notes_marker(card_account_id)
@@ -343,6 +418,7 @@ def _end_card_payment_schedules(session: Session, card_account_id: int) -> None:
         r.active = False
         r.ended_reason = "autopay policy none / recompute"
     _end_autopay_schedules(session, card_account_id)
+    _end_promo_sink_schedules(session, card_account_id)
     session.flush()
 
 
@@ -391,9 +467,13 @@ def _sync_schedule(
     """Upsert cash-funded Card payment schedule (or legacy promo_sink on card).
 
     When amount/funding are provided (recompute path), uses statement projection.
-    Without them, falls back to _suggested_amount for set_autopay legacy callers.
+    Without them, falls back to _suggested_amount. Legacy card-side 0% sink only
+    when policy is promo_sink and no funding cash account is configured.
     """
-    if policy == "promo_sink" and amount is None:
+    timing = timing or getattr(a, "payment_timing", None) or "on_due"
+    funding_id = funding_account_id or a.payment_funding_account_id
+
+    if policy == "promo_sink" and amount is None and not funding_id:
         try:
             return create_promo_sink_bill(session, account_id=a.id, as_of=as_of)
         except ValueError as e:
@@ -402,12 +482,10 @@ def _sync_schedule(
     if amount is not None:
         amt = abs(_d(amount))
     else:
-        amt = abs(_suggested_amount(a, policy))
+        amt = abs(_suggested_amount(a, policy, session=session, as_of=as_of))
     if amt <= ZERO:
         return {"ok": False, "error": "amount is zero"}
 
-    timing = timing or getattr(a, "payment_timing", None) or "on_due"
-    funding_id = funding_account_id or a.payment_funding_account_id
     if not funding_id:
         # Legacy fallback: schedule on the card (IFPP skips credit schedules)
         funding_id = a.id

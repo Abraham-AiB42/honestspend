@@ -154,6 +154,13 @@ def test_put_cycle_config_sets_user_source_and_recomputes(client: TestClient):
     assert Decimal(str(body["next_payment"])) == Decimal("50.00")
     assert Decimal(str(body["statement_balance"])) == Decimal("5000.00")
 
+    # Reverse-sync: autopay_policy min → payment_option minimum
+    with app_mod.SessionLocal() as s:
+        card = s.get(Account, card_id)
+        assert card is not None
+        assert card.autopay_policy == "min"
+        assert card.payment_option == "minimum"
+
     # Persist check via GET
     g = client.get(f"/api/accounts/{card_id}/cycle")
     assert g.status_code == 200

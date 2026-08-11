@@ -138,12 +138,12 @@ class Account(Base):
     )
     plaid_account_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    # Autopay desk: none | min | statement | promo_sink
+    # Sole pay-policy authority (what to pay): none | min | statement | promo_sink | fixed | books
     autopay_policy: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    # User payment strategy for credit/loans (setup + Can I buy / IFPP):
-    # minimum | fixed | statement | interest_saving
+    # Deprecated wizard alias (one release): minimum | fixed | statement | interest_saving | books.
+    # Write-through only — amount logic must not read this (use autopay_policy).
     payment_option: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    # When payment_option=fixed, planned payment amount
+    # When policy=fixed, planned payment amount
     payment_fixed_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
     # Per-account rainy-day floor (cash accounts); total floor remains AppSettings.safety_buffer
     safety_buffer: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)

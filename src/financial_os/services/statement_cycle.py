@@ -184,7 +184,11 @@ def project_card_payment(
     if pay_date is None:
         pay_date = next_due_date(as_of, acct.payment_due_day) or next_close
 
-    policy = (acct.autopay_policy or "none").lower().strip()
+    # Sole amount authority: autopay_policy (backfill from deprecated payment_option
+    # only when policy is null/blank; sticky "none" is never overwritten).
+    from financial_os.services.autopay import ensure_autopay_policy_from_payment_option
+
+    policy = ensure_autopay_policy_from_payment_option(acct)
     bal = _d(acct.current_balance)
     promo_remaining, promo_due = open_promo_totals(session, account_id, as_of=as_of)
 
