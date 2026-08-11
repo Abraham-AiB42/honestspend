@@ -1160,6 +1160,8 @@ class FirstRunIn(BaseModel):
     # Freeware money-in reminders
     import_reminder_cadence: str = "weekly"  # off | daily | weekly | monthly
     import_reminder_focus: str = "transactions"  # transactions | statements | both
+    # False → land on power_menu (optional depth) instead of marking done
+    complete_setup: bool = True
 
 
 @app.post("/api/onboarding/first-run")

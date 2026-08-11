@@ -1,4 +1,4 @@
-"""Smart categorization: deterministic rules first, optional Grok second."""
+"""Smart categorization: deterministic rules first, optional multi-LLM second."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class Suggestion:
     category_code: str | None
     category_name: str | None
     confidence: float
-    source: str  # rule|grok|none
+    source: str  # rule|llm|grok|openai|anthropic|custom|none
     reason: str
     is_transfer: bool = False
     rule_id: int | None = None
@@ -84,15 +84,7 @@ def suggest_from_rules(
     return None
 
 
-def suggest_from_grok(
-    session: Session,
-    txn: Transaction,
-    *,
-    candidates: list[Category],
-) -> Suggestion | None:
-    if not settings.grok_enabled or not candidates:
-        return None
-
+def _build_categorize_prompt(txn: Transaction, candidates: list[Category]) -> dict[str, Any]:
     cat_lines = [
         {
             "id": c.id,
@@ -104,7 +96,7 @@ def suggest_from_grok(
         }
         for c in candidates[:80]
     ]
-    prompt = {
+    return {
         "task": "Pick the best category for this personal/business finance transaction.",
         "transaction": {
             "date": txn.txn_date.isoformat() if txn.txn_date else None,
@@ -121,56 +113,167 @@ def suggest_from_grok(
         ],
     }
 
+
+def _chat_openai_compatible(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    system: str,
+    user: str,
+) -> str:
+    with httpx.Client(timeout=45.0) as client:
+        resp = client.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "temperature": 0.1,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
+
+def _chat_anthropic(
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    system: str,
+    user: str,
+) -> str:
+    root = base_url.rstrip("/")
+    if root.endswith("/v1"):
+        url = f"{root}/messages"
+    else:
+        url = f"{root}/v1/messages"
+    with httpx.Client(timeout=45.0) as client:
+        resp = client.post(
+            url,
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "max_tokens": 512,
+                "temperature": 0.1,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        parts = data.get("content") or []
+        texts = [p.get("text", "") for p in parts if isinstance(p, dict) and p.get("type") == "text"]
+        if texts:
+            return "\n".join(texts)
+        # Fallback older shapes
+        if parts and isinstance(parts[0], dict):
+            return str(parts[0].get("text") or "")
+        raise ValueError("Empty Anthropic response")
+
+
+def suggest_from_llm(
+    session: Session,
+    txn: Transaction,
+    *,
+    candidates: list[Category],
+) -> Suggestion | None:
+    """Try configured LLM providers in priority order (xAI → OpenAI → Anthropic → custom)."""
+    if not candidates:
+        return None
     try:
-        with httpx.Client(timeout=45.0) as client:
-            resp = client.post(
-                f"{settings.xai_base_url.rstrip('/')}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {settings.xai_api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": settings.xai_model,
-                    "temperature": 0.1,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": "You categorize bank transactions for a multi-entity financial OS. Reply with JSON only.",
-                        },
-                        {"role": "user", "content": json.dumps(prompt)},
-                    ],
-                },
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            content = data["choices"][0]["message"]["content"]
+        from financial_os.services.secrets_store import list_ai_runtime_credentials
+
+        providers = list_ai_runtime_credentials()
+    except Exception:
+        providers = []
+    if not providers:
+        return None
+
+    prompt = _build_categorize_prompt(txn, candidates)
+    system = (
+        "You categorize bank transactions for a multi-entity financial OS. "
+        "Reply with JSON only."
+    )
+    user = json.dumps(prompt)
+    errors: list[str] = []
+
+    for prov in providers:
+        pid = prov["id"]
+        source = "grok" if pid == "xai" else pid
+        try:
+            if pid == "anthropic":
+                content = _chat_anthropic(
+                    base_url=prov["base_url"],
+                    api_key=prov["api_key"],
+                    model=prov["model"],
+                    system=system,
+                    user=user,
+                )
+            else:
+                content = _chat_openai_compatible(
+                    base_url=prov["base_url"],
+                    api_key=prov["api_key"],
+                    model=prov["model"],
+                    system=system,
+                    user=user,
+                )
             parsed = _parse_json_object(content)
             cid = parsed.get("category_id")
             if cid is None:
-                return None
+                errors.append(f"{pid}: no category_id")
+                continue
             cid = int(cid)
             cat = session.get(Category, cid)
             if not cat:
-                return None
+                errors.append(f"{pid}: unknown category {cid}")
+                continue
             conf = float(parsed.get("confidence") or 0.5)
             return Suggestion(
                 category_id=cat.id,
                 category_code=cat.code,
                 category_name=cat.display_name,
                 confidence=max(0.0, min(1.0, conf)),
-                source="grok",
-                reason=str(parsed.get("reason") or "Grok suggestion"),
+                source=source,
+                reason=str(parsed.get("reason") or f"{pid} suggestion"),
                 is_transfer=bool(parsed.get("is_transfer")),
             )
-    except Exception as e:
+        except Exception as e:
+            errors.append(f"{pid}: {e}")
+            continue
+
+    if errors:
         return Suggestion(
             category_id=None,
             category_code=None,
             category_name=None,
             confidence=0.0,
             source="none",
-            reason=f"Grok unavailable: {e}",
+            reason="LLM unavailable: " + "; ".join(errors[:3]),
         )
+    return None
+
+
+def suggest_from_grok(
+    session: Session,
+    txn: Transaction,
+    *,
+    candidates: list[Category],
+) -> Suggestion | None:
+    """Backward-compatible alias → multi-provider LLM."""
+    return suggest_from_llm(session, txn, candidates=candidates)
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:
@@ -181,26 +284,40 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
-def suggest_category(session: Session, txn: Transaction, *, use_grok: bool = True) -> Suggestion:
+def suggest_category(
+    session: Session,
+    txn: Transaction,
+    *,
+    use_grok: bool = True,
+    use_llm: bool | None = None,
+) -> Suggestion:
     hit = suggest_from_rules(session, txn)
     if hit:
         return hit
 
-    if use_grok and settings.grok_enabled:
-        candidates = (
-            session.query(Category)
-            .filter(
-                (Category.profile_id == txn.profile_id)
-                | (Category.profile_id.is_(None))
-                | (Category.scope == "system")
+    want_llm = use_llm if use_llm is not None else use_grok
+    if want_llm:
+        try:
+            from financial_os.services.secrets_store import any_llm_configured
+
+            llm_ok = any_llm_configured()
+        except Exception:
+            llm_ok = settings.grok_enabled
+        if llm_ok:
+            candidates = (
+                session.query(Category)
+                .filter(
+                    (Category.profile_id == txn.profile_id)
+                    | (Category.profile_id.is_(None))
+                    | (Category.scope == "system")
+                )
+                .all()
             )
-            .all()
-        )
-        grok = suggest_from_grok(session, txn, candidates=candidates)
-        if grok and grok.category_id:
-            return grok
-        if grok:
-            return grok
+            llm = suggest_from_llm(session, txn, candidates=candidates)
+            if llm and llm.category_id:
+                return llm
+            if llm:
+                return llm
 
     return Suggestion(
         category_id=None,
@@ -208,7 +325,7 @@ def suggest_category(session: Session, txn: Transaction, *, use_grok: bool = Tru
         category_name=None,
         confidence=0.0,
         source="none",
-        reason="No rule or Grok match",
+        reason="No rule or LLM match",
     )
 
 

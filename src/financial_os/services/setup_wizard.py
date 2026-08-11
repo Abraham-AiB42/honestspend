@@ -15,54 +15,35 @@ from financial_os.db import Account, AppSettings, ScheduledItem
 
 # Ordered phases for progress UI (path-specific subsets applied in get_state)
 ALL_PHASES: list[dict[str, str]] = [
-    {"id": "welcome", "title": "Welcome", "blurb": "What we’ll build together"},
-    {"id": "path", "title": "How to connect money", "blurb": "Plaid, CSV, or quick manual"},
+    {"id": "welcome", "title": "Welcome", "blurb": "What can you safely spend?"},
+    {"id": "path", "title": "Connect money", "blurb": "Fast balances, CSV, or Plaid"},
+    {"id": "manual", "title": "Quick balances", "blurb": "2 minutes to Safe to spend"},
     {"id": "plaid_keys", "title": "Plaid keys", "blurb": "Your client id + secret (local only)"},
     {"id": "plaid_link", "title": "Link banks", "blurb": "Connect institutions (trial ≤10 Items)"},
-    {"id": "ai_keys", "title": "AI helpers (optional)", "blurb": "Grok or other LLM keys you prefer"},
-    {"id": "cash_loop", "title": "Cash accounts", "blurb": "Add checking, savings, money market"},
+    {"id": "cash_loop", "title": "Cash + import", "blurb": "Add accounts and CSV/OFX"},
     {"id": "import_cash", "title": "Import history", "blurb": "Bank CSV/OFX per account"},
+    {"id": "power_menu", "title": "Make it smarter", "blurb": "Optional — bills, categories, budgets"},
+    {"id": "ai_keys", "title": "AI helpers", "blurb": "Optional LLM keys"},
     {"id": "discover", "title": "Find cards & bills", "blurb": "Skim debits for liabilities"},
     {"id": "liabilities", "title": "Set up debts", "blurb": "Cards, loans, payment plans"},
     {"id": "recurring", "title": "Recurring", "blurb": "Bills, subscriptions, investments"},
     {"id": "categorize", "title": "Categories", "blurb": "Confirm spend categories"},
     {"id": "budgets", "title": "Budgets", "blurb": "Plans from your history"},
     {"id": "buffers", "title": "Safety buffers", "blurb": "Per-account + total cash floor"},
-    {"id": "manual", "title": "Quick setup", "blurb": "Manual cash + card + bill"},
     {"id": "done", "title": "Done", "blurb": "You’re ready for Home"},
 ]
 
 PHASE_ORDER = [p["id"] for p in ALL_PHASES]
 
-# Default linear path after path choice
+# Fast path to a number, then optional power_menu depth (not a forced tunnel)
 PATH_PHASES: dict[str, list[str]] = {
-    "plaid": [
-        "welcome",
-        "path",
-        "plaid_keys",
-        "plaid_link",
-        "ai_keys",
-        "discover",
-        "recurring",
-        "categorize",
-        "budgets",
-        "buffers",
-        "done",
-    ],
-    "csv": [
-        "welcome",
-        "path",
-        "cash_loop",
-        "import_cash",
-        "discover",
-        "recurring",
-        "categorize",
-        "budgets",
-        "buffers",
-        "done",
-    ],
-    "manual": ["welcome", "path", "manual", "done"],
+    "manual": ["welcome", "path", "manual", "power_menu", "done"],
+    "csv": ["welcome", "path", "cash_loop", "power_menu", "done"],
+    "plaid": ["welcome", "path", "plaid_keys", "plaid_link", "power_menu", "done"],
 }
+
+# Depth modules reachable from power_menu (jump only within this set + done)
+POWER_DEPTH = ("discover", "recurring", "categorize", "budgets", "buffers", "ai_keys")
 
 VALID_PATHS = frozenset({"plaid", "csv", "manual"})
 
@@ -146,17 +127,19 @@ def get_setup_state(session: Session) -> dict[str, Any]:
         phase = "done"
 
     seq = _path_phases(path)
-    # Clamp orphan phases (e.g. removed "liabilities") onto path sequence
-    if phase not in seq and phase != "done":
-        if phase == "liabilities" and "discover" in seq:
+    in_depth = phase in POWER_DEPTH
+    # Clamp orphan phases onto path sequence (keep optional depth modules)
+    if phase not in seq and phase != "done" and not in_depth:
+        if phase == "liabilities":
             phase = "discover"
-        elif "welcome" in seq:
-            phase = seq[0] if phase not in PHASE_ORDER else phase
-            if phase not in seq:
-                phase = "welcome"
+            in_depth = True
+        elif phase not in PHASE_ORDER:
+            phase = "welcome"
 
+    # Progress: depth modules sit under power_menu index
+    display_phase = "power_menu" if in_depth and "power_menu" in seq else phase
     try:
-        idx = seq.index(phase) if phase in seq else 0
+        idx = seq.index(display_phase) if display_phase in seq else 0
     except ValueError:
         idx = 0
     total = max(1, len(seq) - 1)
@@ -169,7 +152,7 @@ def get_setup_state(session: Session) -> dict[str, Any]:
         steps.append(
             {
                 **meta,
-                "current": sid == phase,
+                "current": sid == display_phase,
                 "done": seq.index(sid) < idx if sid in seq else False,
             }
         )
@@ -178,6 +161,16 @@ def get_setup_state(session: Session) -> dict[str, Any]:
     checklist = _checklist(session)
     needs_setup = phase != "done" and not bool(getattr(settings, "onboarding_complete", False))
     can_complete = bool(checklist.get("has_cash"))
+
+    power_modules = [
+        {
+            **next(
+                (p for p in ALL_PHASES if p["id"] == mid),
+                {"id": mid, "title": mid, "blurb": ""},
+            )
+        }
+        for mid in POWER_DEPTH
+    ]
 
     return {
         "phase": phase,
@@ -194,10 +187,13 @@ def get_setup_state(session: Session) -> dict[str, Any]:
         "can_resume": needs_setup and phase not in ("welcome",),
         "product_name": getattr(settings, "product_name", None) or "HonestSpend",
         "plaid_item_limit": 10,
+        "power_modules": power_modules,
+        "in_power_depth": in_depth,
         "hints": {
-            "welcome": "About 2 minutes to a Safe-to-spend number. Import later for smarter bills.",
+            "welcome": "About 2 minutes to a Safe-to-spend number. Optional smart steps after.",
             "path": "Plaid uses your free trial keys (up to 10 bank connections). CSV never needs bank passwords in our app.",
-            "manual": "Fast path: one checking, optional card and bill. You can import later.",
+            "manual": "Fast path: one checking, optional card and bill — then optional smarter setup.",
+            "power_menu": "You already have a number. Optionally find bills, categorize, budget, or set AI keys.",
         },
     }
 
@@ -286,7 +282,7 @@ def advance_setup(
         settings.setup_phase = phase
         session.flush()
 
-    if phase not in seq and phase != "done":
+    if phase not in seq and phase != "done" and phase not in POWER_DEPTH:
         seq = _path_phases(cur_path)
         phase = seq[0] if seq else "welcome"
 
@@ -295,9 +291,17 @@ def advance_setup(
         if tp == "done":
             force = bool((payload or {}).get("force_empty") or (payload or {}).get("force"))
             return mark_setup_done(session, note=(payload or {}).get("note"), force_empty=force)
-        if tp not in seq and tp != "welcome":
+        # power_menu can jump into optional depth modules
+        allowed = set(seq) | set(POWER_DEPTH) | {"power_menu", "welcome", "path"}
+        if tp not in allowed:
             raise ValueError(f"Cannot jump to {tp} on path {cur_path or 'unset'}")
         return set_phase(session, tp, path=path, merge_payload=payload)
+
+    # From optional depth, next/skip/back return to power_menu (not forced tunnel)
+    if phase in POWER_DEPTH and action in ("next", "skip_phase", "back"):
+        settings.setup_phase = "power_menu"
+        session.flush()
+        return get_setup_state(session)
 
     try:
         idx = seq.index(phase) if phase in seq else 0
@@ -309,6 +313,10 @@ def advance_setup(
         settings.setup_phase = seq[new_idx]
         session.flush()
         return get_setup_state(session)
+
+    # power_menu "next" without jump → finish when cash exists
+    if action == "next" and phase == "power_menu":
+        return mark_setup_done(session, note=(payload or {}).get("note"), force_empty=False)
 
     if action in ("next", "skip_phase"):
         # skip_phase never auto-completes without cash

@@ -11,8 +11,10 @@ import json
 import logging
 import os
 import sys
+import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from financial_os.config import settings
 
@@ -29,10 +31,76 @@ AI_PROVIDERS = (
     ("custom", "Other / custom"),
 )
 
+# Default OpenAI-compatible endpoints / models when not overridden
+_AI_DEFAULTS: dict[str, dict[str, str]] = {
+    "xai": {"base_url": "https://api.x.ai/v1", "model": "grok-4-1-fast-reasoning"},
+    "openai": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+    "anthropic": {"base_url": "https://api.anthropic.com", "model": "claude-3-5-haiku-latest"},
+    "custom": {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini"},
+}
+
 
 def secrets_path() -> Path:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     return settings.data_dir / "secrets.json"
+
+
+def _lock_path() -> Path:
+    return secrets_path().with_name("secrets.lock")
+
+
+@contextmanager
+def secrets_file_lock(timeout: float = 8.0) -> Iterator[None]:
+    """Cross-process exclusive lock around secrets.json read-modify-write.
+
+    Prevents concurrent WinUI/engine processes from clobbering each other.
+    """
+    lock_path = _lock_path()
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fh = open(lock_path, "a+b")
+    deadline = time.monotonic() + max(0.5, timeout)
+    locked = False
+    try:
+        while True:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+
+                    fh.seek(0)
+                    if fh.read(1) == b"":
+                        fh.write(b"0")
+                        fh.flush()
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Could not lock secrets file within {timeout}s") from None
+                time.sleep(0.05)
+        yield
+    finally:
+        if locked:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+            except Exception:
+                pass
+        try:
+            fh.close()
+        except Exception:
+            pass
 
 
 def _dpapi_protect(raw: bytes) -> str:
@@ -130,36 +198,49 @@ def _mask(value: str | None, keep: int = 4) -> str | None:
     return "•" * (len(value) - keep) + value[-keep:]
 
 
-def load_raw() -> dict[str, Any]:
-    path = secrets_path()
-    if not path.is_file():
-        return {"version": SECRETS_VERSION, "plaid": {}, "ai": {}}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
+def load_raw(*, _already_locked: bool = False) -> dict[str, Any]:
+    def _read() -> dict[str, Any]:
+        path = secrets_path()
+        if not path.is_file():
             return {"version": SECRETS_VERSION, "plaid": {}, "ai": {}}
-        data.setdefault("version", SECRETS_VERSION)
-        data.setdefault("plaid", {})
-        data.setdefault("ai", {})
-        return data
-    except Exception as e:
-        log.warning("Could not read secrets.json: %s", e)
-        return {"version": SECRETS_VERSION, "plaid": {}, "ai": {}}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return {"version": SECRETS_VERSION, "plaid": {}, "ai": {}}
+            data.setdefault("version", SECRETS_VERSION)
+            data.setdefault("plaid", {})
+            data.setdefault("ai", {})
+            return data
+        except Exception as e:
+            log.warning("Could not read secrets.json: %s", e)
+            return {"version": SECRETS_VERSION, "plaid": {}, "ai": {}}
+
+    if _already_locked:
+        return _read()
+    with secrets_file_lock():
+        return _read()
 
 
-def _write_raw(data: dict[str, Any]) -> None:
-    path = secrets_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(data, indent=2)
-    # atomic write
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
-    try:
-        if sys.platform != "win32":
-            os.chmod(path, 0o600)
-    except Exception:
-        pass
+def _write_raw(data: dict[str, Any], *, _already_locked: bool = False) -> None:
+    def _do() -> None:
+        path = secrets_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(data, indent=2)
+        # atomic write
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+        try:
+            if sys.platform != "win32":
+                os.chmod(path, 0o600)
+        except Exception:
+            pass
+
+    if _already_locked:
+        _do()
+        return
+    with secrets_file_lock():
+        _do()
 
 
 def get_plaid_credentials() -> dict[str, str | None]:
@@ -184,21 +265,23 @@ def save_plaid_credentials(
         raise ValueError("env must be sandbox, development, or production")
     if not client_id or not secret:
         raise ValueError("client_id and secret are required")
-    data = load_raw()
-    data["plaid"] = {
-        "client_id": _enc_str(client_id),
-        "secret": _enc_str(secret),
-        "env": env,
-    }
-    _write_raw(data)
+    with secrets_file_lock():
+        data = load_raw(_already_locked=True)
+        data["plaid"] = {
+            "client_id": _enc_str(client_id),
+            "secret": _enc_str(secret),
+            "env": env,
+        }
+        _write_raw(data, _already_locked=True)
     apply_secrets_to_settings()
     return plaid_credentials_status()
 
 
 def clear_plaid_credentials() -> dict[str, Any]:
-    data = load_raw()
-    data["plaid"] = {}
-    _write_raw(data)
+    with secrets_file_lock():
+        data = load_raw(_already_locked=True)
+        data["plaid"] = {}
+        _write_raw(data, _already_locked=True)
     # Do not clear env vars if set; only clear process overrides from file
     apply_secrets_to_settings(clear_plaid_if_empty=True)
     return plaid_credentials_status()
@@ -254,6 +337,7 @@ def save_ai_credentials(
     provider: str,
     api_key: str,
     base_url: str | None = None,
+    model: str | None = None,
 ) -> dict[str, Any]:
     provider = (provider or "").strip().lower()
     api_key = (api_key or "").strip()
@@ -261,26 +345,67 @@ def save_ai_credentials(
         raise ValueError(f"Unknown provider: {provider}")
     if not api_key:
         raise ValueError("api_key is required")
-    data = load_raw()
-    ai = data.setdefault("ai", {})
-    ai[provider] = {
-        "api_key": _enc_str(api_key),
-    }
-    if base_url:
-        ai[provider]["base_url"] = base_url.strip()
-    _write_raw(data)
+    with secrets_file_lock():
+        data = load_raw(_already_locked=True)
+        ai = data.setdefault("ai", {})
+        entry: dict[str, Any] = {
+            "api_key": _enc_str(api_key),
+        }
+        if base_url:
+            entry["base_url"] = base_url.strip()
+        if model:
+            entry["model"] = model.strip()
+        ai[provider] = entry
+        _write_raw(data, _already_locked=True)
     apply_secrets_to_settings()
     return get_ai_providers()
 
 
 def clear_ai_credentials(provider: str) -> dict[str, Any]:
     provider = (provider or "").strip().lower()
-    data = load_raw()
-    ai = data.setdefault("ai", {})
-    ai.pop(provider, None)
-    _write_raw(data)
+    with secrets_file_lock():
+        data = load_raw(_already_locked=True)
+        ai = data.setdefault("ai", {})
+        ai.pop(provider, None)
+        _write_raw(data, _already_locked=True)
     apply_secrets_to_settings(clear_ai_provider=provider)
     return get_ai_providers()
+
+
+def list_ai_runtime_credentials() -> list[dict[str, str]]:
+    """Configured LLM providers with decrypted keys for categorizer (priority order).
+
+    Order: xai → openai → anthropic → custom. Env FOS_XAI_API_KEY fills xai if file empty.
+    """
+    raw_ai = load_raw().get("ai") or {}
+    out: list[dict[str, str]] = []
+    for pid, _label in AI_PROVIDERS:
+        entry = raw_ai.get(pid) or {}
+        key = _dec_str(entry.get("api_key")) if entry.get("api_key") else None
+        if pid == "xai" and not key:
+            key = settings.xai_api_key
+        if not key:
+            continue
+        defaults = _AI_DEFAULTS.get(pid, _AI_DEFAULTS["custom"])
+        base = (entry.get("base_url") or "").strip() or (
+            settings.xai_base_url if pid == "xai" else defaults["base_url"]
+        )
+        model = (entry.get("model") or "").strip() or (
+            settings.xai_model if pid == "xai" else defaults["model"]
+        )
+        out.append(
+            {
+                "id": pid,
+                "api_key": key,
+                "base_url": base.rstrip("/"),
+                "model": model,
+            }
+        )
+    return out
+
+
+def any_llm_configured() -> bool:
+    return bool(list_ai_runtime_credentials())
 
 
 def apply_secrets_to_settings(

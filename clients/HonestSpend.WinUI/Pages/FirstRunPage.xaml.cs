@@ -13,8 +13,8 @@ using WinRT.Interop;
 namespace HonestSpend_WinUI.Pages;
 
 /// <summary>
-/// Smart setup wizard: path (Plaid / CSV / manual), Plaid keys+Link+AI,
-/// CSV +cash loop with bank guides/import, then later phases.
+/// Smart setup wizard: ~2 min to a Safe-to-spend number, then optional power depth
+/// (discover, recurring, categorize, budgets, buffers, AI keys).
 /// </summary>
 public sealed partial class FirstRunPage : Page
 {
@@ -25,11 +25,12 @@ public sealed partial class FirstRunPage : Page
 
     // Manual path local steps (legacy first-run)
     private int _manualStep;
-    /// <summary>Manual steps 0..4 review, 5 done screen (6 labels = of 6).</summary>
+    /// <summary>Manual steps 0..4 review; after submit → power_menu (not local done).</summary>
     private const int ManualLastReview = 4;
     private const int ManualDoneStep = 5;
     private string _phaseTitle = "Welcome";
     private bool _canComplete;
+    private List<(string Id, string Title, string Blurb)> _powerModules = new();
 
     // CSV cash loop: hub | type | details | guide | import
     private string _cashUi = "hub";
@@ -164,6 +165,16 @@ public sealed partial class FirstRunPage : Page
         ProgressBar.Value = _progress;
         _phaseTitle = JsonUi.Str(st, "phase_title", _phase.Replace('_', ' '));
         _canComplete = st.TryGetProperty("can_complete", out var cc) && cc.ValueKind == JsonValueKind.True;
+        _powerModules.Clear();
+        if (st.TryGetProperty("power_modules", out var pm) && pm.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var m in pm.EnumerateArray())
+            {
+                var id = JsonUi.Str(m, "id");
+                if (string.IsNullOrEmpty(id) || id == "—") continue;
+                _powerModules.Add((id, JsonUi.Str(m, "title", id), JsonUi.Str(m, "blurb")));
+            }
+        }
         if (_phase == "done")
         {
             AppState.ShowSetupNav = false;
@@ -206,9 +217,15 @@ public sealed partial class FirstRunPage : Page
             QuestionText.Text = "What can you safely spend?";
             HintText.Text =
                 "About 2 minutes to a Safe-to-spend number. " +
-                "Import bank history later for smarter bills and budgets.\n\n" +
+                "Then optionally add bills, categories, and budgets — or skip straight to Home.\n\n" +
                 "We never store bank passwords. You can leave anytime — setup stays open until you finish.";
             NextBtn.Content = "Get my number";
+            return;
+        }
+
+        if (_phase == "power_menu")
+        {
+            RenderPowerMenu();
             return;
         }
 
@@ -868,7 +885,9 @@ public sealed partial class FirstRunPage : Page
                 break;
             case 4:
                 QuestionText.Text = "Review";
-                HintText.Text = "We'll create these and mark setup complete.";
+                HintText.Text =
+                    "We'll create these so Safe to spend works. " +
+                    "Next you can optionally deepen setup (bills, categories, budgets) or go to Home.";
                 var lines = new List<string>
                 {
                     $"Checking: {_cashNameV} · {_cashBalV:C}",
@@ -879,12 +898,99 @@ public sealed partial class FirstRunPage : Page
                 if (_wantBillV)
                     lines.Add($"Bill: {_billNameV} · {_billAmtV:C}/mo");
                 Fields.Children.Add(new ItemsControl { ItemsSource = lines });
+                NextBtn.Content = "Create accounts";
                 break;
             default:
                 QuestionText.Text = "You're set";
                 HintText.Text = MsgText.Text.Length > 0 ? MsgText.Text : "Open Home for Safe to spend.";
                 NextBtn.Content = "Go to Home";
                 break;
+        }
+    }
+
+    private void RenderPowerMenu()
+    {
+        QuestionText.Text = "Make it smarter (optional)";
+        HintText.Text =
+            "You already have a Safe-to-spend number. " +
+            "Pick any depth step below, or finish and open Home.";
+        NextBtn.Content = _canComplete ? "I'm ready — go to Home" : "Add cash first";
+        NextBtn.IsEnabled = _canComplete;
+
+        if (_powerModules.Count == 0)
+        {
+            _powerModules = new List<(string Id, string Title, string Blurb)>
+            {
+                ("discover", "Find cards & bills", "Skim cash history for liabilities"),
+                ("recurring", "Recurring", "Bills, subscriptions, investments"),
+                ("categorize", "Categories", "Auto-label spend + confirm ambiguous"),
+                ("budgets", "Budgets", "Plans from your history"),
+                ("buffers", "Safety buffers", "Per-account + total cash floor"),
+                ("ai_keys", "AI helpers", "Grok / OpenAI / Anthropic keys (local)"),
+            };
+        }
+
+        foreach (var mod in _powerModules)
+        {
+            var id = mod.Id;
+            var btn = new Button
+            {
+                Content = new StackPanel
+                {
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock { Text = mod.Title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                        new TextBlock
+                        {
+                            Text = mod.Blurb,
+                            Opacity = 0.75,
+                            TextWrapping = TextWrapping.Wrap,
+                            FontSize = 12,
+                        },
+                    },
+                },
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(12),
+                Tag = id,
+                Margin = new Thickness(0, 0, 0, 4),
+            };
+            btn.Click += async (_, _) => await JumpPowerModuleAsync(id);
+            Fields.Children.Add(btn);
+        }
+
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "You can re-open Get started anytime from the nav to finish depth steps.",
+            Opacity = 0.65,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Margin = new Thickness(0, 8, 0, 0),
+        });
+    }
+
+    private async Task JumpPowerModuleAsync(string phaseId)
+    {
+        if (_loading) return;
+        try
+        {
+            _loading = true;
+            ErrorBar.IsOpen = false;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.SetupAdvanceAsync("jump", targetPhase: phaseId);
+            ApplyState(st);
+            Render();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            _loading = false;
         }
     }
 
@@ -1041,6 +1147,12 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
+            if (_phase == "power_menu")
+            {
+                await FinishFromPowerMenuAsync();
+                return;
+            }
+
             if (_phase == "plaid_keys")
             {
                 await SavePlaidKeysAndAdvanceAsync();
@@ -1089,7 +1201,7 @@ public sealed partial class FirstRunPage : Page
 
             if (_phase == "buffers")
             {
-                await SaveBuffersAndFinishAsync();
+                await SaveBuffersAndAdvanceAsync();
                 return;
             }
 
@@ -1135,8 +1247,7 @@ public sealed partial class FirstRunPage : Page
         if (_manualStep == ManualLastReview)
         {
             await SubmitManualAsync();
-            _manualStep = ManualDoneStep;
-            Render();
+            // Lands on power_menu (optional depth) — not forced tunnel
             return;
         }
 
@@ -1158,6 +1269,8 @@ public sealed partial class FirstRunPage : Page
             ["ifpp_mode"] = "conservative",
             ["import_reminder_cadence"] = _importCadenceV,
             ["import_reminder_focus"] = _importFocusV,
+            // Keep wizard open for optional power depth
+            ["complete_setup"] = false,
         };
         if (_wantCardV)
         {
@@ -1176,12 +1289,38 @@ public sealed partial class FirstRunPage : Page
         var res = await api.FirstRunAsync(body);
         MsgText.Text = JsonUi.Str(res, "message");
         if (string.IsNullOrEmpty(MsgText.Text) || MsgText.Text == "—")
-            MsgText.Text = "Accounts created. Safe to spend is ready on Home.";
-        // first-run marks setup done on server
+            MsgText.Text = "Accounts created. Safe to spend is ready — optional smarter steps next.";
         var st = await api.GetSetupStateAsync();
+        // Ensure power_menu if server still on manual
+        if (JsonUi.Str(st, "phase") is "manual" or "")
+            st = await api.SetupAdvanceAsync("jump", targetPhase: "power_menu");
         ApplyState(st);
-        AppState.ShowSetupNav = false;
         NotifyShellChrome();
+        Render();
+    }
+
+    private async Task FinishFromPowerMenuAsync()
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        try
+        {
+            var st = await api.SetupAdvanceAsync("next"); // power_menu next → complete
+            ApplyState(st);
+            if (_phase == "done")
+            {
+                AppState.ShowSetupNav = false;
+                NotifyShellChrome();
+                Frame?.Navigate(typeof(HomePage));
+                return;
+            }
+            Render();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private async Task SavePlaidKeysAndAdvanceAsync()
@@ -1836,7 +1975,7 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
-    private async Task SaveBuffersAndFinishAsync()
+    private async Task SaveBuffersAndAdvanceAsync()
     {
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync();
@@ -1854,21 +1993,10 @@ public sealed partial class FirstRunPage : Page
             total_buffer = total,
             account_buffers = acctBufs,
         });
-        try
-        {
-            var st = await api.SetupAdvanceAsync("complete");
-            ApplyState(st);
-        }
-        catch (Exception ex)
-        {
-            // Server requires cash — force_empty only if user explicitly abandons
-            ErrorBar.Message = ex.Message;
-            ErrorBar.IsOpen = true;
-            return;
-        }
-        AppState.ShowSetupNav = false;
-        NotifyShellChrome();
-        MsgText.Text = "Setup complete — Home is ready with Safe to spend, bills, and budgets.";
+        // Return to power_menu — finish only from "I'm ready"
+        var st = await api.SetupAdvanceAsync("next");
+        ApplyState(st);
+        MsgText.Text = "Buffers saved. Finish when ready, or pick another optional step.";
         Render();
     }
 
@@ -1881,7 +2009,7 @@ public sealed partial class FirstRunPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             // Skip this step only — never mark setup complete from Skip
-            if (_phase is "welcome" or "path" or "done")
+            if (_phase is "welcome" or "path" or "done" or "power_menu")
             {
                 // Leave for later: Home while needs_setup stays true
                 Frame?.Navigate(typeof(HomePage));

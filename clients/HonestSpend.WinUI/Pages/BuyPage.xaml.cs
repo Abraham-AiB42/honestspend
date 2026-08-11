@@ -10,6 +10,8 @@ namespace HonestSpend_WinUI.Pages;
 public sealed partial class BuyPage : Page
 {
     private readonly List<(int Id, string Name)> _categories = new();
+    private bool _busy;
+    private bool _hasCash = true;
 
     public BuyPage()
     {
@@ -19,7 +21,71 @@ public sealed partial class BuyPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        SetIdleResult();
         await LoadCategoriesAsync();
+        await RefreshBooksHintAsync();
+    }
+
+    private void SetIdleResult()
+    {
+        VerdictText.Text = "—";
+        RecText.Text = "";
+        ReasonText.Text = "Enter an amount and tap Check purchase.";
+        BudgetCheckText.Text = "";
+        OptionsList.ItemsSource = null;
+        CutPanel.Children.Clear();
+        ScopeText.Text = "";
+        SimText.Text = "";
+        ScenarioMsg.Text = "";
+    }
+
+    private async Task RefreshBooksHintAsync()
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var accts = await api.GetAccountsAsync();
+            _hasCash = false;
+            if (accts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var a in accts.EnumerateArray())
+                {
+                    var kind = JsonUi.Str(a, "kind").ToLowerInvariant();
+                    var ifpp = a.TryGetProperty("is_cash_for_ifpp", out var f) && f.ValueKind == JsonValueKind.True;
+                    if (ifpp || kind is "checking" or "savings" or "cash")
+                    {
+                        _hasCash = true;
+                        break;
+                    }
+                }
+            }
+            if (!_hasCash)
+            {
+                VerdictText.Text = "No cash accounts yet";
+                ReasonText.Text =
+                    "Add a checking or savings account in Get started or Accounts, " +
+                    "then come back — Can I buy needs Safe to spend.";
+                SetBusy(false);
+            }
+        }
+        catch
+        {
+            /* optional */
+        }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        _busy = busy;
+        CheckBtn.IsEnabled = !busy && _hasCash;
+        SimBtn.IsEnabled = !busy && _hasCash;
+        ScenarioBtn.IsEnabled = !busy && _hasCash;
+        AmountBox.IsEnabled = !busy;
+        CategoryBox.IsEnabled = !busy;
+        PreferBox.IsEnabled = !busy;
+        if (busy)
+            ScenarioMsg.Text = "Checking purchase…";
     }
 
     private async Task LoadCategoriesAsync()
@@ -55,9 +121,30 @@ public sealed partial class BuyPage : Page
 
     private async void Check_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
         ErrorBar.IsOpen = false;
         BudgetCheckText.Text = "";
         CutPanel.Children.Clear();
+
+        var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
+        if (amount <= 0)
+        {
+            ErrorBar.Message = "Enter an amount greater than zero.";
+            ErrorBar.IsOpen = true;
+            return;
+        }
+        if (!_hasCash)
+        {
+            await RefreshBooksHintAsync();
+            if (!_hasCash)
+            {
+                ErrorBar.Message = "Add a cash account before checking purchases.";
+                ErrorBar.IsOpen = true;
+                return;
+            }
+        }
+
+        SetBusy(true);
         try
         {
             if (App.Backend is not null)
@@ -67,7 +154,6 @@ public sealed partial class BuyPage : Page
             if (PreferBox.SelectedItem is ComboBoxItem item && item.Tag is string t)
                 prefer = t;
 
-            var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
             int? catId = null;
             if (CategoryBox.SelectedIndex > 0 && CategoryBox.SelectedIndex < _categories.Count)
             {
@@ -127,11 +213,18 @@ public sealed partial class BuyPage : Page
             // Show cut offers when purchase is tight or category short
             var tight = verdict is not ("safe" or "safe_via_other_method");
             await LoadCutOffersAsync(api, force: tight || BudgetCheckText.Text.Contains("short", StringComparison.OrdinalIgnoreCase));
+            ScenarioMsg.Text = "";
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+            VerdictText.Text = "Couldn't check";
+            ReasonText.Text = ex.Message;
+        }
+        finally
+        {
+            SetBusy(false);
         }
     }
 
@@ -216,10 +309,14 @@ public sealed partial class BuyPage : Page
 
     private async void Simulate_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
         ErrorBar.IsOpen = false;
+        SetBusy(true);
         try
         {
             var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
+            if (amount <= 0)
+                throw new InvalidOperationException("Enter an amount first.");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.SimulateIfppAsync(new
@@ -237,17 +334,24 @@ public sealed partial class BuyPage : Page
                 scope = AppState.IfppScope,
             });
             SimText.Text = JsonUi.Str(res, "message");
+            ScenarioMsg.Text = "";
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+        finally
+        {
+            SetBusy(false);
+        }
     }
 
     private async void SaveScenario_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
         ErrorBar.IsOpen = false;
+        SetBusy(true);
         try
         {
             var amount = (decimal)(AmountBox.Value is double.NaN ? 0 : AmountBox.Value);
@@ -274,6 +378,10 @@ public sealed partial class BuyPage : Page
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            SetBusy(false);
         }
     }
 }

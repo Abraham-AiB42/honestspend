@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.47 — 2-min primary + optional power depth
+
+- **Wizard reshape**: primary paths end at **power_menu** (not a forced tunnel through discover→budgets)
+- **Power menu**: jump to discover / recurring / categorize / budgets / buffers / AI keys; each returns to menu
+- **Manual first-run** can leave `complete_setup=false` so optional depth stays open
+- **Multi-LLM categorizer**: xAI → OpenAI → Anthropic → custom (OpenAI-compatible + Anthropic Messages)
+- **Secrets file lock** around secrets.json RMW (Windows `msvcrt` / POSIX `fcntl`)
+- **Can I buy**: busy state, empty books hint, amount validation
+- Docs: SETUP_WIZARD power menu map
+
 ## 1.0.46 — Setup honesty + UX fixes (review RC)
 
 - **No IFPP double-count**: credit discover creates account + payment plan only (no scheduled card payment bill)

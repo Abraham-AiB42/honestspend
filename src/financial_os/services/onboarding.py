@@ -72,8 +72,12 @@ def apply_quick_setup(
     card_promo_end: str | None = None,
     safety_buffer: Decimal = Decimal("1000"),
     ifpp_mode: str = "conservative",
+    complete_setup: bool = True,
 ) -> dict[str, Any]:
-    """Create starter cash (+ optional card) and mark onboarding done."""
+    """Create starter cash (+ optional card). By default marks onboarding done.
+
+    complete_setup=False leaves the wizard open at power_menu (2-min primary + optional depth).
+    """
     profile = session.query(Profile).filter(Profile.slug == profile_slug).one()
     settings = session.get(AppSettings, 1)
     if not settings:
@@ -126,19 +130,25 @@ def apply_quick_setup(
         session.add(card)
         created["card_account"] = card_name
 
-    settings.onboarding_complete = True
-    if hasattr(settings, "setup_phase"):
-        settings.setup_phase = "done"
-        if not getattr(settings, "setup_path", None):
-            settings.setup_path = "manual"
+    if not getattr(settings, "setup_path", None):
+        settings.setup_path = "manual"
+    if complete_setup:
+        settings.onboarding_complete = True
+        if hasattr(settings, "setup_phase"):
+            settings.setup_phase = "done"
+    else:
+        settings.onboarding_complete = False
+        if hasattr(settings, "setup_phase"):
+            settings.setup_phase = "power_menu"
     session.flush()
-    created["onboarding_complete"] = True
+    created["onboarding_complete"] = bool(complete_setup)
+    created["setup_phase"] = getattr(settings, "setup_phase", None)
 
     # First backup after setup (local non-negotiable)
     try:
         from financial_os.services.backup import create_backup
 
-        bak = create_backup(as_zip=True, note="post-setup")
+        bak = create_backup(as_zip=True, note="post-setup" if complete_setup else "post-manual-cash")
         created["backup"] = bak.get("name")
         created["backup_path"] = bak.get("path")
     except Exception as e:
@@ -169,8 +179,12 @@ def apply_first_run(
     # freeware money-in reminders
     import_reminder_cadence: str = "weekly",
     import_reminder_focus: str = "transactions",
+    complete_setup: bool = True,
 ) -> dict[str, Any]:
-    """Atomic first-run: cash + optional card + optional bill + onboarding complete."""
+    """Atomic first-run: cash + optional card + optional bill.
+
+    complete_setup=False keeps the smart wizard open at power_menu.
+    """
     from datetime import date as date_cls
 
     from financial_os.services.import_reminders import normalize_cadence, normalize_focus
@@ -190,6 +204,7 @@ def apply_first_run(
         card_promo_end=card_promo_end,
         safety_buffer=safety_buffer,
         ifpp_mode=ifpp_mode,
+        complete_setup=complete_setup,
     )
 
     settings = session.get(AppSettings, 1)

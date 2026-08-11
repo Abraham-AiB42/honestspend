@@ -1,31 +1,41 @@
 # Smart Setup Wizard
 
-Resumable multi-phase onboarding (v1.0.39+). Goal: cash books → liabilities → bills → categories → budgets → buffers → Home.
+Resumable multi-phase onboarding (v1.0.39+). Goal: **~2 minutes to Safe to spend**, then **optional power depth** (bills, categories, budgets) — not a forced tunnel.
 
-## Paths
+## Paths (primary)
 
-| Path | Flow |
-|------|------|
-| **Plaid (BYOK)** | Keys (local) → Link banks (≤10 Items on free trial) → optional AI keys → discover → … |
-| **CSV / OFX** | + Cash account loop → bank guide → import → discover → … |
-| **Quick manual** | Classic 2‑min cash + optional card/bill |
+| Path | Fast flow |
+|------|-----------|
+| **Plaid (BYOK)** | Keys (local) → Link banks (≤10 Items) → **power menu** → Done |
+| **CSV / OFX** | + Cash account loop → **power menu** → Done |
+| **Quick manual** | Checking + optional card/bill → **power menu** → Done |
 
-## Phases
+## Power menu (optional depth)
+
+After you have cash, **Make it smarter** offers jump-in modules. Each returns to the menu when finished:
+
+| Module | What it does |
+|--------|----------------|
+| **Find cards & bills** | Skim cash history for liabilities (no double-schedule on cards) |
+| **Recurring** | Remaining bill / subscription patterns |
+| **Categories** | High-conf auto + confirm queue (rules + multi-LLM) |
+| **Budgets** | Seed from history, edit amounts |
+| **Safety buffers** | Total floor + per-account reserves |
+| **AI helpers** | Grok / OpenAI / Anthropic / custom keys (local only) |
+
+**I'm ready — go to Home** finishes (requires ≥1 cash account). **Skip** leaves setup open so you can resume later.
+
+## Phases (detail)
 
 1. **Welcome** — time honesty, resume support  
 2. **Path** — Plaid / CSV / manual  
-3a. **Plaid keys** — [dashboard.plaid.com/signup](https://dashboard.plaid.com/signup); stored in `~/.financial-os/secrets.json` (Windows DPAPI)  
+3a. **Plaid keys** — [dashboard.plaid.com/signup](https://dashboard.plaid.com/signup); stored in `~/.financial-os/secrets.json` (Windows DPAPI + file lock)  
 3b. **Plaid Link** — app opens `/static/plaid-link.html`  
-3c. **AI keys** — Grok / OpenAI / Anthropic / custom (optional)  
-4. **Cash loop** — type → nickname/bank → guide → import  
-5. **Discover** — cards, loans, bills, recurring investments; card payment plans (no double-schedule on cards)  
-6. **Recurring** — remaining bill patterns  
-7. **Categorize** — high-conf auto + top payee chips (rules learned)  
-8. **Budgets** — seed from history, edit amounts  
-9. **Buffers** — total floor + per-account reserves (IFPP pool–aligned)  
-10. **Done** → Simple Home  
+4. **Cash loop** (CSV) or **manual** form  
+5. **Power menu** — optional depth (above)  
+6. **Done** → Simple Home  
 
-**Skip this step** advances one phase only. Finishing requires ≥1 cash account unless `force_empty`.
+**Skip this step** advances one phase only (or leaves to Home from power menu). Finishing requires ≥1 cash account unless `force_empty`.
 
 ## APIs (summary)
 
@@ -51,8 +61,10 @@ Resumable multi-phase onboarding (v1.0.39+). Goal: cash books → liabilities �
 ## Secrets
 
 - Path: `%USERPROFILE%\.financial-os\secrets.json`  
+- Windows DPAPI for values; exclusive file lock on read-modify-write  
 - Not included in SQLite backup zips  
 - Settings → **BYOK connections** to edit without re-running the wizard  
+- Categorizer tries configured LLM keys in order: Grok (xAI) → OpenAI → Anthropic → custom  
 
 ## Fresh dogfood
 
