@@ -12,7 +12,7 @@
             <StackPanel Spacing="4">
                 <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Import" />
                 <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                    Text="Freeware path: download CSV from your bank (no passwords here), drop in inbox or pick a file. Plaid is optional BYOK." />
+                    Text="Download CSV from your bank (we never store bank passwords), drop in the inbox or pick a file. Optional bank link lives under More options." />
             </StackPanel>
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -61,10 +61,6 @@
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
                         Text="Export from Chase, Amex, etc. Map to one HonestSpend account. Duplicates skipped." />
                     <ComboBox x:Name="AccountBox" Header="Target account" HorizontalAlignment="Stretch" />
-                    <ComboBox x:Name="SignBox" Header="Amount sign" SelectedIndex="0" HorizontalAlignment="Stretch">
-                        <ComboBoxItem Content="Bank style (expenses negative)" Tag="bank" />
-                        <ComboBoxItem Content="Invert signs" Tag="invert" />
-                    </ComboBox>
                     <CheckBox x:Name="AutoCatBox" Content="Auto-categorize after import" IsChecked="True" />
                     <TextBox x:Name="EndingBalanceBox" Header="Bank ending balance (optional)"
                              PlaceholderText="From CSV Balance column, or type statement balance"
@@ -88,37 +84,64 @@
                         <Button x:Name="GoSortBtn" Content="Sort charges" Click="GoSort_Click" Visibility="Collapsed" />
                         <Button x:Name="GoHomeBtn" Content="Home" Click="GoHome_Click" Visibility="Collapsed" />
                     </StackPanel>
+                    <Border x:Name="FreezeStatementPanel" Visibility="Collapsed"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="12">
+                        <StackPanel Spacing="8">
+                            <InfoBar x:Name="FreezeStatementBar" IsOpen="True" IsClosable="True"
+                                     Severity="Informational"
+                                     Title="Statement close"
+                                     Message="Got a statement balance from the bank? Freeze it for this close." />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <NumberBox x:Name="FreezeActualBox" Header="Actual statement balance ($)"
+                                           Minimum="0" Value="0" Width="220" />
+                                <Button Content="Freeze" Click="FreezeStatement_Click"
+                                        VerticalAlignment="Bottom" Style="{StaticResource AccentButtonStyle}" />
+                                <Button Content="Not now" Click="DismissFreeze_Click" VerticalAlignment="Bottom" />
+                            </StackPanel>
+                            <TextBlock x:Name="FreezeMsg" Opacity="0.85" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Best: CSV or OFX/QFX. Ending balance → Match bank. New rows update books balance. One-tap Set Safe to spend from bank when bank bal differs." />
+                        Text="Best: CSV or OFX/QFX. Ending balance → Match bank. One-tap Set Safe to spend from bank when bank bal differs." />
                 </StackPanel>
             </Border>
 
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="16">
-                <StackPanel Spacing="12">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Legacy Budget.xlsx" />
-                    <ComboBox x:Name="ProfileSlugBox" Header="Entity" SelectedIndex="0" HorizontalAlignment="Stretch" />
-                    <CheckBox x:Name="DryRunBox" Content="Dry run (scan only)" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Pick xlsx…" Click="PickXlsx_Click" Style="{StaticResource AccentButtonStyle}" />
-                        <TextBlock x:Name="XlsxPathText" VerticalAlignment="Center" Opacity="0.75" Text="No file" />
-                    </StackPanel>
-                    <Button Content="Import xlsx" Click="ImportXlsx_Click" />
+            <Expander Header="More options (xlsx, amount sign, bank link)" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="16" Margin="0,12,0,0">
+                    <ComboBox x:Name="SignBox" Header="Amount sign" SelectedIndex="0" HorizontalAlignment="Stretch">
+                        <ComboBoxItem Content="Bank style (expenses negative)" Tag="bank" />
+                        <ComboBoxItem Content="Invert signs" Tag="invert" />
+                    </ComboBox>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="12" Padding="16">
+                        <StackPanel Spacing="12">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Legacy Budget.xlsx" />
+                            <ComboBox x:Name="ProfileSlugBox" Header="Who" SelectedIndex="0" HorizontalAlignment="Stretch" />
+                            <CheckBox x:Name="DryRunBox" Content="Dry run (scan only)" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Content="Pick xlsx…" Click="PickXlsx_Click" Style="{StaticResource AccentButtonStyle}" />
+                                <TextBlock x:Name="XlsxPathText" VerticalAlignment="Center" Opacity="0.75" Text="No file" />
+                            </StackPanel>
+                            <Button Content="Import xlsx" Click="ImportXlsx_Click" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="12" Padding="16">
+                        <StackPanel Spacing="8">
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Optional bank link" />
+                            <TextBlock x:Name="PlaidText" Opacity="0.8" TextWrapping="Wrap" Text="Checking…" />
+                            <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                                Text="Full connect / sync is under Banks in Full books. This is status only." />
+                            <Button Content="Refresh bank-link status" Click="Plaid_Click" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
-            </Border>
-
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="16">
-                <StackPanel Spacing="8">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Plaid" />
-                    <TextBlock x:Name="PlaidText" Opacity="0.8" TextWrapping="Wrap" Text="Checking…" />
-                    <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Full connect / sync is under Banks (Plaid) in the nav. This is status only." />
-                    <Button Content="Refresh Plaid status" Click="Plaid_Click" />
-                </StackPanel>
-            </Border>
+            </Expander>
 
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>

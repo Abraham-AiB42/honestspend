@@ -19,10 +19,12 @@ public sealed partial class ImportPage : Page
     private StorageFile? _xlsxFile;
     private string? _inboxPath;
     private int? _setBooksAccountId;
+    private int? _freezeAccountId;
     private bool _requireEndingBal;
     /// <summary>Remaining honesty CTAs after the active button (set_books then enter).</summary>
     private readonly List<(int AccountId, string Label)> _enterEndingQueue = new();
     private readonly List<(int AccountId, string Label)> _setBooksQueue = new();
+    private readonly Dictionary<int, string> _accountKinds = new();
 
     public ImportPage()
     {
@@ -45,12 +47,16 @@ public sealed partial class ImportPage : Page
 
             var accounts = await api.GetAccountsAsync();
             AccountBox.Items.Clear();
+            _accountKinds.Clear();
             foreach (var a in accounts.EnumerateArray())
             {
+                var id = a.GetProperty("id").GetInt32();
+                var kind = JsonUi.Str(a, "kind");
+                _accountKinds[id] = kind;
                 AccountBox.Items.Add(new ComboBoxItem
                 {
-                    Content = $"{JsonUi.Str(a, "nickname")} · {UiCopy.AccountKind(JsonUi.Str(a, "kind"))}",
-                    Tag = a.GetProperty("id").GetInt32(),
+                    Content = $"{JsonUi.Str(a, "nickname")} · {UiCopy.AccountKind(kind)}",
+                    Tag = id,
                 });
             }
             if (AccountBox.Items.Count > 0) AccountBox.SelectedIndex = 0;
@@ -237,6 +243,7 @@ public sealed partial class ImportPage : Page
             AppendNextStepLines(lines, res);
             ResultText.Text = string.Join("\n", lines);
             ShowNextSteps(res);
+            MaybeOfferFreezeFromInbox(res);
             await RefreshInboxAsync(api);
         }
         catch (Exception ex)
@@ -514,6 +521,118 @@ public sealed partial class ImportPage : Page
         _requireEndingBal = false;
         _enterEndingQueue.Clear();
         _setBooksQueue.Clear();
+        HideFreezeStatement();
+    }
+
+    private void HideFreezeStatement()
+    {
+        FreezeStatementPanel.Visibility = Visibility.Collapsed;
+        FreezeStatementBar.IsOpen = false;
+        FreezeMsg.Text = "";
+        _freezeAccountId = null;
+    }
+
+    private void DismissFreeze_Click(object sender, RoutedEventArgs e) => HideFreezeStatement();
+
+    /// <summary>
+    /// After credit import: optional freeze of bank statement actual for last close.
+    /// Cash path unchanged (panel stays collapsed).
+    /// </summary>
+    private void MaybeOfferFreezeStatement(int accountId, JsonElement res)
+    {
+        if (!_accountKinds.TryGetValue(accountId, out var kind)
+            || !string.Equals(kind, "credit", StringComparison.OrdinalIgnoreCase))
+        {
+            HideFreezeStatement();
+            return;
+        }
+
+        _freezeAccountId = accountId;
+        if (TryBalanceFromImport(res) is decimal bal)
+            FreezeActualBox.Value = (double)bal;
+        else
+            FreezeActualBox.Value = double.NaN;
+
+        FreezeMsg.Text = "";
+        FreezeStatementBar.IsOpen = true;
+        FreezeStatementPanel.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Inbox may touch several accounts — offer freeze for first credit hit.</summary>
+    private void MaybeOfferFreezeFromInbox(JsonElement res)
+    {
+        if (!res.TryGetProperty("results", out var results) || results.ValueKind != JsonValueKind.Array)
+        {
+            HideFreezeStatement();
+            return;
+        }
+
+        foreach (var r in results.EnumerateArray())
+        {
+            if (r.TryGetProperty("error", out var er)
+                && er.ValueKind == JsonValueKind.String
+                && !string.IsNullOrEmpty(er.GetString()))
+                continue;
+            if (!int.TryParse(JsonUi.Str(r, "account_id"), out var aid))
+                continue;
+            if (!_accountKinds.TryGetValue(aid, out var kind)
+                || !string.Equals(kind, "credit", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            MaybeOfferFreezeStatement(aid, r);
+            return;
+        }
+
+        HideFreezeStatement();
+    }
+
+    private static decimal? TryBalanceFromImport(JsonElement res)
+    {
+        foreach (var key in new[] { "ending_balance", "ledger_balance", "institution_balance" })
+        {
+            if (!res.TryGetProperty(key, out var p) || p.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                continue;
+            var raw = p.ValueKind switch
+            {
+                JsonValueKind.String => p.GetString(),
+                JsonValueKind.Number => p.GetRawText(),
+                _ => null,
+            };
+            if (string.IsNullOrWhiteSpace(raw) || raw is "?" or "—")
+                continue;
+            if (TryParseBankAmount(raw, out var bal))
+                return bal;
+        }
+        return null;
+    }
+
+    private async void FreezeStatement_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (_freezeAccountId is not int accountId)
+                throw new InvalidOperationException("No credit account for freeze.");
+            if (double.IsNaN(FreezeActualBox.Value))
+                throw new InvalidOperationException("Enter the statement balance from the bank.");
+            var amt = (decimal)FreezeActualBox.Value;
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.FreezeStatementCycleAsync(accountId, new
+            {
+                actual_balance = amt,
+                source = "import",
+            });
+            FreezeMsg.Text =
+                $"Frozen close {JsonUi.Str(res, "cycle_end")} · actual {JsonUi.Money(res, "actual_balance")} · " +
+                $"projected {JsonUi.Money(res, "projected_balance")} · variance {JsonUi.Money(res, "variance")}";
+            FreezeStatementBar.IsOpen = false;
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private void ShowNextSteps(
@@ -805,6 +924,7 @@ public sealed partial class ImportPage : Page
                 AppendNextStepLines(lines, ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
                 ResultText.Text = string.Join("\n", lines);
                 ShowNextSteps(ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
+                MaybeOfferFreezeStatement(accountId, ofxRes);
                 return;
             }
             if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
@@ -845,6 +965,7 @@ public sealed partial class ImportPage : Page
             AppendNextStepLines(csvLines, res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
             ResultText.Text = string.Join("\n", csvLines);
             ShowNextSteps(res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
+            MaybeOfferFreezeStatement(accountId, res);
         }
         catch (Exception ex)
         {
@@ -902,6 +1023,7 @@ public sealed partial class ImportPage : Page
             AppendNextStepLines(pdfLines, res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
             ResultText.Text = string.Join("\n", pdfLines);
             ShowNextSteps(res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
+            MaybeOfferFreezeStatement(accountId, res);
         }
         catch (Exception ex)
         {
