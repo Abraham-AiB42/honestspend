@@ -870,6 +870,94 @@ def setup_advance(body: SetupAdvanceIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/api/setup/storage")
+def setup_storage_get():
+    """Data folder candidates for first-run storage phase."""
+    from financial_os.services.paths import data_path_info
+
+    return data_path_info()
+
+
+class SetupStorageIn(BaseModel):
+    kind: str = "local"  # local | onedrive | dropbox | icloud | custom | …
+    path: str | None = None
+    advance: bool = True  # advance wizard to next phase after save
+
+
+@app.post("/api/setup/storage")
+def setup_storage_post(body: SetupStorageIn, db: Session = Depends(get_db)):
+    """Record storage choice (client applies FOS_DATA_DIR + engine restart)."""
+    from financial_os.services.paths import apply_storage_choice
+    from financial_os.services.setup_wizard import set_phase
+
+    try:
+        choice = apply_storage_choice(kind=body.kind, path=body.path)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    payload = {
+        "storage_kind": choice["kind"],
+        "storage_path": choice["path"],
+        "storage_chosen": True,
+    }
+    # Jump to security (resilient if engine restarted onto a fresh/copied DB)
+    if body.advance:
+        st = set_phase(db, "security", merge_payload=payload)
+    else:
+        st = set_phase(db, "storage", merge_payload=payload)
+    return {"ok": True, "choice": choice, "setup": st}
+
+
+@app.get("/api/setup/security")
+def setup_security_get(platform: str = "win", db: Session = Depends(get_db)):
+    """App lock catalog + current setup payload mode (no secrets)."""
+    from financial_os.services.app_security import security_catalog
+    from financial_os.services.setup_wizard import get_setup_state
+
+    st = get_setup_state(db)
+    pl = st.get("payload") or {}
+    cat = security_catalog(platform=platform)
+    return {
+        **cat,
+        "mode": pl.get("app_lock_mode") or "none",
+        "platform_capability": pl.get("app_lock_capability"),
+        "configured": bool(pl.get("security_configured")),
+    }
+
+
+class SetupSecurityIn(BaseModel):
+    mode: str = "none"  # none | pin | password | platform
+    platform_capability: str | None = None
+    advance: bool = True
+
+
+@app.post("/api/setup/security")
+def setup_security_post(body: SetupSecurityIn, db: Session = Depends(get_db)):
+    """Record app-lock *metadata* only. PIN/password/Hello secrets stay on the client."""
+    from financial_os.services.app_security import validate_security_payload
+    from financial_os.services.setup_wizard import set_phase
+
+    try:
+        meta = validate_security_payload(
+            mode=body.mode,
+            platform_capability=body.platform_capability,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    payload = {
+        "app_lock_mode": meta["mode"],
+        "app_lock_capability": meta.get("platform_capability"),
+        "security_configured": True,
+    }
+    # Land on money path after lock choice
+    if body.advance:
+        st = set_phase(db, "path", merge_payload=payload)
+    else:
+        st = set_phase(db, "security", merge_payload=payload)
+    return {"ok": True, "security": meta, "setup": st}
+
+
 class SetupSkipIn(BaseModel):
     note: str | None = "skipped"
     force_empty: bool = False  # allow complete without cash (explicit abandon)

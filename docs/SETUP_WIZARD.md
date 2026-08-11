@@ -1,8 +1,16 @@
 # Smart Setup Wizard
 
-Resumable multi-phase onboarding (v1.0.39+). Goal: **~2 minutes to Safe to spend**, then **optional power depth** (bills, categories, budgets) — not a forced tunnel.
+Resumable multi-phase onboarding (v1.0.39+). Goal: choose **where books live** + **optional app lock**, then **~2 minutes to Safe to spend**, then **optional power depth** — not a forced tunnel.
 
-## Paths (primary)
+## Early steps (all paths)
+
+| Phase | Purpose |
+|-------|---------|
+| **Welcome** | Time honesty |
+| **Storage** | This PC only · OneDrive / Dropbox / iCloud / custom folder (`FOS_DATA_DIR`). Cloud = single-writer honesty. |
+| **Security** | App lock: none · PIN · password · Windows Hello (Face ID / fingerprint catalog for future clients). Secrets stay on device. |
+
+## Paths (money)
 
 | Path | Fast flow |
 |------|-----------|

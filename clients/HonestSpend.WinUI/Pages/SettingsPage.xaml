@@ -79,6 +79,19 @@
                 </StackPanel>
             </Expander>
 
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="App lock (this device)" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Optional PIN, password, or Windows Hello. Stops casual access to the UI — not full database encryption. Change anytime; clearing lock does not delete books." />
+            <TextBlock x:Name="AppLockStatusText" Opacity="0.8" TextWrapping="Wrap" Text="Checking…" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="No lock" Click="AppLockNone_Click" />
+                <Button Content="Set PIN…" Click="AppLockPin_Click" />
+                <Button Content="Set password…" Click="AppLockPassword_Click" />
+                <Button Content="Windows Hello" Click="AppLockHello_Click" />
+                <Button Content="Clear lock" Click="AppLockClear_Click" />
+            </StackPanel>
+            <TextBlock x:Name="AppLockMsgText" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Money in (freeware)" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
                 Text="Download CSV/OFX or statements from your bank, then Import. Reminders are local only — no bank passwords, no paid feed. Optional live link = your Plaid keys; optional AI = your xAI key." />

@@ -16,6 +16,8 @@ from financial_os.db import Account, AppSettings, ScheduledItem
 # Ordered phases for progress UI (path-specific subsets applied in get_state)
 ALL_PHASES: list[dict[str, str]] = [
     {"id": "welcome", "title": "Welcome", "blurb": "What can you safely spend?"},
+    {"id": "storage", "title": "Where books live", "blurb": "This PC or your cloud folder"},
+    {"id": "security", "title": "App lock", "blurb": "None, PIN, password, or device unlock"},
     {"id": "path", "title": "Connect money", "blurb": "Fast balances, CSV, or Plaid"},
     {"id": "manual", "title": "Quick balances", "blurb": "2 minutes to Safe to spend"},
     {"id": "plaid_keys", "title": "Plaid keys", "blurb": "Your client id + secret (local only)"},
@@ -35,11 +37,20 @@ ALL_PHASES: list[dict[str, str]] = [
 
 PHASE_ORDER = [p["id"] for p in ALL_PHASES]
 
-# Fast path to a number, then optional power_menu depth (not a forced tunnel)
+# Storage + security first, then money path, then optional power_menu
 PATH_PHASES: dict[str, list[str]] = {
-    "manual": ["welcome", "path", "manual", "power_menu", "done"],
-    "csv": ["welcome", "path", "cash_loop", "power_menu", "done"],
-    "plaid": ["welcome", "path", "plaid_keys", "plaid_link", "power_menu", "done"],
+    "manual": ["welcome", "storage", "security", "path", "manual", "power_menu", "done"],
+    "csv": ["welcome", "storage", "security", "path", "cash_loop", "power_menu", "done"],
+    "plaid": [
+        "welcome",
+        "storage",
+        "security",
+        "path",
+        "plaid_keys",
+        "plaid_link",
+        "power_menu",
+        "done",
+    ],
 }
 
 # Depth modules reachable from power_menu (jump only within this set + done)
@@ -113,8 +124,8 @@ def _checklist(session: Session) -> dict[str, Any]:
 def _path_phases(path: str | None) -> list[str]:
     if path and path in PATH_PHASES:
         return list(PATH_PHASES[path])
-    # Before path choice: welcome → path only
-    return ["welcome", "path"]
+    # Before path choice: welcome → storage → security → path
+    return ["welcome", "storage", "security", "path"]
 
 
 def get_setup_state(session: Session) -> dict[str, Any]:
@@ -190,7 +201,9 @@ def get_setup_state(session: Session) -> dict[str, Any]:
         "power_modules": power_modules,
         "in_power_depth": in_depth,
         "hints": {
-            "welcome": "About 2 minutes to a Safe-to-spend number. Optional smart steps after.",
+            "welcome": "About 2 minutes to a Safe-to-spend number. First: where books live + optional app lock.",
+            "storage": "Local is simplest. A cloud folder lets another PC of yours open the same books — one writer at a time.",
+            "security": "Optional app lock (PIN, password, or Windows Hello). Not bank-vault encryption — your OS login still matters.",
             "path": "Plaid uses your free trial keys (up to 10 bank connections). CSV never needs bank passwords in our app.",
             "manual": "Fast path: one checking, optional card and bill — then optional smarter setup.",
             "power_menu": "You already have a number. Optionally find bills, categorize, budget, or set AI keys.",
@@ -272,7 +285,7 @@ def advance_setup(
 
     seq = _path_phases(cur_path)
     if phase == "welcome" and action == "next":
-        settings.setup_phase = "path"
+        settings.setup_phase = "storage"
         session.flush()
         return get_setup_state(session)
 

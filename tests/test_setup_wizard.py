@@ -38,21 +38,40 @@ def test_fresh_setup_needs_wizard(tmp_path: Path, monkeypatch):
     s.close()
 
 
-def test_advance_welcome_to_path(tmp_path: Path, monkeypatch):
+def test_advance_welcome_to_storage(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
+    st = sw.advance_setup(s, action="next")
+    assert st["phase"] == "storage"
+    st = sw.advance_setup(s, action="next")
+    assert st["phase"] == "security"
     st = sw.advance_setup(s, action="next")
     assert st["phase"] == "path"
     s.close()
 
 
+def _to_path(s):
+    """welcome → storage → security → path"""
+    sw.advance_setup(s, action="next")
+    sw.advance_setup(s, action="next")
+    sw.advance_setup(s, action="next")
+
+
 def test_choose_csv_path_short_to_power_menu(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next")  # welcome -> path
+    _to_path(s)
     st = sw.advance_setup(s, action="set_path", path="csv")
     assert st["path"] == "csv"
     assert st["phase"] == "cash_loop"
     ids = [x["id"] for x in st["steps"]]
-    assert ids == ["welcome", "path", "cash_loop", "power_menu", "done"]
+    assert ids == [
+        "welcome",
+        "storage",
+        "security",
+        "path",
+        "cash_loop",
+        "power_menu",
+        "done",
+    ]
     assert "discover" not in ids  # depth is optional, not forced tunnel
     assert st["needs_setup"] is True
     s.close()
@@ -60,7 +79,7 @@ def test_choose_csv_path_short_to_power_menu(tmp_path: Path, monkeypatch):
 
 def test_choose_plaid_then_power_menu(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next")
+    _to_path(s)
     st = sw.advance_setup(s, action="set_path", path="plaid")
     assert st["phase"] == "plaid_keys"
     st = sw.advance_setup(s, action="next")
@@ -75,11 +94,13 @@ def test_choose_plaid_then_power_menu(tmp_path: Path, monkeypatch):
 
 def test_manual_path_and_complete(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next")
+    _to_path(s)
     st = sw.advance_setup(s, action="set_path", path="manual")
     assert st["phase"] == "manual"
     ids = [x["id"] for x in st["steps"]]
     assert "power_menu" in ids
+    assert "storage" in ids
+    assert "security" in ids
     # Cannot complete without cash
     try:
         sw.mark_setup_done(s, note="test")
@@ -98,7 +119,7 @@ def test_manual_path_and_complete(tmp_path: Path, monkeypatch):
 
 def test_power_menu_jump_and_return(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next")
+    _to_path(s)
     sw.advance_setup(s, action="set_path", path="csv")
     # Seed cash so we can finish later
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -150,7 +171,7 @@ def test_first_run_without_complete_lands_power_menu(tmp_path: Path, monkeypatch
 
 def test_back_navigation(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next")
+    _to_path(s)
     sw.advance_setup(s, action="set_path", path="csv")
     st = sw.advance_setup(s, action="back")
     assert st["phase"] == "path"
@@ -170,7 +191,9 @@ def test_quick_setup_marks_wizard_done(tmp_path: Path, monkeypatch):
 
 def test_payload_merge(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next", payload={"seen_welcome": True})
+    sw.advance_setup(s, action="next", payload={"seen_welcome": True})  # → storage
+    sw.advance_setup(s, action="next")  # → security
+    sw.advance_setup(s, action="next")  # → path
     st = sw.advance_setup(
         s, action="set_path", path="csv", payload={"checking_draft": 1}
     )
@@ -181,7 +204,7 @@ def test_payload_merge(tmp_path: Path, monkeypatch):
 
 def test_csv_path_has_no_liabilities_phase(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
-    sw.advance_setup(s, action="next")
+    _to_path(s)
     st = sw.advance_setup(s, action="set_path", path="csv")
     ids = [x["id"] for x in st["steps"]]
     assert "liabilities" not in ids

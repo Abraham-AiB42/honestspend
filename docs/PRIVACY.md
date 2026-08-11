@@ -47,9 +47,14 @@ HonestSpend is not directed at children under 13. Do not use the app to store a 
 
 - Use **Import** only (no bank APIs)  
 - Turn off optional BYOK features  
-- Change **Data folder** (e.g. OneDrive) in Settings  
+- Change **Data folder** (e.g. OneDrive) in Get started or Settings  
+- Optional **app lock** (PIN / password / Windows Hello) — device-local only; does not encrypt the database file by itself  
 - Export/delete data via backups and local file tools  
 - Uninstall the app  
+
+## App lock
+
+If you enable an app lock, HonestSpend stores a **one-way hash** of your PIN/password (or a flag for Windows Hello) in Windows app settings on **this device**. Lock secrets are **not** uploaded and are **not** included in SQLite backup zips. Clearing the lock does not delete your books.
 
 ## Third parties
 

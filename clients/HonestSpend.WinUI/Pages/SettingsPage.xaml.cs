@@ -44,6 +44,7 @@ public sealed partial class SettingsPage : Page
             ? $"Engine log: {lp}"
             : "Engine log: ~/.financial-os/engine.log (after Start engine)";
         RefreshTaskStatus();
+        RefreshAppLockStatus();
         await LoadPathsAsync();
         await LoadFiscalAsync();
         await LoadImportReminderAsync();
@@ -574,6 +575,122 @@ public sealed partial class SettingsPage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private void RefreshAppLockStatus()
+    {
+        try
+        {
+            var mode = AppLockService.Mode;
+            AppLockStatusText.Text = mode switch
+            {
+                AppLockService.LockMode.None => "Current: no lock",
+                AppLockService.LockMode.Pin => "Current: PIN",
+                AppLockService.LockMode.Password => "Current: password",
+                AppLockService.LockMode.Platform => "Current: Windows Hello",
+                _ => "Current: unknown",
+            };
+        }
+        catch
+        {
+            AppLockStatusText.Text = "App lock status unavailable";
+        }
+    }
+
+    private void AppLockNone_Click(object sender, RoutedEventArgs e)
+    {
+        AppLockService.SetNone();
+        AppLockMsgText.Text = "App lock disabled.";
+        RefreshAppLockStatus();
+    }
+
+    private async void AppLockPin_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var pinBox = new PasswordBox { Header = "PIN (4–8 digits)", MaxLength = 8 };
+            var confBox = new PasswordBox { Header = "Confirm PIN", MaxLength = 8 };
+            var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(pinBox);
+            panel.Children.Add(confBox);
+            var dlg = new ContentDialog
+            {
+                Title = "Set app PIN",
+                Content = panel,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot,
+            };
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                return;
+            if (pinBox.Password != confBox.Password)
+                throw new InvalidOperationException("PIN confirmation does not match.");
+            AppLockService.SetPin(pinBox.Password);
+            AppLockMsgText.Text = "PIN saved. You’ll unlock on next launch.";
+            RefreshAppLockStatus();
+        }
+        catch (Exception ex)
+        {
+            AppLockMsgText.Text = ex.Message;
+        }
+    }
+
+    private async void AppLockPassword_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var passBox = new PasswordBox { Header = "Password (min 8)" };
+            var confBox = new PasswordBox { Header = "Confirm password" };
+            var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(passBox);
+            panel.Children.Add(confBox);
+            var dlg = new ContentDialog
+            {
+                Title = "Set app password",
+                Content = panel,
+                PrimaryButtonText = "Save",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot,
+            };
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                return;
+            if (passBox.Password != confBox.Password)
+                throw new InvalidOperationException("Password confirmation does not match.");
+            AppLockService.SetPassword(passBox.Password);
+            AppLockMsgText.Text = "Password saved. You’ll unlock on next launch.";
+            RefreshAppLockStatus();
+        }
+        catch (Exception ex)
+        {
+            AppLockMsgText.Text = ex.Message;
+        }
+    }
+
+    private async void AppLockHello_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (!await AppLockService.IsWindowsHelloAvailableAsync())
+                throw new InvalidOperationException("Windows Hello is not available on this device.");
+            var ok = await AppLockService.TryWindowsHelloAsync("Confirm Windows Hello for HonestSpend");
+            if (!ok)
+                throw new InvalidOperationException("Windows Hello cancelled.");
+            AppLockService.SetPlatform("windows_hello");
+            AppLockMsgText.Text = "Windows Hello lock enabled.";
+            RefreshAppLockStatus();
+        }
+        catch (Exception ex)
+        {
+            AppLockMsgText.Text = ex.Message;
+        }
+    }
+
+    private void AppLockClear_Click(object sender, RoutedEventArgs e)
+    {
+        AppLockService.ClearLock();
+        AppLockService.SetNone();
+        AppLockMsgText.Text = "Lock cleared. Books were not deleted.";
+        RefreshAppLockStatus();
     }
 
     private async void StartEngine_Click(object sender, RoutedEventArgs e)

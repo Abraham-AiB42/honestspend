@@ -75,6 +75,27 @@ public sealed partial class MainWindow : Window
         }
         _shellLoading = false;
 
+        // App lock gate — before engine / books UI
+        if (AppLockService.NeedsUnlock)
+        {
+            NavView.IsEnabled = false;
+            NavFrame.Navigate(typeof(LockPage));
+            return;
+        }
+        AppLockService.MarkUnlocked();
+
+        await ContinueAfterUnlockAsync();
+    }
+
+    /// <summary>Called from LockPage after successful unlock.</summary>
+    public async void OnAppUnlocked()
+    {
+        NavView.IsEnabled = true;
+        await ContinueAfterUnlockAsync();
+    }
+
+    private async Task ContinueAfterUnlockAsync()
+    {
         await LoadShellEntitiesAsync();
         ApplySimpleChrome();
 

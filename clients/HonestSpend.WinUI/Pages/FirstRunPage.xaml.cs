@@ -32,6 +32,20 @@ public sealed partial class FirstRunPage : Page
     private bool _canComplete;
     private List<(string Id, string Title, string Blurb)> _powerModules = new();
 
+    // Storage phase
+    private string _storageKind = "local";
+    private string _storagePath = "";
+    private readonly List<(string Kind, string Label, string Path)> _storageCandidates = new();
+    private TextBox? _customStorageBox;
+
+    // Security phase
+    private string _securityMode = "none";
+    private PasswordBox? _secPinBox;
+    private PasswordBox? _secPinConfirmBox;
+    private PasswordBox? _secPassBox;
+    private PasswordBox? _secPassConfirmBox;
+    private bool _helloAvailable;
+
     // CSV cash loop: hub | type | details | guide | import
     private string _cashUi = "hub";
     private string _cashType = "checking";
@@ -216,10 +230,22 @@ public sealed partial class FirstRunPage : Page
         {
             QuestionText.Text = "What can you safely spend?";
             HintText.Text =
-                "About 2 minutes to a Safe-to-spend number. " +
+                "A few short steps: where books live, optional app lock, then ~2 minutes to Safe to spend. " +
                 "Then optionally add bills, categories, and budgets — or skip straight to Home.\n\n" +
                 "We never store bank passwords. You can leave anytime — setup stays open until you finish.";
-            NextBtn.Content = "Get my number";
+            NextBtn.Content = "Get started";
+            return;
+        }
+
+        if (_phase == "storage")
+        {
+            _ = RenderStorageAsync();
+            return;
+        }
+
+        if (_phase == "security")
+        {
+            _ = RenderSecurityAsync();
             return;
         }
 
@@ -994,6 +1020,330 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
+    private async Task RenderStorageAsync()
+    {
+        QuestionText.Text = "Where should your books live?";
+        HintText.Text =
+            "Local is simplest. A cloud folder lets another PC of yours open the same books — " +
+            "open one writer at a time. We never store bank passwords.";
+        NextBtn.Content = "Use this location";
+        Fields.Children.Clear();
+
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var info = await api.GetSetupStorageAsync();
+            _storageCandidates.Clear();
+            var warn = JsonUi.Str(info, "warning");
+            if (!string.IsNullOrEmpty(warn) && warn != "—")
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = warn,
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.85,
+                    Margin = new Thickness(0, 0, 0, 8),
+                });
+            }
+
+            if (info.TryGetProperty("candidates", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in arr.EnumerateArray())
+                {
+                    var kind = JsonUi.Str(c, "kind", "local");
+                    var label = JsonUi.Str(c, "label");
+                    var path = JsonUi.Str(c, "path");
+                    if (string.IsNullOrEmpty(path) || path == "—") continue;
+                    _storageCandidates.Add((kind, label, path));
+                }
+            }
+            if (_storageCandidates.Count == 0)
+            {
+                var def = StorageLocationService.DefaultLocalPath();
+                _storageCandidates.Add(("local", "This PC only (default)", def));
+            }
+
+            if (string.IsNullOrEmpty(_storagePath))
+            {
+                _storageKind = _storageCandidates[0].Kind;
+                _storagePath = _storageCandidates[0].Path;
+            }
+
+            foreach (var cand in _storageCandidates)
+            {
+                var kind = cand.Kind;
+                var path = cand.Path;
+                var btn = new Button
+                {
+                    Content = new StackPanel
+                    {
+                        Spacing = 2,
+                        Children =
+                        {
+                            new TextBlock { Text = cand.Label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                            new TextBlock
+                            {
+                                Text = path,
+                                Opacity = 0.7,
+                                FontSize = 12,
+                                TextWrapping = TextWrapping.Wrap,
+                            },
+                        },
+                    },
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(12),
+                    Margin = new Thickness(0, 0, 0, 4),
+                    Tag = (kind, path),
+                };
+                if (string.Equals(_storagePath, path, StringComparison.OrdinalIgnoreCase))
+                    btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+                btn.Click += (_, _) =>
+                {
+                    _storageKind = kind;
+                    _storagePath = path;
+                    _ = RenderStorageAsync();
+                };
+                Fields.Children.Add(btn);
+            }
+
+            Fields.Children.Add(new TextBlock
+            {
+                Text = "Or custom folder path:",
+                Margin = new Thickness(0, 8, 0, 0),
+                Opacity = 0.8,
+            });
+            _customStorageBox = new TextBox
+            {
+                Header = "Custom path",
+                Text = _storageKind == "custom" ? _storagePath : "",
+                PlaceholderText = @"D:\Finance\HonestSpend",
+            };
+            Fields.Children.Add(_customStorageBox);
+            var useCustom = new Button { Content = "Use custom path", Margin = new Thickness(0, 4, 0, 0) };
+            useCustom.Click += (_, _) =>
+            {
+                var p = _customStorageBox?.Text?.Trim() ?? "";
+                if (string.IsNullOrEmpty(p)) return;
+                _storageKind = "custom";
+                _storagePath = p;
+                MsgText.Text = "Custom path selected.";
+            };
+            Fields.Children.Add(useCustom);
+        }
+        catch (Exception ex)
+        {
+            // Offline fallback
+            _storageKind = "local";
+            _storagePath = StorageLocationService.DefaultLocalPath();
+            Fields.Children.Add(new TextBlock
+            {
+                Text = $"Using default local folder (engine offline): {_storagePath}\n{ex.Message}",
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private async Task SaveStorageAndAdvanceAsync()
+    {
+        if (_customStorageBox is not null &&
+            !string.IsNullOrWhiteSpace(_customStorageBox.Text) &&
+            _storageKind == "custom")
+            _storagePath = _customStorageBox.Text.Trim();
+
+        if (string.IsNullOrWhiteSpace(_storagePath))
+            _storagePath = StorageLocationService.DefaultLocalPath();
+
+        // Apply on client first so engine restarts with FOS_DATA_DIR
+        await StorageLocationService.ApplyAndRestartEngineAsync(_storagePath, copyFromPrevious: true);
+
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        try
+        {
+            var res = await api.PostSetupStorageAsync(_storageKind, _storagePath, advance: true);
+            if (res.TryGetProperty("setup", out var st) && st.ValueKind == JsonValueKind.Object)
+                ApplyState(st);
+            else
+            {
+                var st2 = await api.SetupAdvanceAsync("next", payload: new
+                {
+                    storage_kind = _storageKind,
+                    storage_path = _storagePath,
+                    storage_chosen = true,
+                });
+                ApplyState(st2);
+            }
+        }
+        catch
+        {
+            // Engine may have just restarted — advance via state machine
+            var st = await api.SetupAdvanceAsync("next", payload: new
+            {
+                storage_kind = _storageKind,
+                storage_path = _storagePath,
+                storage_chosen = true,
+            });
+            ApplyState(st);
+        }
+        MsgText.Text = $"Books folder: {_storagePath}";
+        Render();
+    }
+
+    private async Task RenderSecurityAsync()
+    {
+        QuestionText.Text = "Protect this app on this device?";
+        HintText.Text =
+            "Optional. Stops others from opening HonestSpend while you’re away. " +
+            "This is an app lock — not bank-grade vault encryption. Your Windows login still matters. " +
+            "Each device sets its own lock.";
+        NextBtn.Content = "Continue";
+        Fields.Children.Clear();
+
+        _helloAvailable = await AppLockService.IsWindowsHelloAvailableAsync();
+
+        void addMode(string id, string title, string detail, bool enabled = true)
+        {
+            var btn = new Button
+            {
+                Content = new StackPanel
+                {
+                    Spacing = 2,
+                    Children =
+                    {
+                        new TextBlock { Text = title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                        new TextBlock
+                        {
+                            Text = detail,
+                            Opacity = 0.75,
+                            FontSize = 12,
+                            TextWrapping = TextWrapping.Wrap,
+                        },
+                    },
+                },
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left,
+                Padding = new Thickness(12),
+                Margin = new Thickness(0, 0, 0, 4),
+                IsEnabled = enabled,
+                Tag = id,
+            };
+            if (_securityMode == id)
+                btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            btn.Click += (_, _) =>
+            {
+                _securityMode = id;
+                _ = RenderSecurityAsync();
+            };
+            Fields.Children.Add(btn);
+        }
+
+        addMode("none", "No lock (default)", "Open instantly. Fine on a private PC.");
+        addMode("pin", "PIN", "4–8 digits. Stored only on this device.");
+        addMode("password", "Password", "Min 8 characters. Not your bank password.");
+        addMode(
+            "platform",
+            "Windows Hello",
+            _helloAvailable
+                ? "Face, fingerprint, or Windows Hello PIN on this PC."
+                : "Windows Hello not available — pick PIN instead (or set up Hello in Windows Settings).",
+            enabled: _helloAvailable);
+
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "Also planned on other devices: Face ID, Touch ID, Android biometrics (each client sets its own).",
+            Opacity = 0.6,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, 0, 8),
+        });
+
+        if (_securityMode == "pin")
+        {
+            _secPinBox = new PasswordBox { Header = "PIN (4–8 digits)", MaxLength = 8 };
+            _secPinConfirmBox = new PasswordBox { Header = "Confirm PIN", MaxLength = 8 };
+            Fields.Children.Add(_secPinBox);
+            Fields.Children.Add(_secPinConfirmBox);
+        }
+        else if (_securityMode == "password")
+        {
+            _secPassBox = new PasswordBox { Header = "Password" };
+            _secPassConfirmBox = new PasswordBox { Header = "Confirm password" };
+            Fields.Children.Add(_secPassBox);
+            Fields.Children.Add(_secPassConfirmBox);
+        }
+    }
+
+    private async Task SaveSecurityAndAdvanceAsync()
+    {
+        string? capability = null;
+        switch (_securityMode)
+        {
+            case "none":
+                AppLockService.SetNone();
+                break;
+            case "pin":
+                var pin = _secPinBox?.Password ?? "";
+                var pin2 = _secPinConfirmBox?.Password ?? "";
+                if (pin != pin2)
+                    throw new InvalidOperationException("PIN confirmation does not match.");
+                AppLockService.SetPin(pin);
+                break;
+            case "password":
+                var pw = _secPassBox?.Password ?? "";
+                var pw2 = _secPassConfirmBox?.Password ?? "";
+                if (pw != pw2)
+                    throw new InvalidOperationException("Password confirmation does not match.");
+                AppLockService.SetPassword(pw);
+                break;
+            case "platform":
+                if (!await AppLockService.IsWindowsHelloAvailableAsync())
+                    throw new InvalidOperationException("Windows Hello is not available. Choose PIN instead.");
+                // Probe once so user knows it works
+                var ok = await AppLockService.TryWindowsHelloAsync("Confirm Windows Hello for HonestSpend");
+                if (!ok)
+                    throw new InvalidOperationException("Windows Hello was cancelled. Try again or choose PIN.");
+                AppLockService.SetPlatform("windows_hello");
+                capability = "windows_hello";
+                break;
+            default:
+                AppLockService.SetNone();
+                _securityMode = "none";
+                break;
+        }
+
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        try
+        {
+            var res = await api.PostSetupSecurityAsync(_securityMode, capability, advance: true);
+            if (res.TryGetProperty("setup", out var st) && st.ValueKind == JsonValueKind.Object)
+                ApplyState(st);
+            else
+            {
+                var st2 = await api.SetupAdvanceAsync("next", payload: new
+                {
+                    app_lock_mode = _securityMode,
+                    app_lock_capability = capability,
+                    security_configured = true,
+                });
+                ApplyState(st2);
+            }
+        }
+        catch
+        {
+            var st = await api.SetupAdvanceAsync("next", payload: new
+            {
+                app_lock_mode = _securityMode,
+                app_lock_capability = capability,
+                security_configured = true,
+            });
+            ApplyState(st);
+        }
+        Render();
+    }
+
     private static void AddCombo(ComboBox box, string tag, string label, bool selected)
     {
         var item = new ComboBoxItem { Content = label, Tag = tag };
@@ -1144,6 +1494,18 @@ public sealed partial class FirstRunPage : Page
                 var st = await api.SetupAdvanceAsync("next");
                 ApplyState(st);
                 Render();
+                return;
+            }
+
+            if (_phase == "storage")
+            {
+                await SaveStorageAndAdvanceAsync();
+                return;
+            }
+
+            if (_phase == "security")
+            {
+                await SaveSecurityAndAdvanceAsync();
                 return;
             }
 

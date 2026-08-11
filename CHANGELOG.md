@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.48 — Storage + app lock in setup
+
+- **Setup first steps**: **Where books live** (local / OneDrive / Dropbox / iCloud / custom) then **App lock**
+- Cloud folder = user’s sync path; single-writer honesty; engine restarts with `FOS_DATA_DIR`
+- **App lock**: none · PIN · password · Windows Hello; launch gate + Settings reconfigure
+- Capability catalog for future Face ID / Touch ID / Android biometrics (stubs)
+- Lock secrets stay on the client (not SQLite / not backups); engine stores metadata only
+- APIs: `GET/POST /api/setup/storage`, `GET/POST /api/setup/security`
+
 ## 1.0.47 — 2-min primary + optional power depth
 
 - **Wizard reshape**: primary paths end at **power_menu** (not a forced tunnel through discover→budgets)
