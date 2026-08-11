@@ -63,9 +63,14 @@
       try {
         const st = await jfetch("/api/plaid/status");
         if (!st.enabled) {
-          log("Plaid is off. Set FOS_PLAID_CLIENT_ID and FOS_PLAID_SECRET, then restart the engine.\n" + (st.hint || ""));
+          log("Plaid is off. In HonestSpend: Get started → Plaid keys, or POST /api/plaid/credentials with your client id + secret (stored locally). Env FOS_PLAID_* also works.\n" + (st.hint || ""));
           return;
         }
+        if (st.at_item_limit) {
+          log(`Plaid trial limit: ${st.item_count}/${st.item_limit} institutions linked. Disconnect one in the app before adding another.`);
+          return;
+        }
+        log(`Plaid ready · env ${st.env || "?"} · institutions ${st.item_count || 0}/${st.item_limit || 10}`);
         const profiles = await jfetch("/api/profiles");
         profileSel.innerHTML = "";
         for (const p of profiles) {

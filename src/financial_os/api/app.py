@@ -65,6 +65,12 @@ async def lifespan(_app: FastAPI):
         )
 
     init_db(engine)
+    try:
+        from financial_os.services.secrets_store import apply_secrets_to_settings
+
+        apply_secrets_to_settings()
+    except Exception:
+        pass
     session = SessionLocal()
     try:
         seed_all(session)
@@ -2937,20 +2943,110 @@ class PlaidExchangeIn(BaseModel):
 
 
 @app.get("/api/plaid/status")
-def plaid_status():
+def plaid_status(db: Session = Depends(get_db)):
+    from financial_os.services.secrets_store import (
+        PLAID_ITEM_TRIAL_LIMIT,
+        apply_secrets_to_settings,
+        plaid_credentials_status,
+    )
+
+    apply_secrets_to_settings()
     link_url = f"http://{app_settings.host}:{app_settings.port}/static/plaid-link.html"
+    creds = plaid_credentials_status()
+    n_items = plaid_service.item_count(db)
     return {
         "enabled": app_settings.plaid_enabled,
         "env": app_settings.plaid_env,
         "link_url": link_url,
         "hint": (
-            "Optional BYOK: set your own FOS_PLAID_CLIENT_ID and FOS_PLAID_SECRET. "
-            "HonestSpend is free — we never bill for bank feeds. CSV/OFX import works offline."
+            "BYOK: enter your Plaid client id + secret in setup or POST /api/plaid/credentials "
+            "(stored locally only). HonestSpend never bills for bank feeds. CSV/OFX works offline."
         ),
         "sandbox_hint": "POST /api/plaid/sandbox-link?profile_id=N for one-click sandbox bank (no Link UI).",
         "freeware": True,
         "byok": True,
+        "signup_url": "https://dashboard.plaid.com/signup",
+        "keys_url": "https://dashboard.plaid.com/developers/keys",
+        "item_count": n_items,
+        "item_limit": PLAID_ITEM_TRIAL_LIMIT,
+        "items_remaining": max(0, PLAID_ITEM_TRIAL_LIMIT - n_items),
+        "at_item_limit": n_items >= PLAID_ITEM_TRIAL_LIMIT,
+        "credentials": creds,
     }
+
+
+class PlaidCredentialsIn(BaseModel):
+    client_id: str
+    secret: str
+    env: str = "sandbox"  # sandbox | development | production
+
+
+@app.get("/api/plaid/credentials")
+def plaid_credentials_get():
+    from financial_os.services.secrets_store import apply_secrets_to_settings, plaid_credentials_status
+
+    apply_secrets_to_settings()
+    return plaid_credentials_status()
+
+
+@app.post("/api/plaid/credentials")
+def plaid_credentials_save(body: PlaidCredentialsIn):
+    """Save BYOK Plaid keys to local secure store (hot-reload; no engine restart)."""
+    from financial_os.services.secrets_store import save_plaid_credentials
+
+    try:
+        return {"ok": True, **save_plaid_credentials(
+            client_id=body.client_id,
+            secret=body.secret,
+            env=body.env,
+        )}
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.delete("/api/plaid/credentials")
+def plaid_credentials_delete():
+    from financial_os.services.secrets_store import clear_plaid_credentials
+
+    return {"ok": True, **clear_plaid_credentials()}
+
+
+class AiCredentialsIn(BaseModel):
+    provider: str  # xai | openai | anthropic | custom
+    api_key: str
+    base_url: str | None = None
+
+
+@app.get("/api/ai/credentials")
+def ai_credentials_list():
+    from financial_os.services.secrets_store import apply_secrets_to_settings, get_ai_providers
+
+    apply_secrets_to_settings()
+    return get_ai_providers()
+
+
+@app.post("/api/ai/credentials")
+def ai_credentials_save(body: AiCredentialsIn):
+    from financial_os.services.secrets_store import save_ai_credentials
+
+    try:
+        return {
+            "ok": True,
+            **save_ai_credentials(
+                provider=body.provider,
+                api_key=body.api_key,
+                base_url=body.base_url,
+            ),
+        }
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.delete("/api/ai/credentials/{provider}")
+def ai_credentials_delete(provider: str):
+    from financial_os.services.secrets_store import clear_ai_credentials
+
+    return {"ok": True, **clear_ai_credentials(provider)}
 
 
 class ImportSnoozeIn(BaseModel):
@@ -2981,10 +3077,18 @@ def import_reminder_ack(db: Session = Depends(get_db)):
 
 
 @app.post("/api/plaid/link-token")
-def plaid_link_token():
+def plaid_link_token(db: Session = Depends(get_db)):
+    from financial_os.services.secrets_store import apply_secrets_to_settings
+
+    apply_secrets_to_settings()
     try:
-        data = plaid_service.create_link_token()
-        return {"link_token": data.get("link_token"), "expiration": data.get("expiration")}
+        data = plaid_service.create_link_token(db)
+        return {
+            "link_token": data.get("link_token"),
+            "expiration": data.get("expiration"),
+            "item_count": data.get("item_count"),
+            "item_limit": data.get("item_limit"),
+        }
     except plaid_service.PlaidError as e:
         raise HTTPException(400, str(e)) from e
 

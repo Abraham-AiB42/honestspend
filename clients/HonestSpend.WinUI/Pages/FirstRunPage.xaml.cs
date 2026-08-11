@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using HonestSpend_WinUI.Helpers;
@@ -38,6 +39,14 @@ public sealed partial class FirstRunPage : Page
     private CalendarDatePicker? _billNext;
     private ComboBox? _importCadenceBox;
     private ComboBox? _importFocusBox;
+
+    // Plaid / AI wizard fields
+    private TextBox? _plaidClientId;
+    private PasswordBox? _plaidSecret;
+    private ComboBox? _plaidEnv;
+    private TextBox? _aiKey;
+    private ComboBox? _aiProvider;
+    private string _linkUrl = "http://127.0.0.1:7420/static/plaid-link.html";
 
     private string _cashNameV = "Primary checking";
     private string? _instV;
@@ -182,29 +191,32 @@ public sealed partial class FirstRunPage : Page
             return;
         }
 
-        // Placeholder phases until PR2+
+        if (_phase == "plaid_keys")
+        {
+            RenderPlaidKeys();
+            return;
+        }
+        if (_phase == "plaid_link")
+        {
+            _ = RenderPlaidLinkAsync();
+            return;
+        }
+        if (_phase == "ai_keys")
+        {
+            RenderAiKeys();
+            return;
+        }
+
+        // Later PR placeholders
         var (title, hint, nextLabel) = _phase switch
         {
-            "plaid_keys" => (
-                "Plaid keys (next update)",
-                "You'll enter client id + secret here with secure local storage, then Link. " +
-                "For now: Settings/env, or pick CSV / Quick manual. Skip advances the wizard.",
-                "Continue (placeholder)"),
-            "plaid_link" => (
-                "Link banks (next update)",
-                "App-owned Plaid Link — up to 10 institutions on trial. Placeholder; Next continues.",
-                "Continue"),
-            "ai_keys" => (
-                "AI helpers (optional)",
-                "After Plaid: connect Grok or another LLM you prefer (BYOK, local only). Skip for now.",
-                "Skip AI for now"),
             "cash_loop" => (
                 "Cash accounts (next update)",
-                "Pattern: + Cash account → type → bank → import. Placeholder; use Quick manual or wait for next build.",
+                "Pattern: + Cash account → type → bank → import. Use Quick manual for now or continue.",
                 "Continue"),
             "import_cash" => (
                 "Import cash history",
-                "Bank guides + CSV import per account. Coming next — you can use Full books → Import now.",
+                "Bank guides + CSV import per account. Coming next — Full books → Import works today.",
                 "Continue"),
             "discover" => (
                 "Find cards & bills",
@@ -238,9 +250,141 @@ public sealed partial class FirstRunPage : Page
         QuestionText.Text = title;
         HintText.Text = hint;
         NextBtn.Content = nextLabel;
-        InfoBar.Title = "Wizard foundation";
-        InfoBar.Message = "Path saved. Full steps ship in the next builds — you can still skip to Home.";
+        InfoBar.Title = "Coming soon";
+        InfoBar.Message = "This phase ships next. Next advances the wizard; Skip finishes setup.";
         InfoBar.IsOpen = true;
+    }
+
+    private void RenderPlaidKeys()
+    {
+        QuestionText.Text = "Your Plaid keys (local only)";
+        HintText.Text =
+            "HonestSpend never sees your bank password. Create a free Plaid account (Personal / trial — " +
+            "about 10 institution links), copy client_id + secret, paste here. Keys stay on this PC.";
+        NextBtn.Content = "Save & continue";
+
+        var openSignup = new HyperlinkButton
+        {
+            Content = "Open Plaid signup (dashboard.plaid.com)",
+            NavigateUri = new Uri("https://dashboard.plaid.com/signup"),
+        };
+        var openKeys = new HyperlinkButton
+        {
+            Content = "Open API keys page",
+            NavigateUri = new Uri("https://dashboard.plaid.com/developers/keys"),
+        };
+        Fields.Children.Add(openSignup);
+        Fields.Children.Add(openKeys);
+        Fields.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.8,
+            Text =
+                "1) Sign up → Team Settings / Developers → Keys\n" +
+                "2) Start with Sandbox to practice, then Development or Production\n" +
+                "3) Paste client_id and secret below — we store them encrypted locally (Windows DPAPI)",
+        });
+
+        _plaidClientId = new TextBox { Header = "client_id", PlaceholderText = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" };
+        Fields.Children.Add(_plaidClientId);
+        Fields.Children.Add(new TextBlock { Text = "secret", Opacity = 0.85 });
+        _plaidSecret = new PasswordBox { PlaceholderText = "••••••••" };
+        Fields.Children.Add(_plaidSecret);
+        _plaidEnv = new ComboBox { Header = "Environment", HorizontalAlignment = HorizontalAlignment.Stretch };
+        AddCombo(_plaidEnv, "sandbox", "Sandbox (practice)", true);
+        AddCombo(_plaidEnv, "development", "Development (limited live)", false);
+        AddCombo(_plaidEnv, "production", "Production", false);
+        Fields.Children.Add(_plaidEnv);
+    }
+
+    private async Task RenderPlaidLinkAsync()
+    {
+        QuestionText.Text = "Link your banks";
+        HintText.Text = "Opens Plaid Link in your browser. After connecting, return here and press Next.";
+        NextBtn.Content = "I've linked — continue";
+        Fields.Children.Clear();
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.GetPlaidStatusAsync();
+            var enabled = st.TryGetProperty("enabled", out var en) && en.GetBoolean();
+            var n = JsonUi.Int(st, "item_count", 0);
+            var limit = JsonUi.Int(st, "item_limit", 10);
+            _linkUrl = JsonUi.Str(st, "link_url", _linkUrl);
+
+            Fields.Children.Add(new TextBlock
+            {
+                Text = enabled
+                    ? $"Plaid ON · env {JsonUi.Str(st, "env")} · institutions {n}/{limit}"
+                    : "Plaid OFF — go Back and save keys first.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (st.TryGetProperty("at_item_limit", out var lim) && lim.GetBoolean())
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = $"Trial limit reached ({n}/{limit}). Disconnect a bank in Full books → Banks before adding more.",
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.OrangeRed),
+                });
+            }
+
+            var open = new Button
+            {
+                Content = "Open Plaid Link in browser",
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+                HorizontalAlignment = HorizontalAlignment.Left,
+                IsEnabled = enabled && !(st.TryGetProperty("at_item_limit", out var l2) && l2.GetBoolean()),
+            };
+            open.Click += (_, _) =>
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo(_linkUrl) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    ErrorBar.Message = ex.Message;
+                    ErrorBar.IsOpen = true;
+                }
+            };
+            Fields.Children.Add(open);
+            Fields.Children.Add(new TextBlock
+            {
+                Opacity = 0.75,
+                TextWrapping = TextWrapping.Wrap,
+                Text = "Sandbox: use Plaid's test credentials in Link. Production: real banks with your Production keys.",
+            });
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private void RenderAiKeys()
+    {
+        QuestionText.Text = "AI helpers (optional)";
+        HintText.Text =
+            "After Plaid, you can add BYOK keys for smarter categorize later. " +
+            "Grok (xAI) is first-class; OpenAI, Anthropic, or custom are stored too. All local-only. Skip anytime.";
+        NextBtn.Content = "Save & continue (or skip empty)";
+
+        _aiProvider = new ComboBox { Header = "Provider", HorizontalAlignment = HorizontalAlignment.Stretch };
+        AddCombo(_aiProvider, "xai", "Grok (xAI)", true);
+        AddCombo(_aiProvider, "openai", "OpenAI", false);
+        AddCombo(_aiProvider, "anthropic", "Anthropic", false);
+        AddCombo(_aiProvider, "custom", "Other / custom", false);
+        _aiKey = new TextBox { Header = "API key", PlaceholderText = "sk-… or xai-…" };
+        Fields.Children.Add(_aiProvider);
+        Fields.Children.Add(_aiKey);
+        Fields.Children.Add(new TextBlock
+        {
+            Opacity = 0.75,
+            TextWrapping = TextWrapping.Wrap,
+            Text = "Leave blank and press Next to skip. You can add keys later in Settings when that ships.",
+        });
     }
 
     private void RenderManual()
@@ -451,7 +595,19 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
-            // Placeholder phases: advance server state
+            if (_phase == "plaid_keys")
+            {
+                await SavePlaidKeysAndAdvanceAsync();
+                return;
+            }
+
+            if (_phase == "ai_keys")
+            {
+                await SaveAiKeysAndAdvanceAsync();
+                return;
+            }
+
+            // plaid_link + later placeholders: advance server state
             using (var api = new LedgerApiClient())
             {
                 await api.EnsureBackendAsync();
@@ -540,12 +696,55 @@ public sealed partial class FirstRunPage : Page
         AppState.ShowSetupNav = false;
     }
 
+    private async Task SavePlaidKeysAndAdvanceAsync()
+    {
+        var clientId = _plaidClientId?.Text?.Trim() ?? "";
+        var secret = _plaidSecret?.Password?.Trim() ?? "";
+        var env = "sandbox";
+        if (_plaidEnv?.SelectedItem is ComboBoxItem ci && ci.Tag is string t)
+            env = t;
+        if (string.IsNullOrWhiteSpace(clientId) || string.IsNullOrWhiteSpace(secret))
+            throw new InvalidOperationException("Enter both client_id and secret, or go Back to pick CSV/manual.");
+
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        await api.SavePlaidCredentialsAsync(clientId, secret, env);
+        var st = await api.SetupAdvanceAsync("next", payload: new { plaid_env = env });
+        ApplyState(st);
+        Render();
+    }
+
+    private async Task SaveAiKeysAndAdvanceAsync()
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var key = _aiKey?.Text?.Trim() ?? "";
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            var provider = "xai";
+            if (_aiProvider?.SelectedItem is ComboBoxItem ci && ci.Tag is string t)
+                provider = t;
+            await api.SaveAiCredentialsAsync(provider, key);
+        }
+        var st = await api.SetupAdvanceAsync("next");
+        ApplyState(st);
+        Render();
+    }
+
     private async void Skip_Click(object sender, RoutedEventArgs e)
     {
         try
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
+            // On path phases, skip phase not whole setup when mid-plaid
+            if (_phase is "ai_keys" or "plaid_link" or "plaid_keys")
+            {
+                var st = await api.SetupAdvanceAsync("skip_phase");
+                ApplyState(st);
+                Render();
+                return;
+            }
             await api.SetupCompleteAsync("skipped-from-wizard");
             AppState.ShowSetupNav = false;
             Frame?.Navigate(typeof(HomePage));

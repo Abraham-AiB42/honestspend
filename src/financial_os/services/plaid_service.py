@@ -45,9 +45,40 @@ def _post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
         return data
 
 
-def create_link_token(*, client_user_id: str = "financial-os-user") -> dict[str, Any]:
-    """Create a Plaid Link token for the frontend."""
-    return _post(
+def item_count(session: Session) -> int:
+    """Active Plaid Items (institutions). Trial free tier ≈ 10 Items."""
+    return (
+        session.query(PlaidItem)
+        .filter(PlaidItem.status != "disconnected")
+        .count()
+    )
+
+
+def assert_can_link_item(session: Session, *, item_id: str | None = None) -> None:
+    """Enforce trial Item limit (new institution only)."""
+    from financial_os.services.secrets_store import PLAID_ITEM_TRIAL_LIMIT
+
+    if item_id:
+        existing = session.query(PlaidItem).filter(PlaidItem.item_id == item_id).first()
+        if existing:
+            return
+    n = item_count(session)
+    if n >= PLAID_ITEM_TRIAL_LIMIT:
+        raise PlaidError(
+            f"Plaid trial limit reached ({n}/{PLAID_ITEM_TRIAL_LIMIT} institutions). "
+            "Disconnect an Item in Banks (Plaid) before linking another, or upgrade on Plaid's dashboard."
+        )
+
+
+def create_link_token(
+    session: Session | None = None,
+    *,
+    client_user_id: str = "financial-os-user",
+) -> dict[str, Any]:
+    """Create a Plaid Link token for the frontend (app-owned Link flow)."""
+    if session is not None:
+        assert_can_link_item(session)
+    data = _post(
         "/link/token/create",
         _body(
             {
@@ -59,6 +90,14 @@ def create_link_token(*, client_user_id: str = "financial-os-user") -> dict[str,
             }
         ),
     )
+    # Surface limit info for UI
+    from financial_os.services.secrets_store import PLAID_ITEM_TRIAL_LIMIT
+
+    data = dict(data)
+    if session is not None:
+        data["item_count"] = item_count(session)
+        data["item_limit"] = PLAID_ITEM_TRIAL_LIMIT
+    return data
 
 
 def exchange_public_token(
@@ -82,6 +121,7 @@ def exchange_public_token(
         existing.status = "active"
         item = existing
     else:
+        assert_can_link_item(session, item_id=item_id)
         item = PlaidItem(
             profile_id=profile_id,
             item_id=item_id,

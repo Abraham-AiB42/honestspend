@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.40 — Plaid BYOK secrets + app Link + AI keys (PR2)
+
+- **Local secrets store** (`~/.financial-os/secrets.json`, Windows DPAPI for secret fields)
+- **`POST/GET/DELETE /api/plaid/credentials`** — client id + secret + env; hot-reload (no restart)
+- **`POST/GET/DELETE /api/ai/credentials`** — Grok (xAI), OpenAI, Anthropic, custom
+- **Plaid trial limit** — track Items n/10; block new Link at cap; status shows remaining
+- **App-owned Link** — wizard opens `/static/plaid-link.html` after keys saved
+- **Wizard steps** — plaid_keys, plaid_link, ai_keys (after Plaid path)
+- Signup link: https://dashboard.plaid.com/signup
+
 ## 1.0.39 — Smart setup wizard foundation (PR1)
 
 - **Resumable setup state**: `setup_phase`, `setup_path`, payload (schema v14)

@@ -419,6 +419,30 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetPlaidStatusAsync(CancellationToken ct = default)
         => GetJsonAsync("api/plaid/status", ct);
 
+    public Task<JsonElement> GetPlaidCredentialsAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/plaid/credentials", ct);
+
+    public Task<JsonElement> SavePlaidCredentialsAsync(
+        string clientId, string secret, string env = "sandbox", CancellationToken ct = default)
+        => PostJsonAsync("api/plaid/credentials", new
+        {
+            client_id = clientId,
+            secret,
+            env,
+        }, ct);
+
+    public Task<JsonElement> GetAiCredentialsAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/ai/credentials", ct);
+
+    public Task<JsonElement> SaveAiCredentialsAsync(
+        string provider, string apiKey, string? baseUrl = null, CancellationToken ct = default)
+        => PostJsonAsync("api/ai/credentials", new
+        {
+            provider,
+            api_key = apiKey,
+            base_url = baseUrl,
+        }, ct);
+
     public Task<JsonElement> GetPlaidItemsAsync(CancellationToken ct = default)
         => GetJsonAsync("api/plaid/items", ct);
 
