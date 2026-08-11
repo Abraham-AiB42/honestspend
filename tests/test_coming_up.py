@@ -6,11 +6,13 @@ from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from financial_os.config import settings
-from financial_os.db import Account, Profile, ScheduledItem, init_db
+from financial_os.db import Account, Profile, ScheduledItem, init_db, make_engine, make_session_factory
 from financial_os.seed import seed_all
 from financial_os.services.coming_up import build_coming_up, resolve_window
 
@@ -26,6 +28,28 @@ def _session(tmp_path: Path, monkeypatch):
     seed_all(s)
     s.commit()
     return s
+
+
+@pytest.fixture()
+def api_client(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    monkeypatch.setattr(settings, "host", "127.0.0.1")
+    monkeypatch.setattr(settings, "require_api_key", False)
+    monkeypatch.setattr(settings, "allow_non_loopback", False)
+
+    import financial_os.api.app as app_mod
+
+    app_mod.engine = make_engine()
+    app_mod.SessionLocal = make_session_factory(app_mod.engine)
+    init_db(app_mod.engine)
+    with app_mod.SessionLocal() as s:
+        seed_all(s)
+        s.commit()
+
+    with TestClient(app_mod.app) as c:
+        yield c
 
 
 def test_resolve_window_calendar_14(tmp_path: Path, monkeypatch):
@@ -269,3 +293,43 @@ def test_coming_up_sorts_by_date(tmp_path: Path, monkeypatch):
     assert result["items"][2]["on_date"] == later.isoformat()
     assert result["count"] == 3
     s.close()
+
+
+def test_home_simple_includes_coming_up(api_client: TestClient):
+    """Home payload embeds coming_up with items list."""
+    api_client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
+    r = api_client.get("/api/home/simple")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "coming_up" in body
+    cu = body["coming_up"]
+    assert isinstance(cu.get("items"), list)
+    assert "window" in cu
+    assert "count" in cu
+
+
+def test_api_coming_up_200(api_client: TestClient):
+    """GET /api/coming-up returns 200 with full payload shape."""
+    api_client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
+    r = api_client.get("/api/coming-up")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert isinstance(body.get("items"), list)
+    assert "window" in body
+    assert body["window"].get("mode_effective") in ("auto", "calendar", "paydays")
+    assert "outflow_total" in body
+    assert "inflow_total" in body
+    assert "count" in body
+
+    r2 = api_client.get(
+        "/api/coming-up",
+        params={
+            "mode": "calendar",
+            "calendar_days": 14,
+            "payday_count": 1,
+            "limit": 8,
+            "show_income": True,
+        },
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["window"]["mode_effective"] == "calendar"

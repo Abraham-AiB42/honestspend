@@ -2377,6 +2377,34 @@ def get_cash_runway(
     )
 
 
+@app.get("/api/coming-up")
+def get_coming_up(
+    mode: str = "auto",
+    calendar_days: int = 14,
+    payday_count: int = 1,
+    limit: int = 8,
+    show_income: bool = True,
+    profile_id: Optional[int] = None,
+    scope: Optional[str] = None,
+    as_of: Optional[date] = None,
+    db: Session = Depends(get_db),
+):
+    """Coming up strip: cash-side schedules in calendar or payday window."""
+    from financial_os.services.coming_up import build_coming_up
+
+    return build_coming_up(
+        db,
+        as_of=as_of,
+        mode=mode if mode in ("auto", "calendar", "paydays") else "auto",
+        calendar_days=calendar_days,
+        payday_count=payday_count,
+        profile_id=profile_id,
+        scope=scope,
+        limit=limit,
+        show_income=show_income,
+    )
+
+
 class StatementFreezeIn(BaseModel):
     actual_balance: Decimal
     cycle_end: date | None = None

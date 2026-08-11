@@ -251,6 +251,16 @@ def build_home_simple(
     # Enrich 3-min check from books + fees + bank health
     ritual = _enrich_ritual(ritual, books=books, fees=fees)
 
+    from financial_os.services.coming_up import build_coming_up
+
+    # Same profile/scope resolution as Home (entity default via ifpp)
+    coming_up = build_coming_up(
+        session,
+        as_of=as_of,
+        profile_id=pid,
+        scope=sc,
+    )
+
     return {
         "as_of": as_of.isoformat(),
         "safe_to_spend": str(cash.quantize(Decimal("0.01"))),
@@ -278,6 +288,7 @@ def build_home_simple(
             if ifpp.next_red_day
             else "No red cash day in the runway horizon"
         ),
+        "coming_up": coming_up,
         "pending_warning": ifpp_d.get("pending_warning"),
         "pending_count": ifpp_d.get("pending_count") or 0,
         "pending_outflows_abs": ifpp_d.get("pending_outflows_abs") or "0",
