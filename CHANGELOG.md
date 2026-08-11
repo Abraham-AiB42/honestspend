@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.41 — Setup CSV cash loop (PR3)
+
+- **`GET /api/setup/cash`** — cash accounts + import status + bank guides
+- **`POST /api/setup/cash-account`** — checking / savings / money market (+ primary IFPP flag)
+- **Wizard CSV path**: **+ Cash account** → type → nickname/bank → download guide (login link + steps) → pick CSV/OFX import
+- Loop: add another cash account or **Next** toward discover
+- First checking becomes Safe-to-spend primary cash
+
 ## 1.0.40 — Plaid BYOK secrets + app Link + AI keys (PR2)
 
 - **Local secrets store** (`~/.financial-os/secrets.json`, Windows DPAPI for secret fields)

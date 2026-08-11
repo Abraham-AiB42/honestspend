@@ -6,12 +6,15 @@ using HonestSpend_WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace HonestSpend_WinUI.Pages;
 
 /// <summary>
-/// Smart setup wizard shell (PR1): welcome → path (Plaid / CSV / manual) →
-/// manual short path or placeholders for later phases. Resume via setup_phase.
+/// Smart setup wizard: path (Plaid / CSV / manual), Plaid keys+Link+AI,
+/// CSV +cash loop with bank guides/import, then later phases.
 /// </summary>
 public sealed partial class FirstRunPage : Page
 {
@@ -23,6 +26,16 @@ public sealed partial class FirstRunPage : Page
     // Manual path local steps (legacy first-run)
     private int _manualStep;
     private const int ManualMax = 6;
+
+    // CSV cash loop: hub | type | details | guide | import
+    private string _cashUi = "hub";
+    private string _cashType = "checking";
+    private int? _activeCashAccountId;
+    private string _activeCashName = "";
+    private JsonElement? _activeGuide;
+    private TextBox? _cashNick;
+    private NumberBox? _cashOpenBal;
+    private ComboBox? _bankGuideBox;
 
     private TextBox? _cashName;
     private TextBox? _inst;
@@ -206,18 +219,15 @@ public sealed partial class FirstRunPage : Page
             RenderAiKeys();
             return;
         }
+        if (_phase is "cash_loop" or "import_cash")
+        {
+            _ = RenderCashLoopAsync();
+            return;
+        }
 
         // Later PR placeholders
         var (title, hint, nextLabel) = _phase switch
         {
-            "cash_loop" => (
-                "Cash accounts (next update)",
-                "Pattern: + Cash account → type → bank → import. Use Quick manual for now or continue.",
-                "Continue"),
-            "import_cash" => (
-                "Import cash history",
-                "Bank guides + CSV import per account. Coming next — Full books → Import works today.",
-                "Continue"),
             "discover" => (
                 "Find cards & bills",
                 "We'll skim debits for card payments, loans, and recurring investments. Coming soon.",
@@ -387,6 +397,353 @@ public sealed partial class FirstRunPage : Page
         });
     }
 
+    private async Task RenderCashLoopAsync()
+    {
+        NextBtn.IsEnabled = true;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.GetSetupCashAsync();
+
+            if (_cashUi == "hub" || _phase == "import_cash" && _cashUi == "hub")
+            {
+                // On import_cash phase, jump to first needing import
+                if (_phase == "import_cash" && st.TryGetProperty("need_import", out var ni)
+                    && ni.ValueKind == JsonValueKind.Array && ni.GetArrayLength() > 0)
+                {
+                    var first = ni[0];
+                    _activeCashAccountId = JsonUi.Int(first, "id", 0);
+                    _activeCashName = JsonUi.Str(first, "nickname");
+                    _cashUi = "import";
+                }
+            }
+
+            switch (_cashUi)
+            {
+                case "type":
+                    RenderCashTypePick();
+                    break;
+                case "details":
+                    await RenderCashDetailsAsync(api);
+                    break;
+                case "guide":
+                    RenderCashGuide();
+                    break;
+                case "import":
+                    RenderCashImport();
+                    break;
+                default:
+                    RenderCashHub(st);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            QuestionText.Text = "Cash accounts";
+            HintText.Text = ex.Message;
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private void RenderCashHub(JsonElement st)
+    {
+        QuestionText.Text = "Your cash accounts";
+        HintText.Text =
+            "Add checking, savings, or money market one at a time. " +
+            "After each account we’ll show how to download a CSV from your bank (~90 days).";
+        NextBtn.Content = "Next — find cards & bills";
+        NextBtn.IsEnabled = JsonUi.Int(st, "count", 0) > 0
+            || (st.TryGetProperty("has_cash", out var hc) && hc.ValueKind == JsonValueKind.True);
+
+        if (st.TryGetProperty("accounts", out var accs) && accs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var a in accs.EnumerateArray())
+            {
+                var id = JsonUi.Int(a, "id", 0);
+                var imported = a.TryGetProperty("imported", out var im) && im.GetBoolean();
+                var line = new TextBlock
+                {
+                    Text =
+                        $"• {JsonUi.Str(a, "nickname")} ({JsonUi.Str(a, "kind")}) · " +
+                        $"{JsonUi.Str(a, "institution", "bank?")} · " +
+                        (imported ? $"imported ({JsonUi.Int(a, "transaction_count", 0)} txns)" : "needs CSV"),
+                    TextWrapping = TextWrapping.Wrap,
+                };
+                Fields.Children.Add(line);
+                if (!imported && id > 0)
+                {
+                    var impBtn = new Button
+                    {
+                        Content = $"Import CSV for {JsonUi.Str(a, "nickname")}",
+                        Tag = (id, JsonUi.Str(a, "nickname")),
+                        Margin = new Thickness(0, 0, 0, 6),
+                    };
+                    impBtn.Click += (_, _) =>
+                    {
+                        if (impBtn.Tag is ValueTuple<int, string> t)
+                        {
+                            _activeCashAccountId = t.Item1;
+                            _activeCashName = t.Item2;
+                            _cashUi = "import";
+                            Render();
+                        }
+                    };
+                    Fields.Children.Add(impBtn);
+                }
+            }
+            if (accs.GetArrayLength() == 0)
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = "No cash accounts yet — add your first checking account.",
+                    Opacity = 0.8,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+                NextBtn.IsEnabled = false;
+            }
+        }
+
+        var add = new Button
+        {
+            Content = "+ Cash account",
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+        add.Click += (_, _) =>
+        {
+            _cashUi = "type";
+            Render();
+        };
+        Fields.Children.Add(add);
+        Fields.Children.Add(new TextBlock
+        {
+            Opacity = 0.7,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+            Text = JsonUi.Str(st, "import_hint", "Prefer ~90 days of transactions for bill detection."),
+        });
+    }
+
+    private void RenderCashTypePick()
+    {
+        QuestionText.Text = "What kind of cash account?";
+        HintText.Text = "Personal checking is usually first. Money market is tracked as savings.";
+        NextBtn.IsEnabled = false;
+        NextBtn.Content = "Pick a type";
+
+        void addType(string id, string label)
+        {
+            var b = new Button
+            {
+                Content = label,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                Margin = new Thickness(0, 0, 0, 6),
+                Tag = id,
+            };
+            b.Click += (_, _) =>
+            {
+                _cashType = id;
+                _cashUi = "details";
+                Render();
+            };
+            Fields.Children.Add(b);
+        }
+        addType("checking", "Checking");
+        addType("savings", "Savings");
+        addType("money_market", "Money market / HISA");
+        var back = new Button { Content = "Back to list", Margin = new Thickness(0, 8, 0, 0) };
+        back.Click += (_, _) => { _cashUi = "hub"; Render(); };
+        Fields.Children.Add(back);
+    }
+
+    private async Task RenderCashDetailsAsync(LedgerApiClient api)
+    {
+        QuestionText.Text = "Name it & pick your bank";
+        HintText.Text = "We’ll show download steps for that bank after you create the account.";
+        NextBtn.Content = "Create account";
+        NextBtn.IsEnabled = true;
+
+        var defaultName = _cashType switch
+        {
+            "savings" => "Savings",
+            "money_market" => "Money market",
+            _ => "Primary checking",
+        };
+        _cashNick = new TextBox { Header = "Nickname", Text = defaultName };
+        _cashOpenBal = new NumberBox { Header = "Balance today (optional $)", Value = 0, Minimum = 0 };
+        _bankGuideBox = new ComboBox { Header = "Bank", HorizontalAlignment = HorizontalAlignment.Stretch };
+
+        try
+        {
+            var guides = await api.GetBankGuidesAsync();
+            if (guides.TryGetProperty("guides", out var g) && g.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var guide in g.EnumerateArray())
+                {
+                    var id = JsonUi.Str(guide, "id");
+                    var name = JsonUi.Str(guide, "name");
+                    _bankGuideBox.Items.Add(new ComboBoxItem { Content = name, Tag = id });
+                }
+            }
+        }
+        catch { /* generic only */ }
+        if (_bankGuideBox.Items.Count == 0)
+            _bankGuideBox.Items.Add(new ComboBoxItem { Content = "Other bank / CU", Tag = "generic" });
+        _bankGuideBox.SelectedIndex = 0;
+
+        Fields.Children.Add(_cashNick);
+        Fields.Children.Add(_cashOpenBal);
+        Fields.Children.Add(_bankGuideBox);
+        var cancel = new Button { Content = "Cancel", Margin = new Thickness(0, 8, 0, 0) };
+        cancel.Click += (_, _) => { _cashUi = "hub"; Render(); };
+        Fields.Children.Add(cancel);
+    }
+
+    private void RenderCashGuide()
+    {
+        QuestionText.Text = $"Download CSV for {_activeCashName}";
+        HintText.Text = "About 90 days of transactions is ideal. We never store your bank password.";
+        NextBtn.Content = "I've got the file — import";
+        NextBtn.IsEnabled = true;
+
+        if (_activeGuide is JsonElement g && g.ValueKind == JsonValueKind.Object)
+        {
+            var login = JsonUi.Str(g, "login_url", "");
+            if (!string.IsNullOrEmpty(login) && login != "—")
+            {
+                var open = new HyperlinkButton
+                {
+                    Content = $"Open {JsonUi.Str(g, "name", "bank")} login",
+                    NavigateUri = new Uri(login),
+                };
+                Fields.Children.Add(open);
+            }
+            if (g.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+            {
+                var i = 1;
+                foreach (var step in steps.EnumerateArray())
+                {
+                    Fields.Children.Add(new TextBlock
+                    {
+                        Text = $"{i}. {step.GetString()}",
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 4, 0, 0),
+                    });
+                    i++;
+                }
+            }
+            var notes = JsonUi.Str(g, "notes", "");
+            if (!string.IsNullOrEmpty(notes) && notes != "—")
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = notes,
+                    Opacity = 0.75,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 8, 0, 0),
+                });
+            }
+        }
+        else
+        {
+            Fields.Children.Add(new TextBlock
+            {
+                Text = "Sign in to online banking → account activity → Download / Export → CSV.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private void RenderCashImport()
+    {
+        QuestionText.Text = $"Import file → {_activeCashName}";
+        HintText.Text = "Pick the CSV or OFX you downloaded. We’ll categorize what we can.";
+        NextBtn.Content = "Pick file & import";
+        NextBtn.IsEnabled = _activeCashAccountId is > 0;
+    }
+
+    private async Task CreateCashAccountAndContinueAsync()
+    {
+        var nick = _cashNick?.Text?.Trim() ?? "";
+        var bal = 0m;
+        if (_cashOpenBal is not null && !double.IsNaN(_cashOpenBal.Value))
+            bal = (decimal)_cashOpenBal.Value;
+        var guideId = "generic";
+        if (_bankGuideBox?.SelectedItem is ComboBoxItem ci && ci.Tag is string gid)
+            guideId = gid;
+
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var res = await api.CreateSetupCashAccountAsync(new
+        {
+            account_type = _cashType,
+            nickname = string.IsNullOrWhiteSpace(nick) ? null : nick,
+            bank_guide_id = guideId,
+            current_balance = bal,
+        });
+        if (res.TryGetProperty("account", out var acct))
+        {
+            _activeCashAccountId = JsonUi.Int(acct, "id", 0);
+            _activeCashName = JsonUi.Str(acct, "nickname");
+        }
+        if (res.TryGetProperty("guide", out var guide) && guide.ValueKind == JsonValueKind.Object)
+            _activeGuide = guide;
+        _cashUi = "guide";
+        Render();
+    }
+
+    private async Task ImportCashFileAsync()
+    {
+        if (_activeCashAccountId is not int acctId || acctId <= 0)
+            throw new InvalidOperationException("No account selected for import.");
+
+        var file = await PickCsvOrOfxAsync();
+        if (file is null) return;
+
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        await using var stream = await file.OpenStreamForReadAsync();
+        JsonElement res;
+        var name = file.Name;
+        if (name.EndsWith(".ofx", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith(".qfx", StringComparison.OrdinalIgnoreCase))
+        {
+            res = await api.ImportOfxAsync(stream, name, acctId);
+        }
+        else
+        {
+            res = await api.ImportBankCsvAsync(stream, name, acctId);
+        }
+
+        var created = JsonUi.Int(res, "transactions_created", 0);
+        MsgText.Text =
+            $"Imported {created} transactions" +
+            (res.TryGetProperty("categorized", out var c) ? $", categorized {JsonUi.Int(res, "categorized", 0)}" : "") +
+            ".";
+        InfoBar.Title = "Import done";
+        InfoBar.Message = MsgText.Text;
+        InfoBar.IsOpen = true;
+        _cashUi = "hub";
+        Render();
+    }
+
+    private async Task<StorageFile?> PickCsvOrOfxAsync()
+    {
+        var picker = new FileOpenPicker();
+        picker.FileTypeFilter.Add(".csv");
+        picker.FileTypeFilter.Add(".ofx");
+        picker.FileTypeFilter.Add(".qfx");
+        picker.FileTypeFilter.Add(".txt");
+        picker.SuggestedStartLocation = PickerLocationId.Downloads;
+        picker.ViewMode = PickerViewMode.List;
+        var window = App.MainWindowInstance
+            ?? throw new InvalidOperationException("Main window not ready.");
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+        return await picker.PickSingleFileAsync();
+    }
+
     private void RenderManual()
     {
         StepLabel.Text = $"Quick manual · step {_manualStep + 1} of {ManualMax + 1}";
@@ -550,6 +907,20 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
+            if ((_phase is "cash_loop" or "import_cash") && _cashUi is not "hub")
+            {
+                _cashUi = _cashUi switch
+                {
+                    "import" => _activeGuide is not null ? "guide" : "hub",
+                    "guide" => "hub",
+                    "details" => "type",
+                    "type" => "hub",
+                    _ => "hub",
+                };
+                Render();
+                return;
+            }
+
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var st = await api.SetupAdvanceAsync("back");
@@ -604,6 +975,12 @@ public sealed partial class FirstRunPage : Page
             if (_phase == "ai_keys")
             {
                 await SaveAiKeysAndAdvanceAsync();
+                return;
+            }
+
+            if (_phase is "cash_loop" or "import_cash")
+            {
+                await CashLoopNextAsync();
                 return;
             }
 
@@ -728,6 +1105,57 @@ public sealed partial class FirstRunPage : Page
         }
         var st = await api.SetupAdvanceAsync("next");
         ApplyState(st);
+        Render();
+    }
+
+    private async Task CashLoopNextAsync()
+    {
+        if (_cashUi == "details")
+        {
+            await CreateCashAccountAndContinueAsync();
+            return;
+        }
+        if (_cashUi == "guide")
+        {
+            _cashUi = "import";
+            Render();
+            return;
+        }
+        if (_cashUi == "import")
+        {
+            await ImportCashFileAsync();
+            return;
+        }
+        if (_cashUi == "type")
+            return; // must pick type button
+
+        // hub: advance wizard (skip import_cash if already past / no pending)
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var cash = await api.GetSetupCashAsync();
+        if (JsonUi.Int(cash, "count", 0) <= 0)
+            throw new InvalidOperationException("Add at least one cash account, or Skip setup.");
+
+        // From cash_loop → next phases; skip import_cash if all imported
+        var st = await api.SetupAdvanceAsync("next");
+        ApplyState(st);
+        if (_phase == "import_cash")
+        {
+            var allImp = cash.TryGetProperty("all_imported", out var ai) && ai.GetBoolean();
+            if (allImp || JsonUi.Int(cash, "count", 0) == 0)
+            {
+                st = await api.SetupAdvanceAsync("next");
+                ApplyState(st);
+            }
+            else
+            {
+                _cashUi = "hub";
+            }
+        }
+        else
+        {
+            _cashUi = "hub";
+        }
         Render();
     }
 

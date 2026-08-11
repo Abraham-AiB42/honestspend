@@ -877,6 +877,47 @@ def setup_complete(body: SetupSkipIn | None = None, db: Session = Depends(get_db
     return mark_setup_done(db, note=body.note)
 
 
+@app.get("/api/setup/cash")
+def setup_cash_status(profile_id: int | None = None, db: Session = Depends(get_db)):
+    """Cash accounts for CSV setup loop + bank guides."""
+    from financial_os.services.setup_cash import cash_accounts_status
+
+    try:
+        return cash_accounts_status(db, profile_id=profile_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+class SetupCashAccountIn(BaseModel):
+    account_type: str = "checking"  # checking | savings | money_market
+    nickname: str | None = None
+    institution: str | None = None
+    bank_guide_id: str | None = None
+    current_balance: Decimal = Decimal("0")
+    profile_id: int | None = None
+    make_primary: bool | None = None
+
+
+@app.post("/api/setup/cash-account")
+def setup_cash_account_create(body: SetupCashAccountIn, db: Session = Depends(get_db)):
+    """[+ Cash account] for the setup wizard CSV path."""
+    from financial_os.services.setup_cash import create_cash_account
+
+    try:
+        return create_cash_account(
+            db,
+            account_type=body.account_type,
+            nickname=body.nickname,
+            institution=body.institution,
+            bank_guide_id=body.bank_guide_id,
+            current_balance=body.current_balance,
+            profile_id=body.profile_id,
+            make_primary=body.make_primary,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.post("/api/onboarding/complete")
 def onboarding_complete(db: Session = Depends(get_db)):
     from financial_os.services.onboarding import complete_onboarding

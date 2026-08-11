@@ -481,6 +481,17 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> SetupCompleteAsync(string? note = null, CancellationToken ct = default)
         => PostJsonAsync("api/setup/complete", new { note }, ct);
 
+    public Task<JsonElement> GetSetupCashAsync(int? profileId = null, CancellationToken ct = default)
+    {
+        var q = "api/setup/cash";
+        if (profileId is int pid)
+            q += $"?profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> CreateSetupCashAccountAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/cash-account", body, ct);
+
     public Task<JsonElement> CompleteOnboardingAsync(CancellationToken ct = default)
         => PostJsonAsync("api/onboarding/complete", new { }, ct);
 
