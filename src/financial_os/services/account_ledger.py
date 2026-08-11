@@ -1,7 +1,7 @@
 """Rebuild / verify Account.current_balance from the transaction ledger.
 
-Sums non-void transactions with the same sign rules as
-`apply_amount_to_account` (cash: += amount; credit: -= amount).
+Sums book-affecting transactions (excludes void and pending) with the same
+sign rules as `apply_amount_to_account` (cash: += amount; credit: -= amount).
 """
 
 from __future__ import annotations
@@ -16,6 +16,9 @@ from financial_os.db import Account, Transaction
 ZERO = Decimal("0")
 TWOPLACES = Decimal("0.01")
 
+# Statuses that do not affect books (live apply skips pending; void is reversed).
+_NON_BOOK_STATUSES = frozenset({"void", "pending"})
+
 
 def _d(v: Any) -> Decimal:
     if v is None:
@@ -29,8 +32,9 @@ def _quantize(v: Decimal) -> Decimal:
     return _d(v).quantize(TWOPLACES)
 
 
-def _is_void(status: str | None) -> bool:
-    return (status or "").lower() == "void"
+def _is_non_book(status: str | None) -> bool:
+    """True if status does not affect books (void or pending; case-insensitive)."""
+    return (status or "").lower() in _NON_BOOK_STATUSES
 
 
 def _contribution(account_kind: str, amount: Decimal | Any) -> Decimal:
@@ -41,8 +45,11 @@ def _contribution(account_kind: str, amount: Decimal | Any) -> Decimal:
     return -amt
 
 
-def _sum_non_void_balance(session: Session, account: Account) -> Decimal:
-    """Sum non-void txn contributions for account (does not write)."""
+def _sum_book_balance(session: Session, account: Account) -> Decimal:
+    """Sum book-affecting txn contributions for account (does not write).
+
+    Excludes void and pending (case-insensitive); matches live apply behavior.
+    """
     kind = account.kind or ""
     rows = (
         session.query(Transaction)
@@ -51,19 +58,26 @@ def _sum_non_void_balance(session: Session, account: Account) -> Decimal:
     )
     total = ZERO
     for row in rows:
-        if _is_void(row.status):
+        if _is_non_book(row.status):
             continue
         total += _contribution(kind, row.amount)
     return _quantize(total)
 
 
 def rebuild_running_balance(session: Session, account_id: int) -> Decimal:
-    """Sum non-void txns with same sign rules as apply_amount_to_account; write Account.current_balance."""
+    """Sum book-affecting txns; write Account.current_balance.
+
+    Uses the same sign rules as apply_amount_to_account and excludes void and
+    pending (case-insensitive), matching live apply which does not book pending.
+
+    Rebuild starts from zero (ledger sum only). Bare opening balances without a
+    seed txn are overwritten.
+    """
     account = session.get(Account, account_id)
     if account is None:
         raise ValueError(f"Account not found: {account_id}")
 
-    rebuilt = _sum_non_void_balance(session, account)
+    rebuilt = _sum_book_balance(session, account)
     account.current_balance = rebuilt
     if account.kind == "credit" and account.credit_limit is not None:
         account.available_credit = _quantize(_d(account.credit_limit) - rebuilt)
@@ -82,7 +96,7 @@ def verify_running_balance(session: Session, account_id: int) -> dict:
         raise ValueError(f"Account not found: {account_id}")
 
     books = _quantize(_d(account.current_balance))
-    rebuilt = _sum_non_void_balance(session, account)
+    rebuilt = _sum_book_balance(session, account)
     delta = _quantize(books - rebuilt)
     return {
         "books": books,

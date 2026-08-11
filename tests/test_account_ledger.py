@@ -1,4 +1,4 @@
-"""Running balance rebuild / verify from non-void ledger (ledger integrity)."""
+"""Running balance rebuild / verify from book-affecting ledger (ledger integrity)."""
 
 from __future__ import annotations
 
@@ -80,6 +80,7 @@ def test_rebuild_running_balance_credit(tmp_path: Path, monkeypatch):
 
     assert rebuilt == Decimal("60.00")
     assert Decimal(str(card.current_balance)) == Decimal("60.00")
+    assert Decimal(str(card.available_credit)) == Decimal("4940.00")  # 5000 - 60
     s.close()
 
 
@@ -161,6 +162,57 @@ def test_rebuild_excludes_void_transactions(tmp_path: Path, monkeypatch):
         status="void",
     )
     s.add_all([keep, voided])
+    s.commit()
+
+    cash.current_balance = Decimal("999")
+    s.commit()
+
+    assert rebuild_running_balance(s, cash.id) == Decimal("500.00")
+    s.refresh(cash)
+    assert Decimal(str(cash.current_balance)) == Decimal("500.00")
+    s.close()
+
+
+def test_rebuild_excludes_pending_transactions(tmp_path: Path, monkeypatch):
+    """Pending rows must not contribute to rebuilt balance (live apply parity)."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("0"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+
+    keep = Transaction(
+        profile_id=p.id,
+        account_id=cash.id,
+        txn_date=date(2026, 8, 1),
+        amount=Decimal("500.00"),
+        payee="Keep",
+        status="cleared",
+    )
+    pending = Transaction(
+        profile_id=p.id,
+        account_id=cash.id,
+        txn_date=date(2026, 8, 2),
+        amount=Decimal("-75.00"),
+        payee="Pending buy",
+        status="pending",
+    )
+    # Case-insensitive exclusion
+    pending_upper = Transaction(
+        profile_id=p.id,
+        account_id=cash.id,
+        txn_date=date(2026, 8, 3),
+        amount=Decimal("-25.00"),
+        payee="Pending upper",
+        status="PENDING",
+    )
+    s.add_all([keep, pending, pending_upper])
     s.commit()
 
     cash.current_balance = Decimal("999")
