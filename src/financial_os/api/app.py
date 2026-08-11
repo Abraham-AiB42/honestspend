@@ -399,31 +399,47 @@ class ScheduledIn(BaseModel):
     name: str
     amount: Decimal
     next_date: date
+    start_date: date | None = None
     end_date: date | None = None
     cadence: str = "monthly"
     certainty: str = "fixed"
-    kind: str = "expense"  # expense | income
+    kind: str = "expense"  # expense | income | owner_draw
     account_id: int | None = None
     category_id: int | None = None
     notes: str | None = None
     active: bool = True
+    series_id: str | None = None
+    series_label: str | None = None
+    vendor: str | None = None
+    opex_class: str | None = None  # fixed | variable
+    income_source: str | None = None
 
     @field_validator("kind")
     @classmethod
     def kind_ok(cls, v: str) -> str:
         v = (v or "expense").lower()
-        if v not in ("expense", "income"):
-            raise ValueError("kind must be expense or income")
+        if v not in ("expense", "income", "owner_draw"):
+            raise ValueError("kind must be expense, income, or owner_draw")
+        return v
+
+    @field_validator("opex_class")
+    @classmethod
+    def opex_ok(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        v = v.lower().strip()
+        if v not in ("fixed", "variable"):
+            raise ValueError("opex_class must be fixed or variable")
         return v
 
     @model_validator(mode="after")
     def normalize_amount_and_account(self):
-        # Expenses are negative, income positive
-        if self.kind == "expense" and self.amount > 0:
+        # Expenses and owner_draw are negative, income positive
+        if self.kind in ("expense", "owner_draw") and self.amount > 0:
             self.amount = -abs(self.amount)
         if self.kind == "income" and self.amount < 0:
             self.amount = abs(self.amount)
-        if self.kind == "expense" and not self.account_id:
+        if self.kind in ("expense", "owner_draw") and not self.account_id:
             raise ValueError("Recurring expenses require an account or card (account_id)")
         if self.end_date and self.end_date < self.next_date:
             raise ValueError("end_date cannot be before next_date")
@@ -438,6 +454,7 @@ class ScheduledOut(BaseModel):
     name: str
     amount: Decimal
     next_date: date
+    start_date: date | None = None
     end_date: date | None = None
     cadence: str = "monthly"
     certainty: str = "fixed"
@@ -448,11 +465,24 @@ class ScheduledOut(BaseModel):
     active: bool = True
     ended_at: datetime | None = None
     ended_reason: str | None = None
+    series_id: str | None = None
+    series_label: str | None = None
+    vendor: str | None = None
+    opex_class: str | None = None
+    income_source: str | None = None
     # enriched
     account_nickname: str | None = None
     account_kind: str | None = None
     category_name: str | None = None
     profile_name: str | None = None
+
+
+class ScheduleSeriesStepIn(BaseModel):
+    series_id: str
+    new_amount: Decimal
+    effective_from: date
+    end_date: date | None = None
+    next_date: date | None = None  # default effective_from / cadence-aligned
 
 
 class ScheduledEndIn(BaseModel):
@@ -2222,6 +2252,7 @@ def _enrich_scheduled(db: Session, row: ScheduledItem) -> dict:
         "name": row.name,
         "amount": row.amount,
         "next_date": row.next_date,
+        "start_date": getattr(row, "start_date", None),
         "end_date": getattr(row, "end_date", None),
         "cadence": row.cadence,
         "certainty": row.certainty,
@@ -2232,6 +2263,11 @@ def _enrich_scheduled(db: Session, row: ScheduledItem) -> dict:
         "active": row.active,
         "ended_at": getattr(row, "ended_at", None),
         "ended_reason": getattr(row, "ended_reason", None),
+        "series_id": getattr(row, "series_id", None),
+        "series_label": getattr(row, "series_label", None),
+        "vendor": getattr(row, "vendor", None),
+        "opex_class": getattr(row, "opex_class", None),
+        "income_source": getattr(row, "income_source", None),
         "account_nickname": acct.nickname if acct else None,
         "account_kind": acct.kind if acct else None,
         "category_name": cat.display_name if cat else None,
@@ -2266,6 +2302,43 @@ def list_scheduled(
     if kind:
         out = [r for r in out if r["kind"] == kind]
     return out
+
+
+@app.get("/api/scheduled/series")
+def list_scheduled_series(
+    profile_id: int = Query(..., description="Profile to list series for"),
+    db: Session = Depends(get_db),
+):
+    """List versioned schedule series (grouped segments) for a profile."""
+    from financial_os.services.schedule_series import list_series
+
+    if not db.get(Profile, profile_id):
+        raise HTTPException(404, "Profile not found")
+    return list_series(db, profile_id)
+
+
+@app.post("/api/scheduled/series/step", response_model=ScheduledOut)
+def step_scheduled_series(body: ScheduleSeriesStepIn, db: Session = Depends(get_db)):
+    """Close open series segment and add a new amount step effective_from."""
+    from financial_os.services.schedule_series import add_series_step
+
+    try:
+        row = add_series_step(
+            db,
+            body.series_id,
+            new_amount=body.new_amount,
+            effective_from=body.effective_from,
+            end_date=body.end_date,
+            next_date=body.next_date,
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "no schedule segments" in msg.lower() or "series_id is required" in msg.lower():
+            raise HTTPException(404 if "no schedule" in msg.lower() else 400, msg) from e
+        raise HTTPException(400, msg) from e
+    db.flush()
+    db.refresh(row)
+    return _enrich_scheduled(db, row)
 
 
 @app.get("/api/scheduled/{item_id}", response_model=ScheduledOut)
