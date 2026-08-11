@@ -637,3 +637,119 @@ def test_patch_coming_up_settings(api_client: TestClient):
     # Invalid mode rejected
     bad = api_client.patch("/api/settings", json={"coming_up_window_mode": "nope"})
     assert bad.status_code == 400
+
+
+def test_owner_draw_is_outflow_not_income(tmp_path: Path, monkeypatch):
+    """kind=owner_draw with negative amount → direction out; never payday income."""
+    from financial_os.services.coming_up import is_income_schedule, next_income_dates
+
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("10000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    draw = ScheduledItem(
+        profile_id=p.id,
+        account_id=cash.id,
+        name="Owner draw",
+        amount=Decimal("-2500"),
+        next_date=as_of + timedelta(days=2),
+        start_date=as_of,
+        cadence="monthly",
+        certainty="fixed",
+        kind="owner_draw",
+        active=True,
+    )
+    s.add(draw)
+    s.commit()
+
+    assert is_income_schedule(draw) is False
+    # Positive amount still never income when kind is owner_draw
+    draw.amount = Decimal("2500")
+    assert is_income_schedule(draw) is False
+    draw.amount = Decimal("-2500")
+
+    paydays = next_income_dates(
+        s, as_of=as_of, profile_id=p.id, scope="entity", count=2
+    )
+    assert paydays == []
+
+    result = build_coming_up(
+        s,
+        as_of=as_of,
+        mode="calendar",
+        calendar_days=14,
+        profile_id=p.id,
+        show_income=True,
+    )
+    names = [i["name"] for i in result["items"]]
+    assert "Owner draw" in names
+    row = next(i for i in result["items"] if i["name"] == "Owner draw")
+    assert row["direction"] == "out"
+    assert row["kind"] == "owner_draw"
+    assert Decimal(row["amount"]) < 0
+    assert Decimal(result["outflow_total"]) >= Decimal("2500.00")
+    assert Decimal(result["inflow_total"]) == Decimal("0.00")
+    s.close()
+
+
+def test_coming_up_respects_schedule_start_date(tmp_path: Path, monkeypatch):
+    """Schedule with start_date after as_of: early next_date occurrences skipped."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("5000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    s.add(
+        ScheduledItem(
+            profile_id=p.id,
+            account_id=cash.id,
+            name="Deferred rent",
+            amount=Decimal("-1100"),
+            next_date=as_of,  # would fire Mar 1 without start_date
+            start_date=date(2026, 4, 1),
+            cadence="monthly",
+            certainty="fixed",
+            kind="expense",
+            active=True,
+        )
+    )
+    s.commit()
+
+    # Window covers Mar only — occurrence blocked by start_date
+    r_mar = build_coming_up(
+        s,
+        as_of=as_of,
+        mode="calendar",
+        calendar_days=14,
+        profile_id=p.id,
+        show_income=False,
+    )
+    assert not any(i["name"] == "Deferred rent" for i in r_mar["items"])
+
+    # Window in April includes it
+    r_apr = build_coming_up(
+        s,
+        as_of=date(2026, 4, 1),
+        mode="calendar",
+        calendar_days=14,
+        profile_id=p.id,
+        show_income=False,
+    )
+    names = [i["name"] for i in r_apr["items"]]
+    assert "Deferred rent" in names
+    s.close()

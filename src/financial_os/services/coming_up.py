@@ -42,8 +42,11 @@ def _q(v: Decimal) -> Decimal:
 
 
 def is_income_schedule(item: ScheduledItem) -> bool:
-    """True if kind==income or amount > 0."""
-    if (item.kind or "").lower() == "income":
+    """True if kind==income or amount > 0. owner_draw is never income (even if amount > 0)."""
+    kind = (item.kind or "").lower()
+    if kind == "owner_draw":
+        return False
+    if kind == "income":
         return True
     return _d(item.amount) > ZERO
 
@@ -102,6 +105,7 @@ def next_income_dates(
             as_of=as_of,
             horizon_end=horizon_end,
             end_date=getattr(s, "end_date", None),
+            start_date=getattr(s, "start_date", None),
             active=bool(s.active),
         )
         for ev in occ:
@@ -326,7 +330,10 @@ def build_coming_up(
             continue
         amt = _d(s.amount)
         cert = s.certainty or "fixed"
-        is_income = is_income_schedule(s) or amt > ZERO
+        kind_raw = (s.kind or "").lower()
+        is_owner_draw = kind_raw == "owner_draw"
+        # owner_draw is never income for payday / inflow display
+        is_income = False if is_owner_draw else is_income_schedule(s)
 
         if is_income and not show_income:
             continue
@@ -337,6 +344,9 @@ def build_coming_up(
         expand_amt = amt
         if is_income and expand_amt < ZERO:
             expand_amt = abs(expand_amt)
+        # owner_draw is always a cash outflow (normalize sign if mis-stored)
+        if is_owner_draw and expand_amt > ZERO:
+            expand_amt = -expand_amt
 
         occ = expand_scheduled(
             item_id=s.id,
@@ -348,6 +358,7 @@ def build_coming_up(
             as_of=as_of,
             horizon_end=window_end,
             end_date=getattr(s, "end_date", None),
+            start_date=getattr(s, "start_date", None),
             active=bool(s.active),
         )
         for ev in occ:
@@ -356,17 +367,29 @@ def build_coming_up(
             ev_amt = _d(ev.amount)
             if ev_amt == ZERO:
                 continue
-            direction = "in" if ev_amt > ZERO else "out"
+            # owner_draw always out even if amount were positive
+            if is_owner_draw:
+                direction = "out"
+                if ev_amt > ZERO:
+                    ev_amt = -ev_amt
+            else:
+                direction = "in" if ev_amt > ZERO else "out"
             # Skip income occurrences when show_income is False (already gated at schedule)
             if direction == "in" and not show_income:
                 continue
             if direction == "in" and not _income_certainty_ok(ev.certainty, ifpp_mode):
                 continue
-            # Expenses always listed
+            # Expenses / owner_draw always listed
             acct: Account | None = None
             if s.account_id is not None:
                 acct = acct_by_id.get(int(s.account_id)) or session.get(Account, int(s.account_id))
             name = ev.name or s.name or ""
+            if is_owner_draw:
+                row_kind = "owner_draw"
+            elif direction == "in":
+                row_kind = "income"
+            else:
+                row_kind = "expense"
             rows.append(
                 {
                     "on_date": ev.on_date.isoformat(),
@@ -377,7 +400,7 @@ def build_coming_up(
                     "account_id": int(s.account_id) if s.account_id is not None else None,
                     "account_name": acct.nickname if acct is not None else None,
                     "scheduled_id": int(s.id),
-                    "kind": "income" if direction == "in" else "expense",
+                    "kind": row_kind,
                     "is_card_payment": name.startswith("Card payment"),
                     "_sort_abs": abs(ev_amt),
                 }

@@ -91,6 +91,7 @@ def simulate_ifpp(
                 as_of=as_of,
                 horizon_end=horizon_end,
                 end_date=getattr(s, "end_date", None),
+                start_date=getattr(s, "start_date", None),
                 active=bool(s.active),
             )
         )

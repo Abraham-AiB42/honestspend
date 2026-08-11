@@ -21,19 +21,21 @@ from financial_os.services.payoff import plan_card_payoff, plan_to_dict
 IfppScope = Literal["entity", "group"]
 
 
+def _is_credit_account_schedule(item: ScheduledItem, credit_ids: set[int]) -> bool:
+    """True when schedule is tied to a credit card — card path owns it, not cash runway.
+
+    Card-first users charge Netflix/etc. on cards and pay statement from cash.
+    Those bills must not also subtract from Safe to spend as cash outflows.
+    Autopay / promo sink on the card are included (same rule).
+    """
+    if item.account_id is None:
+        return False
+    return int(item.account_id) in credit_ids
+
+
+# Back-compat alias for older imports/tests
 def _is_credit_card_autopay_schedule(item: ScheduledItem, credit_ids: set[int]) -> bool:
-    """True when a schedule is an autopay tied to a credit card (card path owns payoff)."""
-    if item.account_id is not None and item.account_id in credit_ids:
-        name = (item.name or "").strip().lower()
-        notes = (item.notes or "").strip().lower()
-        if name.startswith("autopay") or "autopay policy=" in notes:
-            return True
-        # promo sink bills also encode card payoff — skip cash double-count
-        if "promo" in name and "sink" in name:
-            return True
-        if "promo_sink" in notes or "promo sink" in notes:
-            return True
-    return False
+    return _is_credit_account_schedule(item, credit_ids)
 
 
 def _active_accounts(session: Session, profile_id: int | None, scope: IfppScope):
@@ -144,15 +146,15 @@ def run_ifpp(
     if sc == "entity" and resolved_pid is not None:
         sched_q = sched_q.filter(ScheduledItem.profile_id == resolved_pid)
 
-    # Credit account ids — autopay schedules on these already modeled by card payoff path
-    credit_ids = {a.id for a in accounts if a.kind == "credit"}
+    # Credit account ids — any bill on a card is owned by card float/balance, not cash Safe
+    credit_ids = {int(a.id) for a in accounts if a.kind == "credit"}
     skipped_card_autopay = 0
 
     scheduled = []
     for s in sched_q.all():
-        # Honesty: do not also subtract Autopay · * · card from cash runway when card
-        # balance/payoff math already reserves that cash (double-count fix).
-        if _is_credit_card_autopay_schedule(s, credit_ids):
+        # Honesty: schedules on credit accounts must not also drain cash runway.
+        # Card-first users: subscriptions on cards + statement pay from cash once.
+        if _is_credit_account_schedule(s, credit_ids):
             skipped_card_autopay += 1
             continue
         amt = Decimal(s.amount)
@@ -170,6 +172,7 @@ def run_ifpp(
                 as_of=as_of,
                 horizon_end=horizon_end,
                 end_date=getattr(s, "end_date", None),
+                start_date=getattr(s, "start_date", None),
                 active=bool(s.active),
             )
         )
@@ -209,10 +212,11 @@ def run_ifpp(
     cleared_only = bool(getattr(settings, "ifpp_cleared_only", True))
     result.details["ifpp_cleared_only"] = cleared_only
     result.details["skipped_card_autopay_schedules"] = skipped_card_autopay
+    result.details["skipped_credit_account_schedules"] = skipped_card_autopay
     if skipped_card_autopay:
         result.warnings.append(
-            f"Skipped {skipped_card_autopay} card autopay schedule(s) in cash runway "
-            "(already counted in card payoff / balance path)."
+            f"Skipped {skipped_card_autopay} card-paid bill(s) in cash runway "
+            "(card path owns those — not double-counted against Safe to spend)."
         )
 
     # Pending exposure for UI
