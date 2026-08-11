@@ -21,3 +21,5 @@ build/
 clients/HonestSpend.WinUI/engine-portable.zip
 packaging/msix/*.pfx
 packaging/msix/*.cer
+
+winui.path
