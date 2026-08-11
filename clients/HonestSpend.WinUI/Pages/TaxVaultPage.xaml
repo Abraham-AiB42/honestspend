@@ -11,7 +11,7 @@
         <StackPanel Spacing="16" MaxWidth="640">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Tax vault" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                Text="Virtual reserve that reduces Spendable. Cash stays in your bank — April doesn't ambush checking." />
+                Text="Virtual reserve that reduces Safe to spend. Cash stays in your bank — April doesn't ambush checking." />
 
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -35,7 +35,7 @@
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Income cliffs" />
             <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                Text="Optional haircut on expected/historical income in Spendable (bad commission months)." />
+                Text="Optional haircut on expected/historical income in Safe to spend (bad commission months)." />
             <CheckBox x:Name="CliffOn" Content="Enable income cliffs" />
             <NumberBox x:Name="CliffFactor" Header="Factor (1 = full, 0.5 = half)" Minimum="0" Maximum="1" Value="1" />
             <Button Content="Save cliffs" Click="Cliff_Click" />

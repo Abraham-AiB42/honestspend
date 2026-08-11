@@ -76,7 +76,7 @@ public sealed partial class TaxVaultPage : Page
             await api.EnsureBackendAsync();
             var v = await api.PutTaxVaultAsync(body);
             BalanceText.Text = JsonUi.Money(v, "balance");
-            MsgText.Text = "Vault saved — Spendable reduced by reserve.";
+            MsgText.Text = "Vault saved — Safe to spend reduced by reserve.";
         }
         catch (Exception ex)
         {

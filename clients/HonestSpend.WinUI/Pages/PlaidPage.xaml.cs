@@ -166,12 +166,54 @@ public sealed partial class PlaidPage : Page
     {
         if (sender is not Button btn || btn.Tag is not int id) return;
         ErrorBar.IsOpen = false;
+        SuccessBar.IsOpen = false;
+        WarningBar.IsOpen = false;
         try
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.PlaidSyncAsync(id);
-            MsgText.Text = "Sync: " + res.GetRawText();
+            var added = JsonUi.Int(res, "added", 0);
+            var modified = JsonUi.Int(res, "modified", 0);
+            var removed = JsonUi.Int(res, "removed", 0);
+            var categorized = JsonUi.Int(res, "categorized", 0);
+            var inst = JsonUi.Str(res, "institution", "");
+            var summary =
+                $"Sync complete" +
+                (string.IsNullOrEmpty(inst) ? "" : $" · {inst}") +
+                $" · +{added} added · {modified} modified · {removed} removed" +
+                (categorized > 0 ? $" · categorized {categorized}" : "");
+            MsgText.Text = summary;
+
+            var advanced = JsonUi.Int(res, "schedules_advanced", 0);
+            var advHint = JsonUi.Str(res, "schedule_advance_hint", "");
+            var advErr = JsonUi.Str(res, "schedule_advance_error", "");
+            if (string.IsNullOrWhiteSpace(advHint) || advHint is "—" or "null" or "?")
+                advHint = "";
+            if (string.IsNullOrWhiteSpace(advErr) || advErr is "—" or "null" or "?")
+                advErr = "";
+
+            if (advanced > 0)
+            {
+                var msg = !string.IsNullOrWhiteSpace(advHint)
+                    ? advHint
+                    : $"Bank matched {advanced} bill(s) — removed from Coming up";
+                SuccessBar.Title = "Bills matched";
+                SuccessBar.Message = msg;
+                SuccessBar.Severity = InfoBarSeverity.Success;
+                SuccessBar.IsOpen = true;
+                MsgText.Text = summary + "\n" + msg;
+            }
+
+            // Non-fatal: sync succeeded even if schedule advance failed
+            if (!string.IsNullOrEmpty(advErr))
+            {
+                WarningBar.Title = "Bill match skipped";
+                WarningBar.Message = advErr;
+                WarningBar.Severity = InfoBarSeverity.Warning;
+                WarningBar.IsOpen = true;
+            }
+
             await LoadAsync();
         }
         catch (Exception ex)

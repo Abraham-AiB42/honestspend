@@ -80,7 +80,22 @@ public sealed partial class ReviewPage : Page
                     reason,
                     catId,
                     isApplied || catId is null ? Visibility.Collapsed : Visibility.Visible,
-                    isApplied ? "done" : ""));
+                    isApplied ? "done" : "",
+                    conf));
+            }
+
+            var totalHint = "";
+            if (res.TryGetProperty("uncategorized_total", out var ut) && ut.ValueKind == JsonValueKind.Number)
+            {
+                var total = ut.GetInt32();
+                if (total > _rows.Count)
+                    totalHint = $" · showing {_rows.Count} of {total}";
+            }
+            else if (res.TryGetProperty("remaining", out var rem) && rem.ValueKind == JsonValueKind.Number)
+            {
+                var total = rem.GetInt32();
+                if (total > _rows.Count)
+                    totalHint = $" · showing {_rows.Count} of {total}";
             }
 
             if (_rows.Count == 0)
@@ -90,10 +105,10 @@ public sealed partial class ReviewPage : Page
             }
 
             StatusText.Text = apply
-                ? $"Filed {applied} of {_rows.Count} automatically. {pending} still need a glance."
+                ? $"Filed {applied} of {_rows.Count} automatically. {pending} still need a glance{totalHint}."
                 : pending == 0
                     ? "Queue handled — nice."
-                    : $"{pending} charge{(pending == 1 ? "" : "s")} to confirm.";
+                    : $"{pending} charge{(pending == 1 ? "" : "s")} to confirm{totalHint}.";
         }
         catch (Exception ex)
         {
@@ -145,10 +160,16 @@ public sealed partial class ReviewPage : Page
     private async void AcceptAll_Click(object sender, RoutedEventArgs e)
     {
         ErrorBar.IsOpen = false;
-        var pending = _rows.Where(r => r.CategoryId is not null && r.AcceptVisible == Visibility.Visible).ToList();
+        // Match server "Accept confident ones" threshold (0.85) so bulk learn is not weaker
+        const double minConf = 0.85;
+        var pending = _rows
+            .Where(r => r.CategoryId is not null
+                        && r.AcceptVisible == Visibility.Visible
+                        && r.Confidence >= minConf)
+            .ToList();
         if (pending.Count == 0)
         {
-            StatusText.Text = "Nothing to accept — refresh or use Accept confident ones.";
+            StatusText.Text = "Nothing confident enough — accept one-by-one or use Accept confident ones.";
             return;
         }
         try
@@ -165,7 +186,7 @@ public sealed partial class ReviewPage : Page
                     learn: true);
                 n++;
             }
-            StatusText.Text = $"Accepted {n} · rules learned.";
+            StatusText.Text = $"Accepted {n} confident · rules learned.";
             await RunBatchAsync(false);
         }
         catch (Exception ex)
@@ -184,8 +205,17 @@ public sealed partial class ReviewPage : Page
         public int? CategoryId { get; }
         public Visibility AcceptVisible { get; set; }
         public string Badge { get; set; }
+        public double Confidence { get; }
 
-        public ReviewRow(int txnId, string title, string suggestion, string reason, int? categoryId, Visibility acceptVisible, string badge)
+        public ReviewRow(
+            int txnId,
+            string title,
+            string suggestion,
+            string reason,
+            int? categoryId,
+            Visibility acceptVisible,
+            string badge,
+            double confidence = 0)
         {
             TxnId = txnId;
             Title = title;
@@ -194,6 +224,7 @@ public sealed partial class ReviewPage : Page
             CategoryId = categoryId;
             AcceptVisible = acceptVisible;
             Badge = badge;
+            Confidence = confidence;
         }
     }
 }

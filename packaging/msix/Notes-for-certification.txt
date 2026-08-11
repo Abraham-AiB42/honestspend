@@ -14,15 +14,23 @@ process and write user-chosen data directories outside the package install folde
 INTERNET
 --------
 internetClient: optional BYOK Plaid and optional Grok categorize (user keys only).
-Default freeware path works fully offline after install.
+Core path works offline after first-run engine extract.
 
-TEST ACCOUNT
-------------
-No account required for first-run. Launch app → Get started (~2 min) → import a sample
-CSV or enter cash balance manually.
+TEST ACCOUNT / FIRST LAUNCH
+---------------------------
+No account required. Launch app → main window appears immediately → Get started
+(~2 min) or open Home. Engine extracts from engine-portable.zip to
+%LocalAppData%\HonestSpend\engine on first EnsureRunning (may take 30–90s on slow disks).
+UI remains interactive if the engine is still starting (Settings can retry).
+
+ON-DEVICE TILES (policy 10.1.1.11)
+---------------------------------
+Package tiles are original HonestSpend brand art (ledger mark + product name on wide tile).
+They do not use Visual Studio template assets, third-party product imagery, or Windows
+stock icons. Solid brand background #0F2744; DisplayName/ShortName "HonestSpend".
 
 VERSION
 -------
-Keep Package.appxmanifest Identity Version in sync with pyproject / financial_os version
-(e.g. 1.0.32.0). Identity Name/Publisher must match Partner Center Product identity.
+Keep Package.appxmanifest Identity Version in sync with financial_os / ApplicationVersion
+(e.g. 1.0.55.0). Identity Name/Publisher must match Partner Center Product identity.
 Device family: Windows.Desktop only — uncheck Xbox and other families in the submission.

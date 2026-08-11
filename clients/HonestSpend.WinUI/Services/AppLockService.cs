@@ -85,6 +85,10 @@ public static class AppLockService
         IsUnlocked = true;
     }
 
+    /// <summary>
+    /// Clear UI lock only. Does NOT turn off at-rest encryption — call
+    /// DisableDatabaseEncryptionAsync with the secret first when encryption is on.
+    /// </summary>
     public static void SetNone()
     {
         ClearLock();
@@ -96,6 +100,20 @@ public static class AppLockService
         }
         catch { /* ignore */ }
         IsUnlocked = true;
+    }
+
+    /// <summary>True when LocalSettings still has a client DEK wrap (encryption may still be on).</summary>
+    public static bool HasClientDek()
+    {
+        try
+        {
+            return ApplicationData.Current.LocalSettings.Values["AppLockDek"] is string s
+                   && !string.IsNullOrEmpty(s);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static void SetPin(string pin)

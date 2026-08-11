@@ -90,10 +90,34 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Store cert + real users: never let a startup fault look like a silent crash.
+        try
+        {
+            LaunchCore();
+        }
+        catch (Exception ex)
+        {
+            LogCrash("OnLaunched", ex);
+            try
+            {
+                // Last resort: still show a window so cert does not report "exits immediately"
+                _window ??= new MainWindow();
+                MainWindowInstance = _window;
+                _window.Activate();
+            }
+            catch (Exception ex2)
+            {
+                LogCrash("OnLaunched.fallback", ex2);
+            }
+        }
+    }
+
+    private void LaunchCore()
+    {
         if (!SingleInstance.TryAcquire())
         {
-            // Another instance was signaled to show; exit this process.
-            // (Instant close if you double-open — the first window should pop forward.)
+            // Another instance owns the UI — signal it and exit cleanly (not a crash).
+            // Store cert launches once; double-launch is local-only.
             Environment.Exit(0);
             return;
         }
@@ -143,6 +167,7 @@ public partial class App : Application
             }
         }
 
+        // Activate BEFORE engine work so Store cert sees a live window immediately.
         _window.Activate();
 
         if (AppConfig.TrayOnly)
@@ -160,7 +185,7 @@ public partial class App : Application
         }
 
         // So tray / scripts can re-open this native client (not Glance/PWA)
-        WinUiPaths.PublishExePathForTray();
+        try { WinUiPaths.PublishExePathForTray(); } catch { /* ignore */ }
 
         if (Backend is not null)
         {
@@ -169,15 +194,34 @@ public partial class App : Application
                 try
                 {
                     await Backend.EnsureRunningAsync();
-                    WinUiPaths.PublishExePathForTray();
+                    try { WinUiPaths.PublishExePathForTray(); } catch { /* ignore */ }
                     if (AppConfig.StartTrayWithApp || AppConfig.TrayOnly)
                         TrayHost.TryStart();
                 }
-                catch
+                catch (Exception ex)
                 {
-                    /* Settings can start engine/tray manually */
+                    LogCrash("EnsureRunningAsync", ex);
+                    /* Settings can start engine/tray manually — UI stays up */
                 }
             });
+        }
+    }
+
+    private static void LogCrash(string where, Exception ex)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".financial-os");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(
+                Path.Combine(dir, "winui-crash.log"),
+                $"[{DateTime.Now:O}] [{where}] {ex}\n\n");
+        }
+        catch
+        {
+            /* ignore */
         }
     }
 

@@ -18,18 +18,15 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- Icon set in code (AppWindow.SetIcon). XAML ImageIconSource/.ico can throw
+             E_POINTER / STOWED 0xc000027b during InitializeComponent on Store cert VMs. -->
         <TitleBar
             x:Name="AppTitleBar"
             Title="HonestSpend"
             BackRequested="TitleBar_BackRequested"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
-            PaneToggleRequested="TitleBar_PaneToggleRequested">
-            <TitleBar.IconSource>
-                <!-- PNG: .ico often throws E_POINTER / XAML load crash on ImageIconSource -->
-                <ImageIconSource ImageSource="Assets/Square44x44Logo.scale-200.png" />
-            </TitleBar.IconSource>
-        </TitleBar>
+            PaneToggleRequested="TitleBar_PaneToggleRequested" />
 
         <NavigationView
             x:Name="NavView"
@@ -51,7 +48,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" Opacity="0.75" Text="Who" />
+                    <TextBlock x:Name="WhoLabel" VerticalAlignment="Center" Opacity="0.75" Text="Who" />
                     <ComboBox x:Name="ShellEntityBox" Grid.Column="1" MinWidth="160"
                               PlaceholderText="Who" SelectionChanged="ShellScope_Changed" />
                     <ComboBox x:Name="ShellScopeBox" Grid.Column="2" MinWidth="130"
@@ -59,16 +56,16 @@
                         <ComboBoxItem Content="This money" Tag="entity" IsSelected="True" />
                         <ComboBoxItem Content="All money" Tag="group" />
                     </ComboBox>
-                    <ComboBox x:Name="UiModeBox" Grid.Column="3" MinWidth="120"
+                    <ComboBox x:Name="UiModeBox" Grid.Column="3" MinWidth="140"
                               SelectionChanged="UiMode_Changed">
-                        <ComboBoxItem Content="Simple" Tag="simple" IsSelected="True" />
-                        <ComboBoxItem Content="Full books" Tag="full" />
+                        <ComboBoxItem Content="View: Simple" Tag="simple" IsSelected="True" />
+                        <ComboBoxItem Content="View: Full books" Tag="full" />
                     </ComboBox>
                     <TextBlock x:Name="ShellModeText" Grid.Column="4" VerticalAlignment="Center"
                                Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                     <Button x:Name="LockChipBtn" Grid.Column="5" Content="Books unlocked"
                             Click="LockChip_Click" MinWidth="120"
-                            ToolTipService.ToolTip="Seal books and lock the app (or unlock if locked)" />
+                            ToolTipService.ToolTip="Lock books and the app (or unlock if locked)" />
                     <Button x:Name="CpaModeBtn" Grid.Column="6" Content="CPA mode"
                             Click="CpaMode_Click" />
                 </Grid>

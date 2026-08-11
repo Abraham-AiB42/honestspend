@@ -1,22 +1,30 @@
-# HonestSpend logos (transparent only)
+# HonestSpend logos
 
-All PNGs have **alpha** (white void removed, content cropped, fitted into squares — not stretched).
+## Package / Start tiles (MSIX — Store 10.1.1.11)
 
-| File | Size | Content |
-|------|------|---------|
-| `icon-300x300.png` | 300×300 | Mark only — **use for Store square logo** |
-| `icon-150x150.png` | 150×150 | Mark only |
-| `icon-71x71.png` | 71×71 | Mark only |
-| `icon-44x44.png` | 44×44 | Small tile |
-| `full-logo-300x300.png` | 300×300 | Mark + wordmark |
-| `full-logo-150x150.png` | 150×150 | Mark + wordmark |
-| `full-logo-71x71.png` | 71×71 | Mark + wordmark |
-| `StoreLogo.png` | 300×300 | Same as icon-300 (app package) |
-| `*-cropped-transparent.png` | master crops | Reprocess source |
-
-Re-export from Downloads source:
+Generate the full on-device tile set into `clients/HonestSpend.WinUI/Assets/`:
 
 ```powershell
-python store-assets/logo/process_selected_logo.py
-# or: python store-assets/logo/process_selected_logo.py path\to\logo.jpg
+# From repo root (needs Pillow)
+python scripts/generate-store-tiles.py
+```
+
+That writes scale-100 + scale-200 squares, wide tile with **HonestSpend** wordmark,
+StoreLogo 50×50, splash, and multi-size `AppIcon.ico` on brand navy `#0F2744`.
+
+## Partner Center listing logos
+
+| File | Size | Use |
+|------|------|-----|
+| `icon-300x300.png` | 300×300 | Store square logo (1:1) |
+| `icon-150x150.png` | 150×150 | Optional |
+| `icon-71x71.png` | 71×71 | Optional |
+| `icon-44x44.png` | 44×44 | Small |
+| `StoreLogo.png` | listing copy | Same family as package |
+
+Re-crop source mark only:
+
+```powershell
+python store-assets/logo/process_selected_logo.py path\to\logo.jpg
+python scripts/generate-store-tiles.py
 ```

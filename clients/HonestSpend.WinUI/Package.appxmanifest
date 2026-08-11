@@ -23,7 +23,7 @@
   <Identity
     Name="AgencyinBox42.HonestSpend"
     Publisher="CN=AA975026-9A8A-4BD4-9A1E-623BC6D70EE3"
-    Version="1.0.54.0" />
+    Version="1.0.55.0" />
 
   <Properties>
     <DisplayName>HonestSpend</DisplayName>
@@ -47,14 +47,23 @@
       EntryPoint="$targetentrypoint$"
       uap10:RuntimeBehavior="packagedClassicApp"
       uap10:TrustLevel="mediumIL">
+      <!-- BackgroundColor: solid brand navy — tiles must uniquely identify HonestSpend (Store 10.1.1.11) -->
       <uap:VisualElements
         DisplayName="HonestSpend"
         Description="Local-first liquidity OS — Safe to spend you can trust."
-        BackgroundColor="transparent"
+        BackgroundColor="#0F2744"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
-        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
-        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Wide310x150Logo.png"
+          Square71x71Logo="Assets\Square71x71Logo.png"
+          ShortName="HonestSpend">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+        <uap:SplashScreen Image="Assets\SplashScreen.png" BackgroundColor="#FFFFFF" />
       </uap:VisualElements>
       <!-- Optional: start minimized / tray via StartupTask later -->
     </Application>

@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Visible in Simple mode; everything else is Full books.</summary>
     private static readonly HashSet<string> SimpleNavTags = new(StringComparer.OrdinalIgnoreCase)
     {
-        "home", "add", "setup", "buy", "review", "about", "license",
+        "home", "add", "setup", "buy", "review", "about",
     };
 
     public MainWindow()
@@ -37,7 +37,10 @@ public sealed partial class MainWindow : Window
             SetTitleBar(AppTitleBar);
             if (AppWindow?.TitleBar is not null)
                 AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-            AppWindow?.SetIcon("Assets/AppIcon.ico");
+            // Prefer absolute path — relative "Assets/..." fails in packaged Store installs
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+            if (File.Exists(iconPath))
+                AppWindow?.SetIcon(iconPath);
             AppWindow?.Resize(new Windows.Graphics.SizeInt32(1180, 820));
         }
         catch
@@ -63,6 +66,26 @@ public sealed partial class MainWindow : Window
     }
 
     private async void NavView_Loaded(object sender, RoutedEventArgs e)
+    {
+        // Store cert: never let Loaded throw — always leave a navigable Home shell.
+        try
+        {
+            await NavView_LoadedCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                ShellModeText.Text = "Starting…";
+                SelectNav("home");
+                NavFrame.Navigate(typeof(HomePage));
+            }
+            catch { /* ignore */ }
+            System.Diagnostics.Debug.WriteLine("NavView_Loaded: " + ex);
+        }
+    }
+
+    private async Task NavView_LoadedCoreAsync()
     {
         _shellLoading = true;
         for (var j = 0; j < UiModeBox.Items.Count; j++)
@@ -229,8 +252,8 @@ public sealed partial class MainWindow : Window
             // Full books if needed for other pages — settings always available
             return;
         }
-        // Deep-link to Full books pages should leave Simple mode
-        if (AppState.SimpleMode && !SimpleNavTags.Contains(tag) && tag != "home")
+        // Deep-link to Full books pages should leave Simple mode (with plain notice)
+        if (AppState.SimpleMode && !SimpleNavTags.Contains(tag) && tag is not ("home" or "settings" or "license"))
         {
             AppState.SimpleMode = false;
             try
@@ -249,6 +272,7 @@ public sealed partial class MainWindow : Window
                     break;
                 }
             }
+            ShellModeText.Text = $"Opening Full books for {tag}…";
         }
         SelectNav(tag);
         NavigateTag(tag);
@@ -295,9 +319,30 @@ public sealed partial class MainWindow : Window
                     nvi.Visibility = Visibility.Visible;
             }
         }
+        ApplySimpleShellHeader();
         ShellModeText.Text = AppState.SimpleMode
             ? "Simple · safe to spend first"
             : "Full books · every tool";
+    }
+
+    /// <summary>Quiet Simple chrome: hide Who / All money / CPA for single-pile households.</summary>
+    private void ApplySimpleShellHeader()
+    {
+        var multiWho = ShellEntityBox.Items.Count > 1;
+        if (AppState.SimpleMode && !multiWho)
+        {
+            WhoLabel.Visibility = Visibility.Collapsed;
+            ShellEntityBox.Visibility = Visibility.Collapsed;
+            ShellScopeBox.Visibility = Visibility.Collapsed;
+            CpaModeBtn.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            WhoLabel.Visibility = Visibility.Visible;
+            ShellEntityBox.Visibility = Visibility.Visible;
+            ShellScopeBox.Visibility = Visibility.Visible;
+            CpaModeBtn.Visibility = AppState.SimpleMode ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 
     /// <summary>Called from Home after setup completes so Get started disappears.</summary>
@@ -342,6 +387,7 @@ public sealed partial class MainWindow : Window
             }
             ShellEntityBox.IsEnabled = AppState.IfppScope == "entity";
             ApplyScopeFromShell();
+            ApplySimpleShellHeader();
         }
         catch
         {
@@ -431,7 +477,7 @@ public sealed partial class MainWindow : Window
                 return;
             }
             LockChipBtn.Visibility = Visibility.Visible;
-            LockChipBtn.Content = "Seal & lock";
+            LockChipBtn.Content = "Lock books";
             LockChipBtn.IsEnabled = true;
         }
         catch { /* ignore */ }
@@ -450,20 +496,20 @@ public sealed partial class MainWindow : Window
             {
                 // Encryption-only: seal without forcing junk PIN on LockPage
                 LockChipBtn.IsEnabled = false;
-                LockChipBtn.Content = "Sealing…";
+                LockChipBtn.Content = "Locking…";
                 await AppLockService.SealDatabaseAsync();
-                LockChipBtn.Content = "Sealed";
+                LockChipBtn.Content = "Locked";
                 return;
             }
             LockChipBtn.IsEnabled = false;
-            LockChipBtn.Content = "Sealing…";
+            LockChipBtn.Content = "Locking…";
             await AppLockService.SealDatabaseAsync();
             AppLockService.LockSession();
             ForceLockScreen();
         }
         catch (Exception ex)
         {
-            try { LockChipBtn.Content = "Seal failed"; } catch { /* ignore */ }
+            try { LockChipBtn.Content = "Lock failed"; } catch { /* ignore */ }
             System.Diagnostics.Debug.WriteLine(ex);
         }
         finally

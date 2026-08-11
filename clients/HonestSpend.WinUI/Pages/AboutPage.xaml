@@ -12,7 +12,7 @@
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="HonestSpend" />
             <TextBlock x:Name="VersionText" Opacity="0.8" Text="Connecting…" />
             <TextBlock x:Name="MaturityText" Opacity="0.75" TextWrapping="Wrap"
-                Text="Local multi-entity liquidity OS." />
+                Text="Local multi-account liquidity OS — personal, business, and kids." />
             <TextBlock TextWrapping="Wrap" FontSize="16">
                 Open-source code · official store builds planned as a one-time commercial license
                 (~$49.99) that unlocks all clients. Not a bureau, not e-file, not payroll, not a loan marketplace.

@@ -211,18 +211,24 @@ public sealed partial class BuyPage : Page
             // Category budget from API (server-side)
             ApplyBudgetCheckFromResponse(res);
 
-            var opts = new List<string>();
+            // One-glance: recommended is above; options = other *safe* paths first, then unsafe collapsed summary
+            var safeOpts = new List<string>();
+            var unsafeN = 0;
             if (res.TryGetProperty("options", out var arr) && arr.ValueKind == JsonValueKind.Array)
             {
                 foreach (var o in arr.EnumerateArray())
                 {
                     var safe = o.TryGetProperty("safe", out var sf) && sf.GetBoolean();
-                    opts.Add(
+                    var line =
                         $"{(safe ? "✓" : "✗")} {UiCopy.PayMethod(JsonUi.Str(o, "method"))} · {JsonUi.Str(o, "account_name")} — " +
-                        JsonUi.Str(o, "reason"));
+                        JsonUi.Str(o, "reason");
+                    if (safe) safeOpts.Add(line);
+                    else unsafeN++;
                 }
             }
-            OptionsList.ItemsSource = opts.Count > 0 ? opts : new List<string> { "No alternate options." };
+            if (unsafeN > 0)
+                safeOpts.Add($"… {unsafeN} other path{(unsafeN == 1 ? "" : "s")} not safe for this amount");
+            OptionsList.ItemsSource = safeOpts.Count > 0 ? safeOpts : new List<string> { "No alternate safe options." };
             ScopeText.Text =
                 $"{UiCopy.MoneyView(AppState.IfppScope)}" +
                 $" · as of {JsonUi.Str(res, "as_of")}" +

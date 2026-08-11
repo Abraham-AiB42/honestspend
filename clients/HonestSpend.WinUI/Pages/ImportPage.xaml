@@ -143,6 +143,8 @@
                 </StackPanel>
             </Expander>
 
+            <InfoBar x:Name="SuccessBar" IsClosable="True" IsOpen="False" Severity="Success" />
+            <InfoBar x:Name="WarningBar" IsClosable="True" IsOpen="False" Severity="Warning" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

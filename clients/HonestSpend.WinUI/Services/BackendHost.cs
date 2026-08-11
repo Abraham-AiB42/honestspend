@@ -223,18 +223,20 @@ public sealed class BackendHost : IDisposable
 
     public static string ResolvePython(string root)
     {
+        // Prefer self-contained embeddable (Store / portable zip) over dev venv / system PATH
         foreach (var rel in new[]
                  {
-                     Path.Combine(".venv", "Scripts", "python.exe"),
-                     Path.Combine(".venv", "Scripts", "python"),
                      Path.Combine("python", "python.exe"),
                      Path.Combine("python", "python"),
+                     Path.Combine(".venv", "Scripts", "python.exe"),
+                     Path.Combine(".venv", "Scripts", "python"),
                  })
         {
             var cand = Path.Combine(root, rel);
             if (File.Exists(cand))
                 return cand;
         }
+        // Last resort: system PATH (developers only — end-user packages must ship embeddable)
         return "python";
     }
 
@@ -278,15 +280,29 @@ public sealed class BackendHost : IDisposable
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return false;
+        // Self-contained embeddable (Store / GitHub zip)
+        var embedPy = Path.Combine(root, "python", "python.exe");
+        if (File.Exists(embedPy))
+            return true;
         var src = Path.Combine(root, "src", "financial_os");
         if (Directory.Exists(src))
             return true;
+        // Dev clone with venv
         var venvPy = Path.Combine(root, ".venv", "Scripts", "python.exe");
         return File.Exists(venvPy);
     }
 
     public void Stop()
     {
+        // Prefer seal-first path when caller can await; sync Stop still best-effort seals
+        try
+        {
+            AppLockService.SealDatabaseAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            /* engine may already be down */
+        }
         try
         {
             if (_process is { HasExited: false })

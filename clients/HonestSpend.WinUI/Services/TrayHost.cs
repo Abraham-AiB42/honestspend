@@ -65,15 +65,30 @@ public static class TrayHost
             if (IsPidFileAlive())
                 return true; // already running elsewhere
 
+            // Prefer LocalAppData extract (Store) then package/sibling engine
             var root = BackendHost.ResolveBackendRoot();
+            if (root is null || !BackendHost.LooksLikeEngine(root))
+            {
+                try
+                {
+                    root = EngineBootstrap.EnsureEngineAvailable(out _);
+                }
+                catch
+                {
+                    root = null;
+                }
+            }
             if (root is null)
                 return false;
 
-            var py = Path.Combine(root, ".venv", "Scripts", "python.exe");
-            if (!File.Exists(py))
-                py = Path.Combine(root, ".venv", "Scripts", "python");
-            if (!File.Exists(py))
-                py = "python";
+            // Same resolution as fiscal engine (embeddable python\ first — not system PATH)
+            var py = BackendHost.ResolvePython(root);
+            if (string.IsNullOrWhiteSpace(py) || (py == "python" && !File.Exists(Path.Combine(root, "python", "python.exe"))))
+            {
+                // Refuse bare system python on Store path — tray would be wrong or missing
+                if (!File.Exists(py))
+                    return false;
+            }
 
             try
             {

@@ -11,7 +11,7 @@
         <StackPanel Spacing="16" MaxWidth="720">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Entities" />
             <TextBlock Opacity="0.8" TextWrapping="Wrap"
-                Text="Personal is always available. Add Business(es) for company books and Child(ren) for siloed allowance tracking. Each entity has its own Spendable by default." />
+                Text="Personal is always available. Add Business(es) for company books and Child(ren) for siloed allowance tracking. Each Who has its own Safe to spend by default." />
 
             <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" IsClosable="True" />
             <TextBlock x:Name="StatusText" Opacity="0.75" />

@@ -204,6 +204,8 @@ public sealed partial class ImportPage : Page
     private async void ImportInbox_Click(object sender, RoutedEventArgs e)
     {
         ErrorBar.IsOpen = false;
+        SuccessBar.IsOpen = false;
+        WarningBar.IsOpen = false;
         ResultText.Text = "";
         HideNextSteps();
         try
@@ -227,6 +229,10 @@ public sealed partial class ImportPage : Page
                     ? ""
                     : $" · OFX ACCTID matches {JsonUi.Str(res, "ofx_acctid_matches")}"),
             };
+            var advTotal = JsonUi.Int(res, "schedules_advanced", 0);
+            string? advHint = NullIfEmptyHint(JsonUi.Str(res, "schedule_advance_hint", ""));
+            string? advErr = NullIfEmptyHint(JsonUi.Str(res, "schedule_advance_error", ""));
+            var hasTopLevelAdvance = advTotal > 0 || advHint is not null || advErr is not null;
             if (res.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
             {
                 foreach (var r in results.EnumerateArray().Take(12))
@@ -238,7 +244,29 @@ public sealed partial class ImportPage : Page
                     if (r.TryGetProperty("error", out var er) && er.ValueKind == JsonValueKind.String)
                         line += " · " + er.GetString();
                     lines.Add(line);
+                    // Nested only when top-level has no advance fields (avoid double-count)
+                    if (!hasTopLevelAdvance)
+                    {
+                        var n = JsonUi.Int(r, "schedules_advanced", 0);
+                        if (n > 0)
+                        {
+                            advTotal += n;
+                            advHint ??= NullIfEmptyHint(JsonUi.Str(r, "schedule_advance_hint", ""));
+                        }
+                        advErr ??= NullIfEmptyHint(JsonUi.Str(r, "schedule_advance_error", ""));
+                    }
                 }
+            }
+            if (advTotal > 0 || advHint is not null || advErr is not null)
+            {
+                using var synth = JsonDocument.Parse(
+                    System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        schedules_advanced = advTotal,
+                        schedule_advance_hint = advHint,
+                        schedule_advance_error = advErr,
+                    }));
+                ApplyScheduleAdvanceFeedback(synth.RootElement, lines);
             }
             AppendNextStepLines(lines, res);
             ResultText.Text = string.Join("\n", lines);
@@ -888,6 +916,8 @@ public sealed partial class ImportPage : Page
     private async void ImportCsv_Click(object sender, RoutedEventArgs e)
     {
         ErrorBar.IsOpen = false;
+        SuccessBar.IsOpen = false;
+        WarningBar.IsOpen = false;
         ResultText.Text = "";
         HideNextSteps();
         try
@@ -921,6 +951,7 @@ public sealed partial class ImportPage : Page
                             : ""));
                 }
                 var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, ofxRes, lines);
+                ApplyScheduleAdvanceFeedback(ofxRes, lines);
                 AppendNextStepLines(lines, ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
                 ResultText.Text = string.Join("\n", lines);
                 ShowNextSteps(ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
@@ -962,6 +993,7 @@ public sealed partial class ImportPage : Page
             }
             // File bal (column/override) or typed-only → one-tap trust (same rule as OFX/PDF)
             var csvTrusted = await CompleteBankHonestyAfterImportAsync(api, accountId, res, csvLines);
+            ApplyScheduleAdvanceFeedback(res, csvLines);
             AppendNextStepLines(csvLines, res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
             ResultText.Text = string.Join("\n", csvLines);
             ShowNextSteps(res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
@@ -977,6 +1009,8 @@ public sealed partial class ImportPage : Page
     private async void ImportPdf_Click(object sender, RoutedEventArgs e)
     {
         ErrorBar.IsOpen = false;
+        SuccessBar.IsOpen = false;
+        WarningBar.IsOpen = false;
         ResultText.Text = "";
         HideNextSteps();
         try
@@ -1020,6 +1054,7 @@ public sealed partial class ImportPage : Page
                     pdfLines.Add("Errors: " + joined);
             }
             var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, res, pdfLines);
+            ApplyScheduleAdvanceFeedback(res, pdfLines);
             AppendNextStepLines(pdfLines, res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
             ResultText.Text = string.Join("\n", pdfLines);
             ShowNextSteps(res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
@@ -1030,6 +1065,56 @@ public sealed partial class ImportPage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    /// <summary>
+    /// Surface bank→schedule advance after import (Coming up cleanup).
+    /// Non-fatal: schedule_advance_error is a warning only.
+    /// </summary>
+    private void ApplyScheduleAdvanceFeedback(JsonElement res, List<string>? lines = null)
+    {
+        var advanced = JsonUi.Int(res, "schedules_advanced", 0);
+        var hint = NullIfEmptyHint(JsonUi.Str(res, "schedule_advance_hint", "")) ?? "";
+        var advErr = NullIfEmptyHint(JsonUi.Str(res, "schedule_advance_error", ""));
+
+        if (advanced > 0 || !string.IsNullOrWhiteSpace(hint))
+        {
+            var msg = !string.IsNullOrWhiteSpace(hint)
+                ? hint
+                : $"Bank matched {advanced} bill(s) — removed from Coming up";
+            // Avoid toasting the "no matches" soft hint as a success
+            var isPositive = advanced > 0
+                || hint.Contains("matched", StringComparison.OrdinalIgnoreCase)
+                || hint.Contains("removed", StringComparison.OrdinalIgnoreCase);
+            if (isPositive)
+            {
+                lines?.Add(msg);
+                SuccessBar.Title = "Bills matched";
+                SuccessBar.Message = msg;
+                SuccessBar.Severity = InfoBarSeverity.Success;
+                SuccessBar.IsOpen = true;
+            }
+            else if (!string.IsNullOrWhiteSpace(hint))
+            {
+                lines?.Add(hint);
+            }
+        }
+
+        if (advErr is not null)
+        {
+            lines?.Add("Schedule advance note: " + advErr);
+            WarningBar.Title = "Bill match skipped";
+            WarningBar.Message = advErr;
+            WarningBar.Severity = InfoBarSeverity.Warning;
+            WarningBar.IsOpen = true;
+        }
+    }
+
+    private static string? NullIfEmptyHint(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s) || s is "—" or "null" or "?")
+            return null;
+        return s;
     }
 
     private static void AppendNextStepLines(

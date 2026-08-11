@@ -50,7 +50,7 @@ public sealed partial class SetupPage : Page
             StatusSummary.Text = complete
                 ? "Onboarding marked complete. You can still run quick setup to add starter accounts."
                 : needs
-                    ? "No accounts yet — run quick setup to get Spendable in under a minute."
+                    ? "No accounts yet — run quick setup to get Safe to spend in under a minute."
                     : "Partial setup — finish accounts/bills when ready.";
             Checklist.ItemsSource = new[]
             {
