@@ -32,6 +32,21 @@ public partial class App : Application
         Backend = new BackendHost();
         UnhandledException += (_, e) =>
         {
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".financial-os");
+                Directory.CreateDirectory(dir);
+                var path = Path.Combine(dir, "winui-crash.log");
+                File.AppendAllText(
+                    path,
+                    $"[{DateTime.Now:O}] {e.Message}\n{e.Exception}\n\n");
+            }
+            catch
+            {
+                /* ignore log failures */
+            }
             e.Handled = true;
         };
     }

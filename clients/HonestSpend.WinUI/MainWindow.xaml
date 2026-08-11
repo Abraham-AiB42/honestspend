@@ -22,11 +22,12 @@
             x:Name="AppTitleBar"
             Title="HonestSpend"
             BackRequested="TitleBar_BackRequested"
-            IsBackButtonVisible="{x:Bind NavFrame.CanGoBack, Mode=OneWay}"
+            IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="True"
             PaneToggleRequested="TitleBar_PaneToggleRequested">
             <TitleBar.IconSource>
-                <ImageIconSource ImageSource="Assets/AppIcon.ico" />
+                <!-- PNG: .ico often throws E_POINTER / XAML load crash on ImageIconSource -->
+                <ImageIconSource ImageSource="Assets/Square44x44Logo.scale-200.png" />
             </TitleBar.IconSource>
         </TitleBar>
 

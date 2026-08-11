@@ -26,13 +26,25 @@ public sealed partial class MainWindow : Window
 
     public MainWindow()
     {
+        // ComboBox SelectionChanged fires while XAML loads (IsSelected items) —
+        // before ShellModeText / NavFrame exist. Guard handlers until init finishes.
+        _shellLoading = true;
         InitializeComponent();
 
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(AppTitleBar);
-        AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        AppWindow.SetIcon("Assets/AppIcon.ico");
-        AppWindow.Resize(new Windows.Graphics.SizeInt32(1180, 820));
+        try
+        {
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+            if (AppWindow?.TitleBar is not null)
+                AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
+            AppWindow?.SetIcon("Assets/AppIcon.ico");
+            AppWindow?.Resize(new Windows.Graphics.SizeInt32(1180, 820));
+        }
+        catch
+        {
+            /* Title bar chrome is optional if host rejects it */
+        }
+
         try
         {
             var ls = Windows.Storage.ApplicationData.Current.LocalSettings.Values;
@@ -42,6 +54,12 @@ public sealed partial class MainWindow : Window
         catch { /* ignore */ }
         ApplyReadOnlyChrome();
         ApplySimpleChrome();
+        NavFrame.Navigated += (_, _) =>
+        {
+            try { AppTitleBar.IsBackButtonVisible = NavFrame.CanGoBack; }
+            catch { /* ignore */ }
+        };
+        _shellLoading = false;
     }
 
     private async void NavView_Loaded(object sender, RoutedEventArgs e)
@@ -258,13 +276,15 @@ public sealed partial class MainWindow : Window
 
     private void ApplyScopeFromShell()
     {
-        if (ShellScopeBox.SelectedItem is ComboBoxItem sc && sc.Tag is string st)
+        if (ShellScopeBox?.SelectedItem is ComboBoxItem sc && sc.Tag is string st)
             AppState.IfppScope = st;
-        if (AppState.IfppScope == "entity" && ShellEntityBox.SelectedItem is ComboBoxItem ei && ei.Tag is int id)
+        if (AppState.IfppScope == "entity" && ShellEntityBox?.SelectedItem is ComboBoxItem ei && ei.Tag is int id)
             AppState.SelectedProfileId = id;
         else if (AppState.IfppScope == "group")
             AppState.SelectedProfileId = null;
-        ShellEntityBox.IsEnabled = AppState.IfppScope == "entity" && !AppState.ReadOnlySession;
+        if (ShellEntityBox is not null)
+            ShellEntityBox.IsEnabled = AppState.IfppScope == "entity" && !AppState.ReadOnlySession;
+        if (ShellModeText is null) return;
         if (AppState.ReadOnlySession)
             ShellModeText.Text = "CPA view — read only";
         else if (AppState.SimpleMode)

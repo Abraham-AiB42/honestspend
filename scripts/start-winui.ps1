@@ -2,5 +2,6 @@
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location "$Root\clients\HonestSpend.WinUI"
-Write-Host "Building & running HonestSpend WinUI…" -ForegroundColor Cyan
-dotnet run -c Debug -p:Platform=x64
+Write-Host "Building & running HonestSpend WinUI (unpackaged)..." -ForegroundColor Cyan
+Write-Host "If a window does not appear, check %USERPROFILE%\.financial-os\winui-crash.log" -ForegroundColor DarkGray
+dotnet run -c Debug -p:Platform=x64 -p:WindowsPackageType=None --launch-profile "HonestSpend.WinUI (Unpackaged)"
