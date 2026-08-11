@@ -2,7 +2,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Windows.Security.Credentials.UI;
+using Windows.Security.Cryptography;
+using Windows.Security.Cryptography.DataProtection;
 using Windows.Storage;
+using Windows.Storage.Streams;
 
 namespace HonestSpend_WinUI.Services;
 
@@ -141,34 +144,52 @@ public static class AppLockService
     {
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync(ct);
+        if (!await api.BooksReadyAsync(ct))
+            throw new InvalidOperationException("Books must be open before enabling encryption.");
         // Engine must be open (plaintext) to enable
         var res = await api.CryptoEnableAsync(secret, modeHint, wrap, ct: ct);
-        if (res.TryGetProperty("dek_b64", out var d) && d.ValueKind == JsonValueKind.String)
+        if (wrap == "client" && res.TryGetProperty("dek_b64", out var d) && d.ValueKind == JsonValueKind.String)
         {
             var dek = d.GetString();
-            if (!string.IsNullOrEmpty(dek) && wrap == "client")
-            {
-                try { ApplicationData.Current.LocalSettings.Values["AppLockDek"] = dek; }
-                catch { /* ignore */ }
-            }
+            if (!string.IsNullOrEmpty(dek))
+                await StoreProtectedDekAsync(dek);
         }
     }
 
-    /// <summary>Unseal books in the engine after UI unlock.</summary>
+    /// <summary>Unseal books in the engine after UI unlock. Returns true only when books are open.</summary>
     public static async Task<bool> UnlockDatabaseAsync(string? secret = null, CancellationToken ct = default)
     {
         try
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync(ct);
+            // Already open (encryption off or prior unlock)
+            if (await api.BooksReadyAsync(ct))
+                return true;
+
             string? dek = null;
-            if (Mode == LockMode.Platform)
+            if (Mode == LockMode.Platform || secret is null)
+                dek = await LoadProtectedDekAsync();
+
+            // Retry while engine finishes booting into sealed mode
+            Exception? last = null;
+            for (var i = 0; i < 8; i++)
             {
-                try { dek = ApplicationData.Current.LocalSettings.Values["AppLockDek"] as string; }
-                catch { /* ignore */ }
+                try
+                {
+                    await api.CryptoUnlockAsync(secret, dek, ct);
+                    if (await api.BooksReadyAsync(ct))
+                        return true;
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    await Task.Delay(300, ct);
+                }
             }
-            await api.CryptoUnlockAsync(secret, dek, ct);
-            return true;
+            if (last is not null)
+                System.Diagnostics.Debug.WriteLine("UnlockDatabaseAsync: " + last.Message);
+            return await api.BooksReadyAsync(ct);
         }
         catch
         {
@@ -181,8 +202,15 @@ public static class AppLockService
         try
         {
             using var api = new LedgerApiClient();
-            if (!await api.HealthAsync(ct)) return;
-            await api.CryptoLockAsync(ct);
+            // Call even if health is flaky — encryption may still be on
+            try
+            {
+                await api.CryptoLockAsync(ct);
+            }
+            catch
+            {
+                // Engine may already be down
+            }
         }
         catch { /* best-effort */ }
     }
@@ -191,12 +219,58 @@ public static class AppLockService
     {
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync(ct);
-        string? dek = null;
-        try { dek = ApplicationData.Current.LocalSettings.Values["AppLockDek"] as string; }
-        catch { /* ignore */ }
+        var dek = await LoadProtectedDekAsync();
         await api.CryptoDisableAsync(secret, dek, ct);
-        try { ApplicationData.Current.LocalSettings.Values.Remove("AppLockDek"); }
+        try
+        {
+            ApplicationData.Current.LocalSettings.Values.Remove("AppLockDekProtected");
+            ApplicationData.Current.LocalSettings.Values.Remove("AppLockDek"); // legacy cleartext
+        }
         catch { /* ignore */ }
+    }
+
+    private static async Task StoreProtectedDekAsync(string dekB64)
+    {
+        try
+        {
+            var provider = new DataProtectionProvider("LOCAL=user");
+            var clear = CryptographicBuffer.ConvertStringToBinary(dekB64, BinaryStringEncoding.Utf8);
+            var protectedBuf = await provider.ProtectAsync(clear);
+            CryptographicBuffer.CopyToByteArray(protectedBuf, out var bytes);
+            ApplicationData.Current.LocalSettings.Values["AppLockDekProtected"] =
+                Convert.ToBase64String(bytes);
+            // Remove any legacy cleartext DEK
+            ApplicationData.Current.LocalSettings.Values.Remove("AppLockDek");
+        }
+        catch
+        {
+            // Last resort (should be rare): still better than failing Hello setup silently
+            ApplicationData.Current.LocalSettings.Values["AppLockDek"] = dekB64;
+        }
+    }
+
+    private static async Task<string?> LoadProtectedDekAsync()
+    {
+        try
+        {
+            var ls = ApplicationData.Current.LocalSettings.Values;
+            if (ls["AppLockDekProtected"] is string b64 && !string.IsNullOrEmpty(b64))
+            {
+                var provider = new DataProtectionProvider("LOCAL=user");
+                var raw = Convert.FromBase64String(b64);
+                var buf = CryptographicBuffer.CreateFromByteArray(raw);
+                var clear = await provider.UnprotectAsync(buf);
+                return CryptographicBuffer.ConvertBinaryToString(BinaryStringEncoding.Utf8, clear);
+            }
+            // Legacy cleartext migration
+            if (ls["AppLockDek"] is string legacy && !string.IsNullOrEmpty(legacy))
+            {
+                await StoreProtectedDekAsync(legacy);
+                return legacy;
+            }
+        }
+        catch { /* ignore */ }
+        return null;
     }
 
     public static bool VerifyPinOrPassword(string secret)

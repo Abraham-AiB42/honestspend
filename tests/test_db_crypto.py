@@ -27,7 +27,8 @@ def test_seal_unseal_roundtrip(tmp_path: Path, monkeypatch):
     data = _prep(tmp_path, monkeypatch)
     pin = "2468"
     out = dc.enable_encryption(secret=pin, mode_hint="pin", wrap="password", seal_now=False)
-    dek = dc._b64d(out["dek_b64"])
+    assert not out.get("dek_b64")  # password wrap must not leak DEK
+    dek = dc.resolve_dek(secret=pin)
     assert dc.encryption_enabled()
     assert dc.plaintext_present()
 
@@ -60,7 +61,8 @@ def test_runtime_unlock_lock(tmp_path: Path, monkeypatch):
     rt.boot()
     assert rt.is_unlocked()
     en = rt.enable(secret="abcd", mode_hint="pin", wrap="password")
-    assert en.get("dek_b64")
+    # password wrap must not return raw DEK
+    assert not en.get("dek_b64")
     locked = rt.lock_and_seal()
     assert locked.get("sealed")
     assert not rt.is_unlocked()
@@ -71,6 +73,24 @@ def test_runtime_unlock_lock(tmp_path: Path, monkeypatch):
     assert u.get("unlocked")
     assert rt.is_unlocked()
     assert dc.plaintext_present()
+
+
+def test_no_silent_boot_when_encrypted(tmp_path: Path, monkeypatch):
+    _prep(tmp_path, monkeypatch)
+    rt.boot()
+    rt.enable(secret="9999", mode_hint="pin", wrap="password")
+    assert dc.plaintext_present()
+    # Soft crash: dispose without seal (plaintext leftover on disk)
+    from financial_os.services import db_runtime as rtmod
+
+    rtmod._dispose_unlocked()
+    rtmod._session_dek = None
+    b = rt.boot()
+    assert b.get("unlocked") is False
+    assert b.get("needs_unlock") is True
+    # Unlock still works from leftover plaintext
+    u = rt.unlock(secret="9999")
+    assert u.get("unlocked") is True
 
 
 def test_disable_encryption(tmp_path: Path, monkeypatch):

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.50 — E2E honesty RC (encryption + IFPP + budgets)
+
+- **Seal before kill**: WinUI seals books before stopping the engine on exit
+- **No silent plaintext boot** when encryption is on (crash leftovers still need unlock)
+- **Unlock fail-closed**: shell opens only when `books_ready` / `db_unlocked`
+- **423 → Lock screen**; health includes `data_dir`, `books_ready`, `needs_unlock`
+- **Multi-card float** = best single card (not sum of every card’s capacity)
+- **Budget reserve** = max remaining per category (no daily+weekly+monthly stack)
+- **Hello DEK** protected with DataProtectionProvider; password enable no longer returns DEK
+- **Books-bundle copy** (db, sealed, crypto.json, license) + engine data_dir match on restart
+- Refuse re-enable encryption without disable (no silent DEK rotation)
+
 ## 1.0.49 — Full DB encryption with unlock key
 
 - **At-rest encryption**: when app lock ≠ none, books use AES-256-GCM seal (`financial_os.db.sealed` + `crypto.json` key wrap)

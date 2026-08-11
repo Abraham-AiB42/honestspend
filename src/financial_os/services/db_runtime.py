@@ -43,25 +43,35 @@ def status() -> dict[str, Any]:
 
 
 def boot() -> dict[str, Any]:
-    """Open DB if plaintext available; otherwise remain locked."""
+    """Open DB if available and encryption is off; otherwise remain locked until unlock()."""
     global _engine, _SessionLocal, _unlocked, _session_dek
     with _lock:
         from financial_os.db import init_db, make_engine
         from financial_os.services import db_crypto as dc
 
-        if dc.needs_unlock():
+        # Encryption on → never silent-open (even if crash left plaintext)
+        if dc.encryption_enabled():
             _dispose_unlocked()
             _unlocked = False
             _session_dek = None
-            log.info("Database sealed — waiting for unlock")
-            return {"ok": True, "unlocked": False, "needs_unlock": True}
+            log.info("Database encryption on — waiting for unlock (no silent plaintext boot)")
+            return {
+                "ok": True,
+                "unlocked": False,
+                "needs_unlock": True,
+                "reason": "encryption_requires_unlock",
+            }
+
+        if not dc.plaintext_present() and not dc.sealed_present():
+            # Fresh install — create empty DB
+            pass
 
         _engine = make_engine()
         _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False, future=True)
         init_db(_engine)
         _unlocked = True
-        # DEK only set on explicit unlock/enable
-        log.info("Database open (plaintext ready)")
+        _session_dek = None
+        log.info("Database open (plaintext, encryption off)")
         return {"ok": True, "unlocked": True, "needs_unlock": False}
 
 
@@ -90,6 +100,9 @@ def unlock(*, secret: str | None = None, dek_b64: str | None = None) -> dict[str
         dek = dc.resolve_dek(secret=secret, dek_b64=dek_b64)
         if dc.sealed_present() and not dc.plaintext_present():
             dc.unseal_database(dek)
+        elif dc.plaintext_present():
+            # Crash leftover plaintext — open after DEK recovered (will re-seal on exit)
+            pass
         elif not dc.plaintext_present():
             raise ValueError("No sealed or plaintext database found")
 
@@ -97,6 +110,11 @@ def unlock(*, secret: str | None = None, dek_b64: str | None = None) -> dict[str
         _engine = make_engine()
         _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False, future=True)
         init_db(_engine)
+        try:
+            with _engine.connect() as conn:
+                conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+        except Exception:
+            pass
         _unlocked = True
         _session_dek = dek
         return {"ok": True, "unlocked": True, "process_unlocked": True, **dc.status()}
@@ -123,7 +141,13 @@ def lock_and_seal() -> dict[str, Any]:
             _dispose_unlocked()
             return {"ok": True, "sealed": True, "already_sealed": True}
 
-        # Flush engine before reading file (Windows holds locks until dispose + GC)
+        # Checkpoint then dispose so seal reads a complete SQLite file
+        if _engine is not None:
+            try:
+                with _engine.connect() as conn:
+                    conn.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception as e:
+                log.warning("WAL checkpoint before seal: %s", e)
         _dispose_unlocked()
         gc.collect()
         time.sleep(0.1)
@@ -159,6 +183,22 @@ def enable(
         dek = None
         if dek_b64:
             dek = base64.b64decode(dek_b64)
+        if dc.encryption_enabled():
+            # Keep session DEK; re-wrap only if secret provided
+            if wrap == "password" and secret and _session_dek is not None:
+                from financial_os.services.db_crypto import change_secret
+
+                out = change_secret(
+                    old_secret=None,
+                    new_secret=secret,
+                    dek_b64=base64.b64encode(_session_dek).decode("ascii"),
+                    mode_hint=mode_hint,
+                )
+                return {"ok": True, "enabled": True, "rotated": True, **{k: out[k] for k in out if k != "dek_b64"}}
+            raise ValueError(
+                "Encryption is already enabled. Unlock first, or disable encryption before re-enabling."
+            )
+
         out = dc.enable_encryption(
             secret=secret,
             dek=dek,
@@ -166,7 +206,13 @@ def enable(
             wrap=wrap,
             seal_now=False,
         )
-        _session_dek = base64.b64decode(out["dek_b64"])
+        if out.get("dek_b64"):
+            _session_dek = base64.b64decode(out["dek_b64"])
+        elif secret:
+            # password wrap — recover DEK into session for seal-on-exit
+            _session_dek = dc.resolve_dek(secret=secret)
+        elif dek is not None:
+            _session_dek = dek
         return out
 
 

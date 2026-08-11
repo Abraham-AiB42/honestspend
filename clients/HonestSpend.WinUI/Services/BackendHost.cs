@@ -23,8 +23,16 @@ public sealed class BackendHost : IDisposable
     public async Task<bool> EnsureRunningAsync(CancellationToken ct = default)
     {
         using var probe = new LedgerApiClient();
-        if (await probe.HealthAsync(ct))
+        if (await probe.HealthAsync(ct) && await DataDirMatchesAsync(probe, ct))
             return true;
+
+        // Wrong data_dir peer on :7420 — kill our child if any and restart
+        if (await probe.HealthAsync(ct) && !await DataDirMatchesAsync(probe, ct))
+        {
+            AppendLog("--- peer engine data_dir mismatch; restarting engine ---");
+            Stop();
+            await Task.Delay(400, ct);
+        }
 
         // Store/MSIX: install engine from engine-portable.zip if needed
         try
@@ -43,16 +51,25 @@ public sealed class BackendHost : IDisposable
         // Another client (or prior launch) may already be binding :7420.
         using (var recheck = new LedgerApiClient())
         {
-            if (await recheck.HealthAsync(ct))
+            if (await recheck.HealthAsync(ct) && await DataDirMatchesAsync(recheck, ct))
                 return true;
+            if (await recheck.HealthAsync(ct) && !await DataDirMatchesAsync(recheck, ct))
+            {
+                // Cannot kill a peer we did not start — surface error
+                LastError =
+                    "Another HonestSpend engine is running with a different data folder. " +
+                    "Close other instances, then retry.";
+                AppendLog("--- " + LastError + " ---");
+                return false;
+            }
         }
 
         if (!TryStart())
         {
-            // Race: peer won the port — accept if healthy.
+            // Race: peer won the port — accept if healthy and path matches.
             await Task.Delay(800, ct);
             using var peer = new LedgerApiClient();
-            if (await peer.HealthAsync(ct))
+            if (await peer.HealthAsync(ct) && await DataDirMatchesAsync(peer, ct))
                 return true;
             return false;
         }
@@ -62,12 +79,37 @@ public sealed class BackendHost : IDisposable
             ct.ThrowIfCancellationRequested();
             await Task.Delay(500, ct);
             using var c = new LedgerApiClient();
-            if (await c.HealthAsync(ct))
+            if (await c.HealthAsync(ct) && await DataDirMatchesAsync(c, ct))
                 return true;
         }
 
         LastError = "Backend started but did not become healthy on :7420";
         return false;
+    }
+
+    /// <summary>True if engine data_dir matches AppConfig.DataDir (or both default).</summary>
+    private static async Task<bool> DataDirMatchesAsync(LedgerApiClient api, CancellationToken ct)
+    {
+        try
+        {
+            var h = await api.GetHealthDetailsAsync(ct);
+            if (h is null) return true; // old engine without field — allow
+            if (!h.Value.TryGetProperty("data_dir", out var dd) || dd.ValueKind != System.Text.Json.JsonValueKind.String)
+                return true;
+            var engineDir = (dd.GetString() ?? "").Trim().TrimEnd('\\', '/');
+            var want = string.IsNullOrWhiteSpace(AppConfig.DataDir)
+                ? WinUiPaths.DataDirRoot()
+                : AppConfig.DataDir!.Trim();
+            want = Path.GetFullPath(want).TrimEnd('\\', '/');
+            try { engineDir = Path.GetFullPath(engineDir).TrimEnd('\\', '/'); }
+            catch { /* keep raw */ }
+            if (string.IsNullOrEmpty(engineDir)) return true;
+            return string.Equals(engineDir, want, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     public bool TryStart()

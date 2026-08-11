@@ -397,8 +397,17 @@ def compute_ifpp(
         # attach note on top rewards card via details
         pass
 
-    card_float = sum((c.safe_to_charge for c in card_plans), ZERO)
+    # Honesty: cash payoff capacity is shared — do NOT sum every card's safe_to_charge.
+    # Interest-free float = best single card path; combined = cash + that float.
+    positive = [c for c in card_plans if c.safe_to_charge > ZERO]
+    best_card = max(positive, key=lambda c: c.safe_to_charge) if positive else None
+    card_float = best_card.safe_to_charge if best_card else ZERO
     combined = cash_spendable + card_float
+    if len(positive) > 1:
+        warnings.append(
+            "Interest-free float uses your best single card (not the sum of every card — "
+            "the same cash can only pay off one charge path)."
+        )
 
     return IfppResult(
         as_of=as_of,
@@ -418,6 +427,13 @@ def compute_ifpp(
             "cash_accounts": len([a for a in cash_accounts if a.is_cash_for_ifpp]),
             "zero_pct_float_ok": True,
             "is_red_now": is_red_now,
+            "card_float_mode": "best_single_card",
+            "best_card_id": best_card.account_id if best_card else None,
+            "best_card_name": best_card.name if best_card else None,
+            "cards_with_float": len(positive),
+            "sum_card_caps_not_used": str(
+                sum((c.safe_to_charge for c in card_plans), ZERO).quantize(Decimal("0.01"))
+            ),
         },
     )
 

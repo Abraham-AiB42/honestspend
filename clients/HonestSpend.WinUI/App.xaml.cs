@@ -75,6 +75,19 @@ public partial class App : Application
         }
     }
 
+    /// <summary>Seal books while engine is still alive, then kill the process.</summary>
+    private static void SealThenStopEngine()
+    {
+        try
+        {
+            // Always attempt seal when encryption may be on (not only UI lock mode)
+            AppLockService.SealDatabaseAsync().GetAwaiter().GetResult();
+        }
+        catch { /* ignore */ }
+        try { Backend?.Dispose(); } catch { /* ignore */ }
+        Backend = null;
+    }
+
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         if (!SingleInstance.TryAcquire())
@@ -88,15 +101,8 @@ public partial class App : Application
         // Release mutex if process dies cleanly so the next launch is not blocked.
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
-            try
-            {
-                // Best-effort seal before engine die (sync; process exiting)
-                if (AppLockService.IsLockEnabled)
-                    AppLockService.SealDatabaseAsync().GetAwaiter().GetResult();
-            }
-            catch { /* ignore */ }
+            try { SealThenStopEngine(); } catch { /* ignore */ }
             try { SingleInstance.Release(); } catch { /* ignore */ }
-            try { Backend?.Dispose(); } catch { /* ignore */ }
         };
 
         _dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -111,17 +117,15 @@ public partial class App : Application
         {
             try
             {
-                var dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".financial-os");
+                var dir = WinUiPaths.DataDirRoot();
                 Directory.CreateDirectory(dir);
                 File.AppendAllText(
                     Path.Combine(dir, "winui-lifecycle.log"),
                     $"[{DateTime.Now:O}] [pid={Environment.ProcessId}] MainWindow.Closed\n");
             }
             catch { /* ignore */ }
+            try { SealThenStopEngine(); } catch { /* ignore */ }
             try { SingleInstance.Release(); } catch { /* ignore */ }
-            try { Backend?.Dispose(); } catch { /* ignore */ }
         };
 
         if (AppConfig.TrayOnly || AppConfig.StartMinimized)

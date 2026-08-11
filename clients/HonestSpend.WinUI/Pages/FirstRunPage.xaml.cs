@@ -1318,7 +1318,7 @@ public sealed partial class FirstRunPage : Page
                 break;
         }
 
-        // Full DB encryption whenever lock ≠ none (books sealed at rest)
+        // Full DB encryption whenever lock ≠ none — block advance if enable fails
         if (_securityMode is not "none")
         {
             try
@@ -1328,17 +1328,17 @@ public sealed partial class FirstRunPage : Page
                     modeHint: _securityMode,
                     wrap: wrap);
                 MsgText.Text =
-                    "App lock on — books will be encrypted at rest when the app seals them. " +
-                    "Remember your PIN/password; without it sealed books cannot be recovered.";
+                    "App lock + encryption on. Forget this secret and sealed books cannot be recovered. " +
+                    "Books re-seal when you close HonestSpend.";
             }
             catch (Exception ex)
             {
-                // UI lock still works; warn about encryption
-                ErrorBar.Message =
-                    "App lock saved, but database encryption could not be enabled yet: " +
-                    ex.Message +
-                    " (You can retry from Settings after setup.)";
-                ErrorBar.IsOpen = true;
+                // Roll back UI lock so we don't claim protection we don't have
+                AppLockService.SetNone();
+                throw new InvalidOperationException(
+                    "Could not enable database encryption: " + ex.Message +
+                    " Fix the engine, then set a lock again. (Continue without lock by choosing No lock.)",
+                    ex);
             }
         }
 

@@ -47,6 +47,43 @@ public sealed class LedgerApiClient : IDisposable
         }
     }
 
+    /// <summary>Full health JSON (data_dir, db_unlocked, needs_unlock, books_ready).</summary>
+    public async Task<JsonElement?> GetHealthDetailsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var r = await _http.GetAsync("api/health", ct);
+            if (!r.IsSuccessStatusCode) return null;
+            var body = await r.Content.ReadAsStringAsync(ct);
+            return JsonSerializer.Deserialize<JsonElement>(body, JsonOpts);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Engine is up AND books are open (or encryption off).</summary>
+    public async Task<bool> BooksReadyAsync(CancellationToken ct = default)
+    {
+        var h = await GetHealthDetailsAsync(ct);
+        if (h is null) return false;
+        if (h.Value.TryGetProperty("books_ready", out var br) && br.ValueKind == JsonValueKind.True)
+            return true;
+        if (h.Value.TryGetProperty("db_unlocked", out var u) && u.ValueKind == JsonValueKind.True)
+            return true;
+        // Encryption off and process up
+        if (h.Value.TryGetProperty("encryption_enabled", out var enc) && enc.ValueKind == JsonValueKind.False)
+            return true;
+        if (h.Value.TryGetProperty("needs_unlock", out var nu) && nu.ValueKind == JsonValueKind.False
+            && h.Value.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True)
+            return true;
+        return false;
+    }
+
+    public static bool IsLockedStatusCode(Exception ex)
+        => ex is HttpRequestException hre && (hre.Message.StartsWith("423 ") || hre.Message.Contains(" 423 "));
+
     public Task<JsonElement> GetIfppAsync(
         string mode = "conservative",
         int? profileId = null,
@@ -1054,7 +1091,20 @@ public sealed class LedgerApiClient : IDisposable
     {
         var body = await r.Content.ReadAsStringAsync(ct);
         if (!r.IsSuccessStatusCode)
+        {
+            if ((int)r.StatusCode == 423)
+            {
+                try
+                {
+                    if (App.MainWindowInstance is MainWindow mw)
+                        mw.ForceLockScreen("Books locked");
+                }
+                catch { /* ignore */ }
+                throw new HttpRequestException(
+                    $"423 {path}: Books are locked. Unlock with your PIN/password or Windows Hello. {body}");
+            }
             throw new HttpRequestException($"{(int)r.StatusCode} {path}: {body}");
+        }
         return JsonSerializer.Deserialize<JsonElement>(body, JsonOpts);
     }
 

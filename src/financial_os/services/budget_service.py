@@ -248,19 +248,30 @@ def budgets_status(
     if pid is None:
         return {"as_of": as_of.isoformat(), "items": [], "reserve_total": "0.00"}
     items = []
-    reserve = ZERO
+    # Honesty: do not stack daily+weekly+monthly for the same category.
+    # Reserve = sum over categories of max(remaining) across periods.
+    best_by_cat: dict[int, Decimal] = {}
     for rule in list_rules(session, pid):
         st = rule_status(session, rule, as_of=as_of)
         if st:
             items.append(st)
             if st.get("active_today"):
-                reserve += _d(st.get("remaining"))
+                cid = int(st.get("category_id") or 0)
+                rem = _d(st.get("remaining"))
+                if rem < ZERO:
+                    rem = ZERO
+                if cid > 0:
+                    prev = best_by_cat.get(cid, ZERO)
+                    if rem > prev:
+                        best_by_cat[cid] = rem
+    reserve = sum(best_by_cat.values(), ZERO)
     settings = _settings(session)
     return {
         "as_of": as_of.isoformat(),
         "profile_id": pid,
         "reserve_enabled": bool(getattr(settings, "budget_reserve_enabled", True)),
         "reserve_total": str(reserve.quantize(Decimal("0.01"))),
+        "reserve_mode": "max_remaining_per_category",
         "items": items,
         "by_period": {
             "daily": [i for i in items if i["period"] == "daily"],

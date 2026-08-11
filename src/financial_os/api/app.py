@@ -613,14 +613,20 @@ class ImportPathIn(BaseModel):
 @app.get("/api/health")
 def health():
     crypto = db_runtime.status()
+    enc = bool(crypto.get("enabled"))
+    unlocked = db_runtime.is_unlocked()
     return {
         "ok": True,
         "version": __version__,
         "app": settings.app_name,
         "product": "HonestSpend",
-        "db_unlocked": db_runtime.is_unlocked(),
-        "needs_unlock": bool(crypto.get("needs_unlock")),
-        "encryption_enabled": bool(crypto.get("enabled")),
+        "data_dir": str(settings.data_dir),
+        "db_path": str(settings.db_path),
+        "db_unlocked": unlocked,
+        # Process-level: encryption on and not unlocked this process
+        "needs_unlock": enc and not unlocked,
+        "encryption_enabled": enc,
+        "books_ready": unlocked or not enc,
     }
 
 
@@ -3670,6 +3676,7 @@ def system_info():
 
     st = db_status()
     paths = data_path_info()
+    crypto = db_runtime.status()
     return {
         "ok": True,
         "version": __version__,
@@ -3679,6 +3686,11 @@ def system_info():
         "port": settings.port,
         "grok_enabled": settings.grok_enabled,
         "plaid_enabled": settings.plaid_enabled,
+        "data_dir": str(settings.data_dir),
+        "db_path": str(settings.db_path),
+        "db_unlocked": db_runtime.is_unlocked(),
+        "encryption_enabled": bool(crypto.get("enabled")),
+        "needs_unlock": bool(crypto.get("enabled")) and not db_runtime.is_unlocked(),
         "data_paths": paths,
         **st,
     }

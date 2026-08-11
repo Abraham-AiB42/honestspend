@@ -22,17 +22,23 @@ public sealed partial class LockPage : Page
         HintText.Text = mode switch
         {
             AppLockService.LockMode.Pin =>
-                "Enter your PIN. This also unlocks your encrypted books.",
+                "Enter your PIN. This unlocks the app and decrypts your books.",
             AppLockService.LockMode.Password =>
-                "Enter your password. This also unlocks your encrypted books.",
+                "Enter your password. This unlocks the app and decrypts your books.",
             AppLockService.LockMode.Platform =>
                 "Use Windows Hello to unlock the app and decrypt books on this device.",
-            _ => "Unlocked.",
+            _ => "Unlock your encrypted books to continue.",
         };
-        SecretBox.Visibility = mode is AppLockService.LockMode.Pin or AppLockService.LockMode.Password
+        SecretBox.Visibility = mode is AppLockService.LockMode.Pin or AppLockService.LockMode.Password or AppLockService.LockMode.None
             ? Visibility.Visible
             : Visibility.Collapsed;
-        UnlockBtn.Visibility = mode is AppLockService.LockMode.Pin or AppLockService.LockMode.Password
+        // If only encryption (edge) show PIN box
+        if (mode == AppLockService.LockMode.None)
+        {
+            HintText.Text = "Books are encrypted. Enter your PIN or password to open them.";
+            UnlockBtn.Content = "Unlock books";
+        }
+        UnlockBtn.Visibility = mode is not AppLockService.LockMode.Platform
             ? Visibility.Visible
             : Visibility.Collapsed;
         HelloBtn.Visibility = mode == AppLockService.LockMode.Platform
@@ -53,12 +59,25 @@ public sealed partial class LockPage : Page
     {
         if (_busy) return;
         ErrorText.Text = "";
-        if (!AppLockService.VerifyPinOrPassword(SecretBox.Password))
+        var secret = SecretBox.Password ?? "";
+        if (AppLockService.Mode is AppLockService.LockMode.Pin or AppLockService.LockMode.Password)
         {
-            ErrorText.Text = "Incorrect PIN or password.";
+            if (!AppLockService.VerifyPinOrPassword(secret))
+            {
+                ErrorText.Text = "Incorrect PIN or password.";
+                return;
+            }
+        }
+        else if (string.IsNullOrEmpty(secret))
+        {
+            ErrorText.Text = "Enter your PIN or password.";
             return;
         }
-        await FinishUnlockedAsync(SecretBox.Password);
+        else
+        {
+            AppLockService.MarkUnlocked();
+        }
+        await FinishUnlockedAsync(secret);
     }
 
     private async void Hello_Click(object sender, RoutedEventArgs e)
@@ -78,29 +97,25 @@ public sealed partial class LockPage : Page
         _busy = true;
         UnlockBtn.IsEnabled = false;
         HelloBtn.IsEnabled = false;
+        ScenarioMsgSafe("Decrypting books…");
         try
         {
-            // Unseal ledger (no-op if encryption not enabled)
             var dbOk = await AppLockService.UnlockDatabaseAsync(secret);
             if (!dbOk)
             {
-                // Engine may still be starting or encryption off
-                try
-                {
-                    using var api = new LedgerApiClient();
-                    await api.EnsureBackendAsync();
-                    var health = await api.HealthAsync();
-                    if (!health)
-                    {
-                        ErrorText.Text = "Could not reach the money engine. Try again.";
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    ErrorText.Text = "Unlock UI ok but database unlock failed: " + ex.Message;
-                    return;
-                }
+                ErrorText.Text =
+                    "Could not decrypt books. Check your PIN/password, or wait for the engine and try again. " +
+                    "The app will not open until books are unlocked.";
+                AppLockService.LockSession();
+                return;
+            }
+            // Fail closed: require books_ready
+            using var api = new LedgerApiClient();
+            if (!await api.BooksReadyAsync())
+            {
+                ErrorText.Text = "Engine is up but books are still locked. Try unlock again.";
+                AppLockService.LockSession();
+                return;
             }
             if (App.MainWindowInstance is MainWindow mw)
                 mw.OnAppUnlocked();
@@ -111,5 +126,10 @@ public sealed partial class LockPage : Page
             UnlockBtn.IsEnabled = true;
             HelloBtn.IsEnabled = true;
         }
+    }
+
+    private void ScenarioMsgSafe(string msg)
+    {
+        try { ErrorText.Text = ""; HintText.Text = msg; } catch { /* ignore */ }
     }
 }

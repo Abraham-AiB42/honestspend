@@ -2,9 +2,20 @@ using Windows.Storage;
 
 namespace HonestSpend_WinUI.Services;
 
-/// <summary>Apply data-folder choice, optional DB copy, restart engine with FOS_DATA_DIR.</summary>
+/// <summary>Apply data-folder choice, optional books-bundle copy, restart engine with FOS_DATA_DIR.</summary>
 public static class StorageLocationService
 {
+    private static readonly string[] BundleNames =
+    {
+        "financial_os.db",
+        "financial_os.db-wal",
+        "financial_os.db-shm",
+        "financial_os.db.sealed",
+        "crypto.json",
+        "license.json",
+        // secrets.json intentionally opt-in / device-local by default
+    };
+
     public static string DefaultLocalPath()
         => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
@@ -29,9 +40,10 @@ public static class StorageLocationService
     }
 
     /// <summary>
-    /// Copy financial_os.db (and sibling essentials) from old data dir to new if needed.
+    /// Copy books bundle (DB, sealed, crypto meta, license) from old data dir to new.
+    /// Does not overwrite existing dest files.
     /// </summary>
-    public static string? CopyBooksIfNeeded(string? fromDir, string toDir)
+    public static string? CopyBooksIfNeeded(string? fromDir, string toDir, bool includeSecrets = false)
     {
         fromDir = string.IsNullOrWhiteSpace(fromDir) ? DefaultLocalPath() : fromDir.Trim();
         toDir = toDir.Trim();
@@ -42,16 +54,28 @@ public static class StorageLocationService
             return null;
 
         Directory.CreateDirectory(toDir);
-        var srcDb = Path.Combine(fromDir, "financial_os.db");
-        var destDb = Path.Combine(toDir, "financial_os.db");
-        if (!File.Exists(srcDb))
-            return "No existing books at previous location — new folder is empty.";
-        if (File.Exists(destDb))
-            return "Destination already has books — left as-is (no overwrite).";
+        var copied = new List<string>();
+        var names = BundleNames.ToList();
+        if (includeSecrets)
+            names.Add("secrets.json");
 
-        File.Copy(srcDb, destDb, overwrite: false);
-        // Optional: secrets stay device-local by design; do not auto-copy secrets.json
-        return $"Copied financial_os.db to {destDb}";
+        foreach (var name in names)
+        {
+            var src = Path.Combine(fromDir, name);
+            var dest = Path.Combine(toDir, name);
+            if (!File.Exists(src)) continue;
+            if (File.Exists(dest))
+            {
+                copied.Add($"{name} (skipped — exists)");
+                continue;
+            }
+            File.Copy(src, dest, overwrite: false);
+            copied.Add(name);
+        }
+
+        if (copied.Count == 0)
+            return "No books files found at previous location — new folder is empty.";
+        return "Copied: " + string.Join(", ", copied);
     }
 
     public static async Task ApplyAndRestartEngineAsync(
@@ -70,6 +94,8 @@ public static class StorageLocationService
 
         if (App.Backend is not null)
         {
+            // Seal first if possible so we don't leave plaintext mid-move
+            try { await AppLockService.SealDatabaseAsync(ct); } catch { /* optional */ }
             var ok = await App.Backend.RestartAsync(ct);
             if (!ok)
                 throw new InvalidOperationException(

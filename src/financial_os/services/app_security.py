@@ -50,9 +50,10 @@ def security_catalog(*, platform: str = "win") -> dict[str, Any]:
         ],
         "capabilities": caps,
         "notes": [
-            "App lock stops casual access to the UI on this device.",
-            "It is not full-disk encryption of your database.",
-            "Each device sets its own lock — PINs do not sync.",
+            "App lock gates the UI on this device.",
+            "PIN/password/Hello also enable AES-256 at-rest sealing of books when encryption is on.",
+            "Forget the secret → sealed books cannot be recovered.",
+            "Windows Hello DEK is device-local; PIN can open the same sealed file on another PC.",
             "Lock secrets never leave this device and are not in SQLite backups.",
         ],
     }

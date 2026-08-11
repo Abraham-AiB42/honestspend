@@ -75,23 +75,53 @@ public sealed partial class MainWindow : Window
         }
         _shellLoading = false;
 
-        // App lock gate — before engine / books UI
+        // App lock / encryption gate — before books UI
         if (AppLockService.NeedsUnlock)
         {
             NavView.IsEnabled = false;
             NavFrame.Navigate(typeof(LockPage));
             return;
         }
-        AppLockService.MarkUnlocked();
 
+        // Encryption may require unlock even if UI lock mode is none (desync / crash recovery)
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var h = await api.GetHealthDetailsAsync();
+            var needs = h is JsonElement he
+                && he.TryGetProperty("needs_unlock", out var nu)
+                && nu.ValueKind == JsonValueKind.True;
+            if (needs)
+            {
+                NavView.IsEnabled = false;
+                NavFrame.Navigate(typeof(LockPage));
+                return;
+            }
+        }
+        catch { /* continue — offline path below */ }
+
+        AppLockService.MarkUnlocked();
         await ContinueAfterUnlockAsync();
     }
 
-    /// <summary>Called from LockPage after successful unlock.</summary>
+    /// <summary>Called from LockPage after successful unlock (books must already be open).</summary>
     public async void OnAppUnlocked()
     {
         NavView.IsEnabled = true;
         await ContinueAfterUnlockAsync();
+    }
+
+    /// <summary>Re-show lock when API returns 423 (books sealed mid-session).</summary>
+    public void ForceLockScreen(string? message = null)
+    {
+        try
+        {
+            AppLockService.LockSession();
+            NavView.IsEnabled = false;
+            NavFrame.Navigate(typeof(LockPage));
+        }
+        catch { /* ignore */ }
     }
 
     private async Task ContinueAfterUnlockAsync()
@@ -99,9 +129,9 @@ public sealed partial class MainWindow : Window
         await LoadShellEntitiesAsync();
         ApplySimpleChrome();
 
-        // Wait for engine so we don't land on empty Home instead of setup
+        // Wait for engine + books ready so we don't land on 423 Home
         JsonElement? ob = null;
-        for (var attempt = 0; attempt < 10; attempt++)
+        for (var attempt = 0; attempt < 12; attempt++)
         {
             try
             {
@@ -112,8 +142,26 @@ public sealed partial class MainWindow : Window
                     await Task.Delay(500);
                     continue;
                 }
+                var h = await api.GetHealthDetailsAsync();
+                if (h is JsonElement he
+                    && he.TryGetProperty("needs_unlock", out var nu)
+                    && nu.ValueKind == JsonValueKind.True)
+                {
+                    ForceLockScreen();
+                    return;
+                }
+                if (!await api.BooksReadyAsync())
+                {
+                    await Task.Delay(400);
+                    continue;
+                }
                 ob = await api.GetOnboardingAsync();
                 break;
+            }
+            catch (Exception ex) when (LedgerApiClient.IsLockedStatusCode(ex))
+            {
+                ForceLockScreen();
+                return;
             }
             catch
             {

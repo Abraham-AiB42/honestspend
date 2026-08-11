@@ -109,18 +109,22 @@ def sealed_present() -> bool:
 
 
 def needs_unlock() -> bool:
-    """True when encryption is on and engine must not open plaintext yet."""
+    """True when encryption is on — boot must never silent-open (even leftover plaintext).
+
+    Crash/kill can leave plaintext on disk; that must still require PIN/DEK so the
+    process recovers a session DEK (and can re-seal on exit).
+    """
     if not encryption_enabled():
         return False
-    if plaintext_present():
-        return False  # session left unsealed
-    return sealed_present()
+    # Sealed-only classic path, or plaintext leftover after failed seal
+    return sealed_present() or plaintext_present()
 
 
 def status() -> dict[str, Any]:
     meta = load_meta() or {}
+    enc = encryption_enabled()
     return {
-        "enabled": encryption_enabled(),
+        "enabled": enc,
         "needs_unlock": needs_unlock(),
         "plaintext_present": plaintext_present(),
         "sealed_present": sealed_present(),
@@ -131,7 +135,7 @@ def status() -> dict[str, Any]:
         "sealed_path": str(sealed_db_path()),
         "meta_path": str(crypto_meta_path()),
         "notes": [
-            "App lock + encryption: sealed file is ciphertext at rest (safe on cloud folders).",
+            "When encryption is on, every process start requires unlock (no silent plaintext boot).",
             "Without your PIN/password (or device DEK for Hello), sealed books cannot be recovered.",
             "Disabling encryption requires unlock first; clearing lock without secret does not wipe seal.",
         ],
@@ -314,6 +318,12 @@ def enable_encryption(
     wrap=password: secret required; DEK wrapped into crypto.json (multi-device with same PIN).
     wrap=client: client holds DEK (Hello); crypto.json has no wrapped_dek.
     """
+    existing = load_meta()
+    if existing and existing.get("enabled"):
+        raise ValueError(
+            "Encryption is already enabled. Unlock and use change-secret, or disable encryption first."
+        )
+
     if not plaintext_present():
         # Create empty file so engine can init after — caller should init_db first
         settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -350,8 +360,10 @@ def enable_encryption(
         "enabled": True,
         "wrap": wrap,
         "mode_hint": mode_hint,
-        "dek_b64": _b64e(dek),  # return once so client can store for Hello / session
     }
+    # Only return raw DEK for client-held wraps (Windows Hello). Password wrap never needs it.
+    if wrap == "client":
+        out["dek_b64"] = _b64e(dek)
     if seal_now:
         out["seal"] = seal_database(dek)
     return out
