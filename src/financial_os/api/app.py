@@ -460,6 +460,11 @@ class ScheduledEndIn(BaseModel):
     reason: str | None = None
 
 
+class MarkPaidIn(BaseModel):
+    create_transaction: bool = True
+    as_of: date | None = None
+
+
 class SettingsIn(BaseModel):
     ifpp_mode: str = "conservative"
     safety_buffer: Decimal = Decimal("1000")
@@ -1798,6 +1803,32 @@ def get_account_cycle(account_id: int, db: Session = Depends(get_db)):
     return _cycle_api_dict(proj, row, db)
 
 
+@app.get("/api/accounts/{account_id}/peak")
+def get_account_peak(
+    account_id: int,
+    lookback_days: int = Query(90, ge=1, le=3660),
+    db: Session = Depends(get_db),
+):
+    """Peak books balance over lookback (and open cycle for credit with close day)."""
+    from financial_os.services.account_peak import peak_balance
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    try:
+        out = peak_balance(db, account_id, lookback_days=lookback_days)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    return {
+        "account_id": account_id,
+        "current": _dec_str(out.get("current")),
+        "peak_lookback": _dec_str(out.get("peak_lookback")),
+        "peak_lookback_date": _iso_date(out.get("peak_lookback_date")),
+        "peak_open_cycle": _dec_str(out.get("peak_open_cycle")),
+        "lookback_days": out.get("lookback_days", lookback_days),
+    }
+
+
 @app.put("/api/accounts/{account_id}/cycle-config")
 def put_account_cycle_config(
     account_id: int,
@@ -2295,6 +2326,30 @@ def end_scheduled(item_id: int, body: ScheduledEndIn | None = None, db: Session 
     db.flush()
     db.refresh(row)
     return _enrich_scheduled(db, row)
+
+
+@app.post("/api/scheduled/{item_id}/mark-paid")
+def mark_scheduled_paid(
+    item_id: int,
+    body: MarkPaidIn | None = None,
+    db: Session = Depends(get_db),
+):
+    """Mark one expense occurrence paid: optional cleared txn + advance next_date."""
+    from financial_os.services.schedule_mark_paid import mark_schedule_paid
+
+    body = body or MarkPaidIn()
+    try:
+        return mark_schedule_paid(
+            db,
+            item_id,
+            as_of=body.as_of,
+            create_transaction=body.create_transaction,
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
 
 
 @app.delete("/api/scheduled/{item_id}")
