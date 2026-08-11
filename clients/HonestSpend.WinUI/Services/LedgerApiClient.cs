@@ -165,6 +165,32 @@ public sealed class LedgerApiClient : IDisposable
         return GetJsonAsync(q, ct);
     }
 
+    /// <summary>
+    /// Optional direct Coming up fetch (Home uses embedded <c>coming_up</c> on simple home).
+    /// </summary>
+    public Task<JsonElement> GetComingUpAsync(
+        string mode = "auto",
+        int calendarDays = 14,
+        int paydayCount = 1,
+        int limit = 8,
+        bool showIncome = true,
+        CancellationToken ct = default)
+    {
+        var sc = AppState.IfppScope;
+        var parts = new List<string>
+        {
+            $"mode={Uri.EscapeDataString(mode)}",
+            $"calendar_days={calendarDays}",
+            $"payday_count={paydayCount}",
+            $"limit={limit}",
+            $"show_income={(showIncome ? "true" : "false")}",
+            $"scope={Uri.EscapeDataString(sc)}",
+        };
+        if (AppState.SelectedProfileId is int pid && sc == "entity")
+            parts.Add($"profile_id={pid}");
+        return GetJsonAsync("api/coming-up?" + string.Join("&", parts), ct);
+    }
+
     public Task<JsonElement> FirstRunAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/onboarding/first-run", body, ct);
 

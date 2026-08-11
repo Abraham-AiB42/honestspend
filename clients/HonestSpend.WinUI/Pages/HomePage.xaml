@@ -23,6 +23,34 @@
                 </StackPanel>
             </Grid>
 
+            <!-- Feedback near top — open-rarely (visible after one-tap actions) -->
+            <InfoBar x:Name="SuccessBar" IsOpen="False" Severity="Success" IsClosable="True" />
+            <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" IsClosable="True" />
+            <InfoBar x:Name="EngineBar" IsOpen="False" Severity="Warning" IsClosable="True"
+                     Title="Engine offline" Message="Start the local money engine (one click).">
+                <InfoBar.ActionButton>
+                    <Button Content="Start engine" Click="StartEngine_Click" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar x:Name="SetupBar" IsOpen="False" Severity="Informational" IsClosable="True"
+                     Title="Almost there" Message="Add checking so we can show Safe to spend.">
+                <InfoBar.ActionButton>
+                    <Button Content="2-minute setup" Click="Setup_Click" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar x:Name="EmptyBillBar" IsOpen="False" Severity="Informational" IsClosable="True"
+                     Title="Tip" Message="Add rent or a paycheck so Safe to spend knows what’s coming.">
+                <InfoBar.ActionButton>
+                    <Button Content="Add bill" Click="EmptyBill_Click" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+            <InfoBar x:Name="BankTipBar" IsOpen="False" Severity="Informational" IsClosable="True"
+                     Title="Less typing later" Message="Link a bank or drop a CSV when you’re ready — optional.">
+                <InfoBar.ActionButton>
+                    <Button Content="Link bank" Click="BankTip_Click" />
+                </InfoBar.ActionButton>
+            </InfoBar>
+
             <!-- SIMPLE: Safe to spend + do this next -->
             <StackPanel x:Name="SimplePanel" Spacing="14">
                 <!-- License soft gate (Store / commercial only) -->
@@ -45,24 +73,40 @@
                         BorderThickness="1" CornerRadius="16" Padding="20">
                     <StackPanel Spacing="6">
                         <TextBlock Opacity="0.7" FontSize="13" Text="Safe to spend" />
-                        <TextBlock Opacity="0.55" FontSize="12" TextWrapping="Wrap"
-                            Text="After bills, buffer, tax vault, and remaining budgets (reserved)" />
                         <TextBlock x:Name="SafeText" FontSize="48" FontWeight="SemiBold"
                                    Margin="0,4,0,0" Text="—" />
                         <TextBlock x:Name="FloatWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
                                    Visibility="Collapsed" />
                         <TextBlock x:Name="CardPayWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
                                    Visibility="Collapsed" />
-                        <TextBlock x:Name="WhyOneLiner" Opacity="0.7" FontSize="13" TextWrapping="Wrap" />
-                        <TextBlock x:Name="BudgetReserveLine" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                         <TextBlock x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />
                         <TextBlock x:Name="RiskLine" Opacity="0.8" TextWrapping="Wrap" Margin="0,4,0,0" />
                         <TextBlock x:Name="PendingLine" Opacity="0.75" TextWrapping="Wrap" Foreground="Orange" />
                         <TextBlock x:Name="WhoLine" Opacity="0.55" FontSize="12" Margin="0,4,0,0" />
                         <Expander x:Name="WhyExpander" Header="Why this number?" Margin="0,8,0,0"
                                   HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
-                            <ItemsControl x:Name="WhyList" Margin="0,8,0,0" />
+                            <StackPanel Spacing="6">
+                                <TextBlock x:Name="WhyOneLiner" Opacity="0.7" FontSize="13" TextWrapping="Wrap" />
+                                <TextBlock x:Name="BudgetReserveLine" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                                <TextBlock Opacity="0.55" FontSize="12" TextWrapping="Wrap"
+                                    Text="After bills, buffer, tax vault, and remaining budgets" />
+                                <ItemsControl x:Name="WhyList" Margin="0,4,0,0" />
+                            </StackPanel>
                         </Expander>
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="ComingUpCard"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1" CornerRadius="12" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Coming up" FontWeight="SemiBold" />
+                        <TextBlock x:Name="ComingUpSubtitle" Opacity="0.7" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="ComingUpList" />
+                        <TextBlock x:Name="ComingUpEmpty" Opacity="0.65" TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
+                        <TextBlock x:Name="ComingUpTotals" Opacity="0.7" FontSize="12" />
                     </StackPanel>
                 </Border>
 
@@ -243,39 +287,13 @@
                     <Button Content="Done for now" Click="Done_Click" />
                 </StackPanel>
                 <TextBlock x:Name="DoneText" Opacity="0.75" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
+                <StackPanel x:Name="PowerToolsPanel" Orientation="Horizontal" Spacing="8">
                     <Button Content="Rescue options" Click="Rescue_Click" />
-                    <Button Content="Fiscal brief" Click="Brief_Click" />
+                    <Button Content="Money brief" Click="Brief_Click" />
                 </StackPanel>
                 <TextBlock x:Name="BriefText" TextWrapping="Wrap" Opacity="0.9" IsTextSelectionEnabled="True" />
                 <ItemsControl x:Name="RescueList" />
             </StackPanel>
-
-            <InfoBar x:Name="ErrorBar" IsOpen="False" Severity="Error" IsClosable="True" />
-            <InfoBar x:Name="SetupBar" IsOpen="False" Severity="Informational" IsClosable="True"
-                     Title="Almost there" Message="Add checking so we can show Safe to spend.">
-                <InfoBar.ActionButton>
-                    <Button Content="2-minute setup" Click="Setup_Click" />
-                </InfoBar.ActionButton>
-            </InfoBar>
-            <InfoBar x:Name="EmptyBillBar" IsOpen="False" Severity="Informational" IsClosable="True"
-                     Title="Tip" Message="Add rent or a paycheck so Safe to spend knows what’s coming.">
-                <InfoBar.ActionButton>
-                    <Button Content="Add bill" Click="EmptyBill_Click" />
-                </InfoBar.ActionButton>
-            </InfoBar>
-            <InfoBar x:Name="BankTipBar" IsOpen="False" Severity="Informational" IsClosable="True"
-                     Title="Less typing later" Message="Link a bank or drop a CSV when you’re ready — optional.">
-                <InfoBar.ActionButton>
-                    <Button Content="Link bank" Click="BankTip_Click" />
-                </InfoBar.ActionButton>
-            </InfoBar>
-            <InfoBar x:Name="EngineBar" IsOpen="False" Severity="Warning" IsClosable="True"
-                     Title="Engine offline" Message="Start the local money engine (one click).">
-                <InfoBar.ActionButton>
-                    <Button Content="Start engine" Click="StartEngine_Click" />
-                </InfoBar.ActionButton>
-            </InfoBar>
         </StackPanel>
     </ScrollViewer>
 </Page>

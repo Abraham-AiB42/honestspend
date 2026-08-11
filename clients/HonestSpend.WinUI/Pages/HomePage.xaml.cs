@@ -82,6 +82,7 @@ public sealed partial class HomePage : Page
             ApplyFloatWhisper(_home);
             await ApplyCardPayWhisperAsync(api);
             ApplyWhyThisNumber(_home);
+            ApplyComingUp(_home);
             ApplyBudgetSummary(_home);
             ApplyBudgetSeedHint(_home);
             var status = JsonUi.Str(_home, "status", "safe");
@@ -799,6 +800,108 @@ public sealed partial class HomePage : Page
             WhyOneLiner.Text = "";
             WhyList.ItemsSource = null;
         }
+    }
+
+    /// <summary>
+    /// Coming up strip from home/simple <c>coming_up</c> (no extra round-trip).
+    /// Rows: weekday · name · money; inflows prefixed with +.
+    /// </summary>
+    private void ApplyComingUp(JsonElement home)
+    {
+        try
+        {
+            if (!home.TryGetProperty("coming_up", out var cu) || cu.ValueKind != JsonValueKind.Object)
+            {
+                ComingUpCard.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            ComingUpCard.Visibility = Visibility.Visible;
+
+            var subtitle = "";
+            if (cu.TryGetProperty("window", out var win) && win.ValueKind == JsonValueKind.Object)
+                subtitle = JsonUi.Str(win, "label", "");
+            if (string.IsNullOrEmpty(subtitle) || subtitle == "—")
+                subtitle = "";
+            ComingUpSubtitle.Text = subtitle;
+            ComingUpSubtitle.Visibility = string.IsNullOrEmpty(subtitle)
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+
+            var lines = new List<string>();
+            if (cu.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var it in items.EnumerateArray())
+                {
+                    var weekday = JsonUi.Str(it, "weekday", "");
+                    var name = JsonUi.Str(it, "name", "");
+                    var direction = JsonUi.Str(it, "direction", "out");
+                    var money = FormatComingUpMoney(it, direction);
+                    if (string.IsNullOrEmpty(weekday) || weekday == "—")
+                        weekday = "?";
+                    if (string.IsNullOrEmpty(name) || name == "—")
+                        name = "Item";
+                    lines.Add($"{weekday} · {name} · {money}");
+                }
+            }
+
+            if (lines.Count == 0)
+            {
+                ComingUpList.ItemsSource = null;
+                ComingUpList.Visibility = Visibility.Collapsed;
+                var hint = JsonUi.Str(cu, "empty_hint", "");
+                if (string.IsNullOrEmpty(hint) || hint == "—")
+                    hint = "Nothing scheduled in this window — add a bill or paycheck in Add";
+                ComingUpEmpty.Text = hint;
+                ComingUpEmpty.Visibility = Visibility.Visible;
+                ComingUpTotals.Text = "";
+                ComingUpTotals.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                ComingUpList.ItemsSource = lines;
+                ComingUpList.Visibility = Visibility.Visible;
+                ComingUpEmpty.Text = "";
+                ComingUpEmpty.Visibility = Visibility.Collapsed;
+
+                var outAbs = ParseMoneyAbs(cu, "outflow_total");
+                var inAbs = ParseMoneyAbs(cu, "inflow_total");
+                var parts = new List<string>();
+                if (outAbs > 0)
+                    parts.Add($"Out {outAbs.ToString("C", CultureInfo.CurrentCulture)}");
+                if (inAbs > 0)
+                    parts.Add($"In +{inAbs.ToString("C", CultureInfo.CurrentCulture)}");
+                ComingUpTotals.Text = parts.Count > 0 ? string.Join(" · ", parts) : "";
+                ComingUpTotals.Visibility = string.IsNullOrEmpty(ComingUpTotals.Text)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+            }
+        }
+        catch
+        {
+            ComingUpCard.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private static string FormatComingUpMoney(JsonElement it, string direction)
+    {
+        var s = JsonUi.Str(it, "amount", "");
+        if (!decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            return JsonUi.Money(it, "amount");
+        var abs = Math.Abs(d);
+        var formatted = abs.ToString("C", CultureInfo.CurrentCulture);
+        // Inflows: +$; outflows: absolute currency (product copy, not signed)
+        if (direction == "in" || d > 0)
+            return "+" + formatted;
+        return formatted;
+    }
+
+    private static decimal ParseMoneyAbs(JsonElement el, string prop)
+    {
+        var s = JsonUi.Str(el, prop, "0");
+        if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+            return Math.Abs(d);
+        return 0;
     }
 
     private void ApplyBudgetSummary(JsonElement home)
