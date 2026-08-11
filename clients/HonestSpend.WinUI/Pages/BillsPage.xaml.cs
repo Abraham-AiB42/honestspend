@@ -251,10 +251,7 @@ public sealed partial class BillsPage : Page
                 ["cash_account_id"] = cashId,
                 ["series_label"] = name,
             });
-            var pkg = JsonUi.Str(res, "package_id", "");
-            PayrollMsgText.Text =
-                $"Payroll day created · net #{JsonUi.Int(res, "net_id")} · tax #{JsonUi.Int(res, "tax_id")}" +
-                (string.IsNullOrEmpty(pkg) || pkg == "—" ? "" : $" · package {pkg[..Math.Min(8, pkg.Length)]}…");
+            PayrollMsgText.Text = $"Created payroll day · net ${net:0.00} + tax ${tax:0.00}";
             await LoadAsync();
         }
         catch (Exception ex)

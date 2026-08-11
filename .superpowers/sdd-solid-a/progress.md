@@ -36,3 +36,7 @@ Task 2.4: complete (316abc0)
 Phase 2 Simple complete
 
 Task 3.1: complete (46e814b, Credit progressive disclosure; WinUI Debug x64 green)
+
+Task 3.1: complete (f27ef1f)
+
+Task 3.2: complete (13744a0, plain power copy; payroll success without schedule ids; WinUI Debug x64 green)
