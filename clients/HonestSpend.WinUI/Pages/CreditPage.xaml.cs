@@ -352,7 +352,7 @@ public sealed partial class CreditPage : Page
                         $"{name} · close {JsonUi.Str(it, "statement_close_day", "?")} · " +
                         $"due {JsonUi.Str(it, "payment_due_day", "?")} · {policy} · " +
                         $"from {fund} · statement {JsonUi.Money(it, "statement_balance")} · " +
-                        $"next {JsonUi.Money(it, "next_payment")} on {JsonUi.Str(it, "next_due")}");
+                        $"next {JsonUi.Money(it, "next_payment")} on {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(it, "next_due"))}");
                     CycleCardBox.Items.Add(new ComboBoxItem { Content = name, Tag = id });
                 }
             }
@@ -570,10 +570,10 @@ public sealed partial class CreditPage : Page
     {
         CycleProjectedText.Text = $"Projected statement: {JsonUi.Money(c, "statement_balance")}";
         CycleNextPaymentText.Text =
-            $"Next payment: {JsonUi.Money(c, "next_payment")} on {JsonUi.Str(c, "next_due")}";
+            $"Next payment: {JsonUi.Money(c, "next_payment")} on {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(c, "next_due"))}";
         var timing = JsonUi.Str(c, "payment_timing", "on_due");
         CycleDatesText.Text =
-            $"Last close {JsonUi.Str(c, "last_close")} · next close {JsonUi.Str(c, "next_close")} · " +
+            $"Last close {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(c, "last_close"))} · next close {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(c, "next_close"))} · " +
             $"{UiCopy.AutopayPolicy(JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy")))} · " +
             $"{UiCopy.PaymentTiming(timing)}";
 
@@ -669,7 +669,7 @@ public sealed partial class CreditPage : Page
                             $"monthly {JsonUi.Money(ln, "monthly_payment")} · {status}" +
                             (string.IsNullOrEmpty(JsonUi.Str(ln, "end_date", "")) || JsonUi.Str(ln, "end_date") == "—"
                                 ? ""
-                                : $" · ends {JsonUi.Str(ln, "end_date")}"));
+                                : $" · ends {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(ln, "end_date"))}"));
                         var lineId = ln.TryGetProperty("id", out var idEl) && idEl.TryGetInt32(out var lid) ? lid : 0;
                         if (lineId > 0)
                         {
@@ -824,7 +824,7 @@ public sealed partial class CreditPage : Page
             var res = await api.PutAccountCycleConfigAsync(id, body);
             ApplyCycleProjection(res);
             CycleMsg.Text =
-                $"Saved · next {JsonUi.Money(res, "next_payment")} on {JsonUi.Str(res, "next_due")} · " +
+                $"Saved · next {JsonUi.Money(res, "next_payment")} on {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(res, "next_due"))} · " +
                 $"settings locked as yours";
             await LoadCycleSectionAsync(api);
         }
@@ -908,7 +908,7 @@ public sealed partial class CreditPage : Page
             ApplyCycleProjection(res);
             CycleMsg.Text =
                 $"Recomputed · statement {JsonUi.Money(res, "statement_balance")} · " +
-                $"next {JsonUi.Money(res, "next_payment")} on {JsonUi.Str(res, "next_due")}";
+                $"next {JsonUi.Money(res, "next_payment")} on {PlainDateUi.FormatPlainWeekdayDate(JsonUi.Str(res, "next_due"))}";
             await LoadCycleSectionAsync(api);
         }
         catch (Exception ex)

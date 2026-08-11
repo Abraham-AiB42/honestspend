@@ -4035,6 +4035,10 @@ def import_xlsx_path(body: ImportPathIn, db: Session = Depends(get_db)):
         "date_from": result.date_from.isoformat() if result.date_from else None,
         "date_to": result.date_to.isoformat() if result.date_to else None,
         "dry_run": body.dry_run,
+        "schedules_advanced": getattr(result, "schedules_advanced", 0) or 0,
+        "schedules_advanced_names": getattr(result, "schedules_advanced_names", None) or [],
+        "schedule_advance_hint": getattr(result, "schedule_advance_hint", None),
+        "schedule_advance_error": getattr(result, "schedule_advance_error", None),
     }
 
 
@@ -4074,6 +4078,10 @@ async def import_xlsx_upload(
         "date_from": result.date_from.isoformat() if result.date_from else None,
         "date_to": result.date_to.isoformat() if result.date_to else None,
         "dry_run": dry_run,
+        "schedules_advanced": getattr(result, "schedules_advanced", 0) or 0,
+        "schedules_advanced_names": getattr(result, "schedules_advanced_names", None) or [],
+        "schedule_advance_hint": getattr(result, "schedule_advance_hint", None),
+        "schedule_advance_error": getattr(result, "schedule_advance_error", None),
     }
 
 

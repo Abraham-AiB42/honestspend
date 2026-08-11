@@ -151,18 +151,55 @@ public sealed partial class IntermixPage : Page
             if (ToBox.SelectedItem is not ComboBoxItem t || t.Tag is not int toId)
                 throw new InvalidOperationException("Pick to account.");
 
-            var body = new
+            var amount = double.IsNaN(AmtBox.Value) ? 0m : (decimal)AmtBox.Value;
+            var memo = string.IsNullOrWhiteSpace(MemoBox.Text) ? null : MemoBox.Text.Trim();
+
+            object Body(bool confirmUnsafe) => new
             {
                 kind,
-                amount = double.IsNaN(AmtBox.Value) ? 0m : (decimal)AmtBox.Value,
+                amount,
                 from_account_id = fromId,
                 to_account_id = toId,
-                memo = string.IsNullOrWhiteSpace(MemoBox.Text) ? null : MemoBox.Text.Trim(),
+                memo,
+                confirm_unsafe = confirmUnsafe,
             };
 
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var res = await api.IntermixAsync(body);
+            JsonElement res;
+            try
+            {
+                res = await api.IntermixAsync(Body(false));
+            }
+            catch (Exception ex) when (NeverNegUi.TryParseWouldGoNegative(ex, out var confirmRequired, out var engMsg))
+            {
+                var friendly = NeverNegUi.FriendlyMessage(engMsg);
+                if (!confirmRequired)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                var dlg = new ContentDialog
+                {
+                    Title = "Checking would go negative",
+                    Content = "This would make checking negative. Move money anyway?",
+                    PrimaryButtonText = "Yes",
+                    CloseButtonText = "No",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = XamlRoot,
+                };
+                if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                res = await api.IntermixAsync(Body(true));
+            }
+
             ResultText.Text =
                 $"{JsonUi.Str(res, "label")}: {JsonUi.Money(res, "amount")}\n" +
                 $"{JsonUi.Str(res, "guidance")}";

@@ -222,7 +222,7 @@ public sealed partial class LedgerPage : Page
             var date = DateBox.Date?.Date ?? DateTime.Today;
             int? catId = CatBox.SelectedItem is CatOpt co ? co.Id : null;
 
-            var body = new Dictionary<string, object?>
+            Dictionary<string, object?> Body(bool confirmUnsafe) => new()
             {
                 ["profile_id"] = profileId,
                 ["account_id"] = accountId,
@@ -232,11 +232,44 @@ public sealed partial class LedgerPage : Page
                 ["category_id"] = catId,
                 ["status"] = "cleared",
                 ["is_transfer"] = false,
+                ["confirm_unsafe"] = confirmUnsafe,
             };
 
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            await api.CreateTransactionAsync(body);
+            try
+            {
+                await api.CreateTransactionAsync(Body(false));
+            }
+            catch (Exception ex) when (NeverNegUi.TryParseWouldGoNegative(ex, out var confirmRequired, out var engMsg))
+            {
+                var friendly = NeverNegUi.FriendlyMessage(engMsg);
+                if (!confirmRequired)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                var dlg = new ContentDialog
+                {
+                    Title = "Checking would go negative",
+                    Content = "This would make checking negative. Add transaction anyway?",
+                    PrimaryButtonText = "Yes",
+                    CloseButtonText = "No",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = XamlRoot,
+                };
+                if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    ErrorBar.Message = friendly;
+                    ErrorBar.IsOpen = true;
+                    return;
+                }
+
+                await api.CreateTransactionAsync(Body(true));
+            }
+
             MsgText.Text = "Transaction added.";
             PayeeBox.Text = "";
             await LoadTxnsAsync();

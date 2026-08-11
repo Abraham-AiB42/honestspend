@@ -38,6 +38,10 @@ class ImportResult:
     errors: list[str] = field(default_factory=list)
     date_from: date | None = None
     date_to: date | None = None
+    schedules_advanced: int = 0
+    schedules_advanced_names: list[str] = field(default_factory=list)
+    schedule_advance_hint: str | None = None
+    schedule_advance_error: str | None = None
 
 
 def _norm_header(val: Any) -> str:
@@ -252,5 +256,25 @@ def import_budget_xlsx(
 
     if not dry_run:
         session.flush()
+        # Honesty: imported rows may match bills already paid — advance schedules (high confidence)
+        if result.transactions_created > 0 and acct is not None:
+            try:
+                from financial_os.services.schedule_mark_paid import advance_schedules_after_import
+
+                adv = advance_schedules_after_import(
+                    session,
+                    account_id=acct.id,
+                    profile_id=profile.id,
+                    auto_apply=True,
+                )
+                result.schedules_advanced = int(adv.get("advanced_count") or 0)
+                result.schedules_advanced_names = [
+                    str(x.get("name") or "") for x in (adv.get("advanced") or []) if x.get("name")
+                ]
+                result.schedule_advance_hint = adv.get("hint")
+            except Exception as e:
+                # Import still succeeded; surface advance failure without failing the import
+                result.schedules_advanced = 0
+                result.schedule_advance_error = str(e)[:300]
     wb.close()
     return result
