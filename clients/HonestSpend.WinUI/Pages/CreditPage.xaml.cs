@@ -49,7 +49,6 @@ public sealed partial class CreditPage : Page
 
             await LoadHistoryFormAsync(api);
             await LoadCycleSectionAsync(api);
-            await LoadAutopayAsync(api);
 
             var health = await api.GetCreditHealthAsync();
             ScoreText.Text = JsonUi.Str(health, "score");
@@ -828,7 +827,6 @@ public sealed partial class CreditPage : Page
                 $"Saved · next {JsonUi.Money(res, "next_payment")} on {JsonUi.Str(res, "next_due")} · " +
                 $"settings locked as yours";
             await LoadCycleSectionAsync(api);
-            await LoadAutopayAsync(api);
         }
         catch (Exception ex)
         {
@@ -1067,63 +1065,5 @@ public sealed partial class CreditPage : Page
         if (box.Items.Count > 0) box.SelectedIndex = 0;
     }
 
-    private async Task LoadAutopayAsync(LedgerApiClient api)
-    {
-        try
-        {
-            var ap = await api.GetAutopayAsync();
-            var lines = new List<string>();
-            AutopayCardBox.Items.Clear();
-            if (ap.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var it in arr.EnumerateArray())
-                {
-                    var id = it.GetProperty("account_id").GetInt32();
-                    var name = JsonUi.Str(it, "name");
-                    var policy = UiCopy.AutopayPolicy(JsonUi.Str(it, "policy"));
-                    lines.Add(
-                        $"{name} · {policy} · about ${JsonUi.Str(it, "suggested_amount")}/mo · bal ${JsonUi.Str(it, "balance")}");
-                    AutopayCardBox.Items.Add(new ComboBoxItem
-                    {
-                        Content = $"{name} (due day {JsonUi.Str(it, "payment_due_day", "?")})",
-                        Tag = id,
-                    });
-                }
-            }
-            if (AutopayCardBox.Items.Count > 0) AutopayCardBox.SelectedIndex = 0;
-            AutopayList.ItemsSource = lines.Count > 0
-                ? lines
-                : new List<string> { "No credit cards yet — Add → Credit card from Home." };
-        }
-        catch
-        {
-            AutopayList.ItemsSource = new List<string> { "Autopay API unavailable." };
-        }
-    }
-
-    private async void Autopay_Click(object sender, RoutedEventArgs e)
-    {
-        ErrorBar.IsOpen = false;
-        try
-        {
-            if (AutopayCardBox.SelectedItem is not ComboBoxItem { Tag: int id })
-                throw new InvalidOperationException("Pick a card by name.");
-            var policy = "none";
-            if (AutopayPolicyBox.SelectedItem is ComboBoxItem ci && ci.Tag is string p)
-                policy = p;
-            using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
-            var res = await api.SetAutopayAsync(id, policy);
-            AutopayMsg.Text =
-                $"{JsonUi.Str(res, "name")} → {UiCopy.AutopayPolicy(JsonUi.Str(res, "policy"))} · " +
-                $"about ${JsonUi.Str(res, "suggested_amount")}/mo";
-            await LoadAutopayAsync(api);
-            await LoadCycleSectionAsync(api);
-        }
-        catch (Exception ex)
-        {
-            ErrorBar.Message = ex.Message;
-            ErrorBar.IsOpen = true;
-        }
-    }
 }
+
