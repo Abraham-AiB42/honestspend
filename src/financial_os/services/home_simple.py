@@ -252,7 +252,10 @@ def build_home_simple(
     ritual = _enrich_ritual(ritual, books=books, fees=fees)
 
     from financial_os.services.coming_up import build_coming_up
-    from financial_os.services.cash_runway import build_safe_until_window
+    from financial_os.services.cash_runway import (
+        build_safe_until_window,
+        runway_starting_cash,
+    )
 
     # Same profile/scope resolution as Home (entity default via ifpp)
     coming_up = build_coming_up(
@@ -261,15 +264,23 @@ def build_home_simple(
         profile_id=pid,
         scope=sc,
     )
-    # Soft line: post-reserve cash base (same as STS), minus Coming up outflows,
-    # capped at Safe to spend so soft never exceeds the primary Home number.
+    # Soft until (single-count window outflows):
+    # - Start from runway cash (buffer/tax only — no IFPP schedule effects).
+    # - Reserve budgets like STS (soft_start = runway_start − reserve).
+    # - Subtract Coming up outflows once; cap at STS.
+    # Starting from STS (ifpp.cash_spendable − reserve) double-counts window
+    # bills already reserved in IFPP min_running / cash_spendable.
+    runway_start, _, _, _ = runway_starting_cash(
+        session, profile_id=pid, scope=sc
+    )
+    soft_start = max(ZERO, runway_start - reserve)
     safe_until_window = build_safe_until_window(
         session,
         as_of=as_of,
         profile_id=pid,
         scope=sc,
         coming_up=coming_up,
-        starting_cash=cash,
+        starting_cash=soft_start,
         cap_at=cash,
     )
 
@@ -298,7 +309,7 @@ def build_home_simple(
         "cash_runway_hint": (
             f"First tight cash day: {ifpp.next_red_day.isoformat()}"
             if ifpp.next_red_day
-            else "No red cash day in the runway horizon"
+            else "No near-term cash crunch"
         ),
         "coming_up": coming_up,
         "safe_until_window": safe_until_window,

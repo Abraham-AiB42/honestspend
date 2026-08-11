@@ -150,13 +150,17 @@ def test_soft_until_starting_cash_override(tmp_path: Path, monkeypatch):
     s.close()
 
 
-def test_home_soft_uses_post_reserve_not_runway_only(tmp_path: Path, monkeypatch):
-    """Home soft starts from post-budget-reserve cash (STS), not runway-only start.
+def test_home_soft_single_counts_window_outflows(tmp_path: Path, monkeypatch):
+    """Home soft starts from runway − budgets (pre-schedule), not STS.
 
-    Budget reserve makes STS < runway start; with outflow > 0, soft < STS.
+    STS (ifpp.cash_spendable − reserve) already reserved window bills. Using
+    STS as start then subtracting Coming up outflows double-counts. Correct:
+    soft_start = max(0, runway_start − reserve); soft = max(0, soft_start − outflows);
+    cap at STS.
     """
     from financial_os.db import Category
     from financial_os.services.budget_service import create_rule
+    from financial_os.services.cash_runway import runway_starting_cash
 
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -184,7 +188,7 @@ def test_home_soft_uses_post_reserve_not_runway_only(tmp_path: Path, monkeypatch
             active=True,
         )
     )
-    # Budget envelope → reserve > 0 so STS (post-reserve) < runway start
+    # Budget envelope → reserve > 0 so soft_start / STS both net budgets
     cat = (
         s.query(Category)
         .filter(Category.profile_id == p.id)
@@ -209,10 +213,67 @@ def test_home_soft_uses_post_reserve_not_runway_only(tmp_path: Path, monkeypatch
     soft_start = Decimal(home["safe_until_window"]["starting_cash"])
     outflows = Decimal(home["safe_until_window"]["outflows"])
 
-    assert reserve > Decimal("0"), "need budget reserve so post-reserve < runway base"
-    assert soft_start == sts, "soft starting_cash must be post-reserve (STS cash)"
+    runway_start, _, _, _ = runway_starting_cash(s, profile_id=p.id)
+    expected_start = max(Decimal("0"), runway_start - reserve)
+    expected_raw = max(Decimal("0"), expected_start - outflows)
+    expected_soft = min(sts, expected_raw)
+
+    assert reserve > Decimal("0"), "need budget reserve for this scenario"
     assert outflows > Decimal("0")
-    assert soft_amt == max(Decimal("0"), soft_start - outflows)
-    assert soft_amt < sts  # soft strictly below STS when outflow > 0
+    assert soft_start == expected_start.quantize(Decimal("0.01"))
+    # Pre-schedule base, not post-IFPP STS (would double-count if equal with outflows)
+    assert soft_start == (runway_start - reserve).quantize(Decimal("0.01"))
+    assert soft_amt == expected_soft.quantize(Decimal("0.01"))
     assert soft_amt <= sts
+    # Must not understate via STS − outflows (double-subtract)
+    double_count = max(Decimal("0"), sts - outflows)
+    assert soft_amt >= double_count
+    s.close()
+
+
+def test_home_soft_not_sts_minus_bills_double_count(tmp_path: Path, monkeypatch):
+    """With window bills already in IFPP, soft must not be STS − outflows."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    cash_acct = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("2000"),
+        is_cash_for_ifpp=True,
+        safety_buffer=Decimal("0"),
+    )
+    s.add(cash_acct)
+    s.flush()
+    s.add(
+        ScheduledItem(
+            profile_id=p.id,
+            account_id=cash_acct.id,
+            name="Utilities",
+            amount=Decimal("-300"),
+            next_date=date(2026, 3, 4),
+            cadence="monthly",
+            certainty="fixed",
+            kind="expense",
+            active=True,
+        )
+    )
+    s.commit()
+
+    home = build_home_simple(s, as_of=as_of, profile_id=p.id)
+    sts = Decimal(home["safe_to_spend"])
+    soft_amt = Decimal(home["safe_until_window"]["amount"])
+    soft_start = Decimal(home["safe_until_window"]["starting_cash"])
+    outflows = Decimal(home["safe_until_window"]["outflows"])
+
+    assert outflows == Decimal("300.00")
+    # Pre-schedule start ≈ books cash (buffer 0)
+    assert soft_start == Decimal("2000.00")
+    # Single-count residual after window (capped at STS)
+    assert soft_amt == Decimal("1700.00") or soft_amt == sts
+    assert soft_amt == min(sts, Decimal("1700.00"))
+    # Old bug: soft = STS − outflows understated by another $300
+    assert soft_amt != max(Decimal("0"), sts - outflows) or outflows == Decimal("0")
+    assert soft_amt > max(Decimal("0"), sts - outflows)
     s.close()

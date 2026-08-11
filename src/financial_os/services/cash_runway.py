@@ -124,12 +124,14 @@ def build_safe_until_window(
 ) -> dict[str, Any]:
     """Soft cash left after window outflows (does not replace safe_to_spend).
 
-    Default start is runway cash (after buffer/tax vault). When ``starting_cash``
-    is set (Home post-budget-reserve Safe to spend), that value is the base so
-    soft can sit below STS when Coming up still has outflows.
+    Default start is runway cash (after buffer/tax vault, **no** schedule
+    effects). Home should pass ``starting_cash`` = max(0, runway_start −
+    budget_reserve) so budgets match STS without using IFPP min_running as the
+    base (that would double-count Coming up bills already in cash_spendable).
 
-    When ``cap_at`` is set (typically Home Safe to spend after budgets), soft
-    amount never exceeds that primary number — one cash spine for Simple Home.
+    Formula: soft = max(0, start − window outflows), then if ``cap_at`` is set
+    (typically Home Safe to spend / STS), amount never exceeds that primary
+    number — one cash spine for Simple Home.
     """
     as_of = as_of or date.today()
     if coming_up is None:
