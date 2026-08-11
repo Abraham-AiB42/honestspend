@@ -2,20 +2,25 @@
 
 Freeware · local-first · Python fiscal engine · **WinUI** (Windows primary) · **Glance** (Mac/Linux/phone browser).
 
-## Recommended layout
+## Recommended layout (self-contained — no system Python)
 
 ```
 C:\HonestSpend\
   HonestSpend.WinUI.exe      ← native UI
   … (WinAppSDK runtime files)
-  engine\                   ← Python package + .venv
-    pyproject.toml
+  engine\                    ← shipped with the app
+    python\python.exe        ← embeddable CPython (private; not on PATH)
     src\financial_os\
-    .venv\
+    pyproject.toml
+  engine-portable.zip        ← Store first-run extract source
   README-INSTALL.txt
 ```
 
-The app looks for `engine\` next to the EXE automatically (`BackendHost`).
+**End users do not install Python.** The package ships a private embeddable runtime under `engine\python\`.  
+Developers still use a normal `.venv` for day-to-day work (`pip install -e ".[dev]"`).
+
+The app finds `engine\` next to the EXE, or extracts `engine-portable.zip` to  
+`%LocalAppData%\HonestSpend\engine\` (`BackendHost` + `EngineBootstrap`).
 
 Data defaults to:
 

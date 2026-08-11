@@ -64,22 +64,36 @@ Listing copy: **[STORE_LISTING.md](./STORE_LISTING.md)** · Privacy: **[PRIVACY.
 6. Privacy policy URL → host PRIVACY.md publicly.  
 7. Screenshots + listing from STORE_LISTING.md.  
 
-## Engine strategy (hybrid app) — implemented
+## Engine strategy (self-contained — users do **not** need Python)
 
-The UI spawns a local Python engine (`BackendHost` + `EngineBootstrap`).
+The UI is WinUI; the fiscal engine is Python. **End users never install Python.**
+
+### What ships
+
+`prepare-engine-bundle.ps1` builds a **relocatable** tree:
+
+| Piece | Role |
+|-------|------|
+| `engine\python\` | Official **CPython embeddable** (x64) + pip + all wheels |
+| `engine\src\` + installed package | HonestSpend code in `site-packages` |
+| `dist\engine-portable.zip` | Same tree, zipped for Store first-run |
+
+A developer machine needs Python **only to build** the bundle (download embeddable + `pip install`).  
+A customer PC only needs the WinUI EXE + that zip.
 
 ### Default Store path (automatic)
 
-1. `package-msix.ps1` builds **engine-portable.zip** (via `prepare-engine-bundle.ps1`) and includes it as package content.  
-2. On first `EnsureRunning`, **EngineBootstrap** extracts the zip to  
+1. `package-msix.ps1` runs the bundle script and embeds **engine-portable.zip**.  
+2. On first `EnsureRunning`, **EngineBootstrap** extracts to  
    **`%LocalAppData%\HonestSpend\engine\`**.  
-3. Settings → **Install / repair engine** re-runs extract if needed.  
+3. `BackendHost` starts `engine\python\python.exe -m financial_os.cli serve` (not system `python`).  
+4. Settings → **Install / repair engine** re-extracts if needed.  
 
-Still requires **runFullTrust** to execute `python.exe` from that folder.
+Still requires **runFullTrust** to spawn that private `python.exe` and write under LocalAppData / `.financial-os`.
 
 ### Unpackaged GitHub zip
 
-`package-release.ps1` keeps `engine\` next to the EXE (and also writes `engine-portable.zip`).
+`package-release.ps1` keeps `engine\` next to the EXE (and writes `engine-portable.zip`).
 
 ## Identity placeholders
 

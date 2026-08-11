@@ -38,10 +38,31 @@ Do these in order. Product type must be **MSIX** (not EXE/MSI).
 - [ ] **Properties:** category Finance; privacy URL → hosted [PRIVACY.md](./PRIVACY.md)  
 - [ ] **Age ratings:** complete questionnaire  
 - [ ] **Store listing:** paste from [STORE_LISTING.md](./STORE_LISTING.md)  
-- [ ] **Screenshots:** follow STORE_LISTING checklist (4+)  
+- [ ] **Store listing logos:** use `store-assets/logo/icon-300x300.png` (and 150/71) — same mark as package tiles  
+- [ ] **Screenshots:** follow STORE_LISTING checklist (4+) — real HonestSpend UI only, no other apps  
 - [ ] **Submission options → Restricted capabilities:** paste  
   `packaging/msix/Notes-for-certification.txt` for `runFullTrust`  
-- [ ] **Notes for certification:** first-run path (Get started, no login required)
+- [ ] **Notes for certification:** first-run path (Get started, no login required)  
+
+### Prior cert failures (see support-file analysis)
+
+Full write-up: **[STORE_CERT_ANALYSIS.md](./STORE_CERT_ANALYSIS.md)**  
+Evidence: `HonestSpend_10.1.1.11_screenshot1.png` (Start tile = **X placeholder**), `HonestSpend_crashlog.evtx` (**0xc000027b** in `Microsoft.UI.Xaml.dll`, package **1.0.32.0**).
+
+| Code | What cert saw | Mitigation in repo |
+|------|----------------|-------------------|
+| **10.1.1.11** | Default broken-tile “X” next to HonestSpend — logos missing at cert DPI | Full scale-100+200 assets; brand navy; wide wordmark; Assets copy to output |
+| **Crash** | `Microsoft.UI.Xaml.dll` / `0xc000027b` on launch | Remove TitleBar `ImageIconSource` (XAML load crash); absolute `SetIcon`; soft-fail launch |
+
+**Before every Store upload:**
+
+```powershell
+python scripts/generate-store-tiles.py
+.\scripts\package-msix.ps1          # fails if engine zip missing
+# Sideload on a clean VM (no Python installed):
+Add-AppxPackage -Path dist\msix\**\*.msix
+# Confirm: window appears <3s; Home or Get started; engine extract under %LocalAppData%\HonestSpend\engine
+```
 
 ## D. Dual channel (keep)
 
