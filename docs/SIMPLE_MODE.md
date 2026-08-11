@@ -9,6 +9,7 @@
 | **Home** | Safe to spend · status · Do this next · **Coming up** · wealth basics |
 | **Home · Coming up** | Short cash-side list until **N calendar days (7–14)** or the **next 1–2 paydays** (auto when income known). Empty: “Nothing scheduled in this window — add a bill or paycheck in Add” |
 | **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
+| **Home · Coming up** | Bills + paychecks until next payday(s) or next 7–14 days (Settings). Totals cover the **full window**; list shows top rows. Cash-side only (Card payment on checking yes; Netflix on card no) |
 | **Add** | Wizards: cash, savings, card, loan, bill, income, business, child |
 | **Get started** | First-run wizard (~2 min) |
 | **Can I buy?** | Pre-purchase check |

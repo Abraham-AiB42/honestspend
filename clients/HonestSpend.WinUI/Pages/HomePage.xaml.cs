@@ -871,6 +871,12 @@ public sealed partial class HomePage : Page
                     parts.Add($"Out {outAbs.ToString("C", CultureInfo.CurrentCulture)}");
                 if (inAbs > 0)
                     parts.Add($"In +{inAbs.ToString("C", CultureInfo.CurrentCulture)}");
+                // Totals are for the full window; list may be truncated
+                var truncated = cu.TryGetProperty("truncated", out var tr) && tr.ValueKind == JsonValueKind.True;
+                var fullCount = JsonUi.Int(cu, "count", lines.Count);
+                var shown = JsonUi.Int(cu, "shown_count", lines.Count);
+                if (truncated && fullCount > shown)
+                    parts.Add($"showing {shown} of {fullCount}");
                 ComingUpTotals.Text = parts.Count > 0 ? string.Join(" · ", parts) : "";
                 ComingUpTotals.Visibility = string.IsNullOrEmpty(ComingUpTotals.Text)
                     ? Visibility.Collapsed

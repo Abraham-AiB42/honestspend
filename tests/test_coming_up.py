@@ -221,6 +221,165 @@ def test_coming_up_includes_card_payment_on_cash_skips_credit_netflix(
     s.close()
 
 
+def test_calendar_mode_forces_calendar_even_with_income(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    s.add(
+        ScheduledItem(
+            profile_id=p.id,
+            name="Paycheck",
+            amount=Decimal("2000"),
+            next_date=as_of + timedelta(days=3),
+            cadence="biweekly",
+            kind="income",
+            active=True,
+        )
+    )
+    s.commit()
+    w = resolve_window(s, as_of=as_of, mode="calendar", calendar_days=7, profile_id=p.id)
+    assert w["mode_effective"] == "calendar"
+    assert w["window_end"] == (as_of + timedelta(days=7)).isoformat()
+    s.close()
+
+
+def test_paydays_no_income_falls_back(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    w = resolve_window(s, as_of=as_of, mode="paydays", profile_id=p.id)
+    assert w["mode_effective"] == "calendar"
+    assert w["window_fallback"] == "no_income"
+    assert "no paycheck" in w["label"].lower()
+    s.close()
+
+
+def test_calendar_days_clamped(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    w_lo = resolve_window(s, as_of=as_of, mode="calendar", calendar_days=5, profile_id=p.id)
+    w_hi = resolve_window(s, as_of=as_of, mode="calendar", calendar_days=30, profile_id=p.id)
+    assert w_lo["calendar_days"] == 7
+    assert w_hi["calendar_days"] == 14
+    s.close()
+
+
+def test_empty_hint_when_no_schedules(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    # Deactivate seed schedules if any
+    for row in s.query(ScheduledItem).all():
+        row.active = False
+    s.commit()
+    r = build_coming_up(s, as_of=date(2026, 3, 1), mode="calendar", profile_id=p.id)
+    assert r["items"] == []
+    assert r["count"] == 0
+    assert r["empty_hint"]
+    assert "Nothing scheduled" in r["empty_hint"]
+    s.close()
+
+
+def test_income_only_outflow_zero(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    for row in s.query(ScheduledItem).all():
+        row.active = False
+    s.add(
+        ScheduledItem(
+            profile_id=p.id,
+            name="Paycheck",
+            amount=Decimal("2500"),
+            next_date=as_of + timedelta(days=2),
+            cadence="biweekly",
+            kind="income",
+            active=True,
+        )
+    )
+    s.commit()
+    r = build_coming_up(
+        s, as_of=as_of, mode="calendar", calendar_days=14, profile_id=p.id, show_income=True
+    )
+    assert r["outflow_total"] == "0.00"
+    assert Decimal(r["inflow_total"]) == Decimal("2500.00")
+    assert any(i["direction"] == "in" for i in r["items"])
+    s.close()
+
+
+def test_totals_over_full_window_when_truncated(tmp_path: Path, monkeypatch):
+    """outflow_total includes all window rows, not just top 8 list items."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    for row in s.query(ScheduledItem).all():
+        row.active = False
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("10000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    # 10 expenses of $10 on different days
+    for i in range(10):
+        s.add(
+            ScheduledItem(
+                profile_id=p.id,
+                name=f"Bill{i}",
+                amount=Decimal("-10"),
+                next_date=as_of + timedelta(days=i + 1),
+                cadence="monthly",
+                kind="expense",
+                account_id=cash.id,
+                active=True,
+            )
+        )
+    s.commit()
+    r = build_coming_up(
+        s,
+        as_of=as_of,
+        mode="calendar",
+        calendar_days=14,
+        profile_id=p.id,
+        limit=8,
+        show_income=False,
+    )
+    assert r["truncated"] is True
+    assert r["count"] == 10
+    assert r["shown_count"] == 8
+    assert len(r["items"]) == 8
+    assert r["outflow_total"] == "100.00"  # full window 10×10
+    s.close()
+
+
+def test_window_capped_when_second_payday_missing(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 3, 1)
+    # Monthly income only once in 45d from next_date
+    s.add(
+        ScheduledItem(
+            profile_id=p.id,
+            name="Monthly pay",
+            amount=Decimal("3000"),
+            next_date=as_of + timedelta(days=40),
+            cadence="monthly",
+            kind="income",
+            active=True,
+        )
+    )
+    s.commit()
+    w = resolve_window(
+        s, as_of=as_of, mode="paydays", payday_count=2, profile_id=p.id
+    )
+    assert w["window_capped"] is True
+    assert w["window_end"] == (as_of + timedelta(days=45)).isoformat()
+    s.close()
+
+
 def test_coming_up_sorts_by_date(tmp_path: Path, monkeypatch):
     """Items sorted by on_date ascending, then larger abs amount first."""
     s = _session(tmp_path, monkeypatch)

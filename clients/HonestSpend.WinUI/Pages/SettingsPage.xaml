@@ -141,7 +141,7 @@
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Everyday safety" />
             <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                Text="Total rainy-day floor stays out of Safe to spend. Per-account buffers reserve cash inside each account. IFPP uses the larger of total vs sum of per-account." />
+                Text="Total rainy-day floor stays out of Safe to spend. Per-account buffers reserve cash inside each account. Safe to spend uses the larger of total vs sum of per-account." />
             <NumberBox x:Name="BufferBox" Header="Total cash buffer ($)" Minimum="0" Value="1000" />
             <StackPanel x:Name="AccountBuffersPanel" Spacing="8" />
             <ComboBox x:Name="NeverNegEnforceBox" Header="Protect checking when posting expenses" SelectedIndex="1">
@@ -171,6 +171,25 @@
                 <CheckBox x:Name="WdSun" Content="Sun" />
             </StackPanel>
             <Button Content="Save budget settings" Click="SaveBudgetSettings_Click" Style="{StaticResource AccentButtonStyle}" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Coming up (Home)" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Simple Home lists bills and paychecks until the next payday(s) or the next 7–14 days. Card payments from checking show up; charges on the card itself do not double-count." />
+            <ComboBox x:Name="ComingUpModeBox" Header="Window" SelectedIndex="0" HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Auto — payday if known, else 14 days" Tag="auto" IsSelected="True" />
+                <ComboBoxItem Content="Calendar days (7–14)" Tag="calendar" />
+                <ComboBoxItem Content="Next payday(s)" Tag="paydays" />
+            </ComboBox>
+            <NumberBox x:Name="ComingUpDaysBox" Header="Calendar days (when using calendar)"
+                       Minimum="7" Maximum="14" Value="14" />
+            <ComboBox x:Name="ComingUpPaydayCountBox" Header="How many paydays" SelectedIndex="0"
+                      HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Next 1 payday" Tag="1" IsSelected="True" />
+                <ComboBoxItem Content="Next 2 paydays" Tag="2" />
+            </ComboBox>
+            <CheckBox x:Name="ComingUpShowIncomeBox" Content="Show paychecks in the list" IsChecked="True" />
+            <Button Content="Save Coming up settings" Click="SaveComingUpSettings_Click"
+                    Style="{StaticResource AccentButtonStyle}" />
 
             <Expander Header="Advanced (power user)" IsExpanded="False" HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Stretch">

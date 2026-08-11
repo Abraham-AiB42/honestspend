@@ -70,7 +70,11 @@ def next_income_dates(
     count: int = 2,
     max_days: int = 45,
 ) -> list[date]:
-    """Next N income occurrence dates from active income schedules (cash or unassigned OK)."""
+    """Next N income occurrence dates from active income schedules in scope.
+
+    Includes all active income (any account). Dates are already limited to
+    [as_of, as_of+max_days] so callers need not re-cap by date.
+    """
     count = max(1, int(count))
     max_days = max(1, int(max_days))
     horizon_end = as_of + timedelta(days=max_days)
@@ -136,13 +140,22 @@ def _paydays_window(
     as_of: date,
     paydays: list[date],
     payday_count: int,
-    window_capped: bool,
+    window_capped: bool = False,
 ) -> dict[str, Any]:
-    end = paydays[min(len(paydays), payday_count) - 1] if paydays else as_of
+    """Build paydays window dict. When capped, end is as_of+45 with partial paydays list."""
     if window_capped:
         end = as_of + timedelta(days=MAX_PAYDAY_HORIZON_DAYS)
-    n_label = "next payday" if payday_count == 1 else "2nd payday"
-    label = f"Until {_label_date(end)} ({n_label})"
+        if len(paydays) == 0:
+            n_label = "no payday in range"
+        elif len(paydays) == 1 and payday_count >= 2:
+            n_label = "next payday · 2nd beyond 45 days"
+        else:
+            n_label = "horizon cap (45 days)"
+        label = f"Until {_label_date(end)} ({n_label})"
+    else:
+        end = paydays[min(len(paydays), payday_count) - 1] if paydays else as_of
+        n_label = "next payday" if payday_count == 1 else "2nd payday"
+        label = f"Until {_label_date(end)} ({n_label})"
     return {
         "mode_effective": "paydays",
         "window_start": as_of.isoformat(),
@@ -202,35 +215,14 @@ def resolve_window(
             )
         n = payday_count
         chosen = income_dates[:n]
-        # Cap if Nth payday missing within 45d (or beyond cap)
-        cap_end = as_of + timedelta(days=MAX_PAYDAY_HORIZON_DAYS)
+        # Not enough paydays within 45d → cap window at horizon (dates already ≤45d)
         if len(chosen) < n:
-            # Not enough paydays in horizon → end at 45d
-            return {
-                "mode_effective": "paydays",
-                "window_start": as_of.isoformat(),
-                "window_end": cap_end.isoformat(),
-                "calendar_days": None,
-                "payday_count": n,
-                "paydays": [d.isoformat() for d in chosen],
-                "label": f"Until {_label_date(cap_end)} ({'next payday' if n == 1 else '2nd payday'})",
-                "window_fallback": None,
-                "window_capped": True,
-            }
-        nth = chosen[n - 1]
-        capped = nth > cap_end
-        if capped:
-            return {
-                "mode_effective": "paydays",
-                "window_start": as_of.isoformat(),
-                "window_end": cap_end.isoformat(),
-                "calendar_days": None,
-                "payday_count": n,
-                "paydays": [d.isoformat() for d in chosen],
-                "label": f"Until {_label_date(cap_end)} ({'next payday' if n == 1 else '2nd payday'})",
-                "window_fallback": None,
-                "window_capped": True,
-            }
+            return _paydays_window(
+                as_of=as_of,
+                paydays=chosen,
+                payday_count=n,
+                window_capped=True,
+            )
         return _paydays_window(
             as_of=as_of,
             paydays=chosen,
@@ -334,7 +326,6 @@ def build_coming_up(
             continue
         amt = _d(s.amount)
         cert = s.certainty or "fixed"
-        kind = (s.kind or ("income" if amt > ZERO else "expense")).lower()
         is_income = is_income_schedule(s) or amt > ZERO
 
         if is_income and not show_income:
@@ -342,10 +333,15 @@ def build_coming_up(
         if is_income and not _income_certainty_ok(cert, ifpp_mode):
             continue
 
+        # Mis-tagged income (kind=income, negative amount): treat as positive inflow for display
+        expand_amt = amt
+        if is_income and expand_amt < ZERO:
+            expand_amt = abs(expand_amt)
+
         occ = expand_scheduled(
             item_id=s.id,
             name=s.name or ("Income" if is_income else "Expense"),
-            amount=amt,
+            amount=expand_amt,
             next_date=s.next_date,
             cadence=s.cadence or "monthly",
             certainty=cert,
@@ -392,18 +388,22 @@ def build_coming_up(
     for r in rows:
         r.pop("_sort_abs", None)
 
-    limited = rows[:limit]
-    outflow = sum((_d(r["amount"]) for r in limited if r["direction"] == "out"), ZERO)
-    inflow = sum((_d(r["amount"]) for r in limited if r["direction"] == "in"), ZERO)
-    # outflow_total as positive magnitude of outflows
+    # Totals over the full window; items may be truncated for the list
+    full_count = len(rows)
+    outflow = sum((_d(r["amount"]) for r in rows if r["direction"] == "out"), ZERO)
+    inflow = sum((_d(r["amount"]) for r in rows if r["direction"] == "in"), ZERO)
     outflow_total = _q(abs(outflow))
     inflow_total = _q(inflow)
+    limited = rows[:limit]
+    truncated = full_count > limit
 
     return {
         "window": window,
         "items": limited,
         "outflow_total": str(outflow_total),
         "inflow_total": str(inflow_total),
-        "count": len(limited),
-        "empty_hint": EMPTY_HINT if not limited else None,
+        "count": full_count,
+        "shown_count": len(limited),
+        "truncated": truncated,
+        "empty_hint": EMPTY_HINT if full_count == 0 else None,
     }

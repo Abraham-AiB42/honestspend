@@ -2314,6 +2314,26 @@ def get_settings(db: Session = Depends(get_db)):
     return row
 
 
+def _validate_coming_up_settings(data: dict) -> dict:
+    """Normalize/validate coming_up_* fields; mutates and returns data."""
+    if "coming_up_window_mode" in data and data["coming_up_window_mode"] is not None:
+        mode = str(data["coming_up_window_mode"]).lower()
+        if mode not in ("auto", "calendar", "paydays"):
+            raise HTTPException(400, "coming_up_window_mode must be auto, calendar, or paydays")
+        data["coming_up_window_mode"] = mode
+    if "coming_up_calendar_days" in data and data["coming_up_calendar_days"] is not None:
+        d = int(data["coming_up_calendar_days"])
+        if d < 7 or d > 14:
+            raise HTTPException(400, "coming_up_calendar_days must be 7–14")
+        data["coming_up_calendar_days"] = d
+    if "coming_up_payday_count" in data and data["coming_up_payday_count"] is not None:
+        n = int(data["coming_up_payday_count"])
+        if n not in (1, 2):
+            raise HTTPException(400, "coming_up_payday_count must be 1 or 2")
+        data["coming_up_payday_count"] = n
+    return data
+
+
 @app.put("/api/settings", response_model=SettingsOut)
 def put_settings(body: SettingsIn, db: Session = Depends(get_db)):
     """Full-ish replace using provided fields (prefer PATCH for partial updates)."""
@@ -2321,7 +2341,9 @@ def put_settings(body: SettingsIn, db: Session = Depends(get_db)):
     if not row:
         row = AppSettings(id=1)
         db.add(row)
-    for k, v in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    data = _validate_coming_up_settings(data)
+    for k, v in data.items():
         if v is None and k in ("onboarding_complete", "product_name"):
             continue
         if v is not None or k not in ("onboarding_complete", "product_name"):
@@ -2345,21 +2367,7 @@ def patch_settings(body: SettingsPatch, db: Session = Depends(get_db)):
     if "never_negative_enforcement" in data and data["never_negative_enforcement"] is not None:
         if data["never_negative_enforcement"] not in ("off", "warn", "hard"):
             raise HTTPException(400, "never_negative_enforcement must be off, warn, or hard")
-    if "coming_up_window_mode" in data and data["coming_up_window_mode"] is not None:
-        mode = str(data["coming_up_window_mode"]).lower()
-        if mode not in ("auto", "calendar", "paydays"):
-            raise HTTPException(400, "coming_up_window_mode must be auto, calendar, or paydays")
-        data["coming_up_window_mode"] = mode
-    if "coming_up_calendar_days" in data and data["coming_up_calendar_days"] is not None:
-        d = int(data["coming_up_calendar_days"])
-        if d < 7 or d > 14:
-            raise HTTPException(400, "coming_up_calendar_days must be 7–14")
-        data["coming_up_calendar_days"] = d
-    if "coming_up_payday_count" in data and data["coming_up_payday_count"] is not None:
-        n = int(data["coming_up_payday_count"])
-        if n not in (1, 2):
-            raise HTTPException(400, "coming_up_payday_count must be 1 or 2")
-        data["coming_up_payday_count"] = n
+    data = _validate_coming_up_settings(data)
     for k, v in data.items():
         setattr(row, k, v)
     db.flush()

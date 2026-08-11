@@ -440,7 +440,7 @@ public sealed partial class SettingsPage : Page
             {
                 Title = "Move books folder?",
                 Content =
-                    $"Seal (if encrypted), copy full books bundle (db/sealed/crypto/license), " +
+                    $"Lock books (if encrypted), copy full books bundle (db/sealed/crypto/license), " +
                     $"set data dir, and restart engine.\n\nDestination:\n{dest}",
                 PrimaryButtonText = "Move",
                 CloseButtonText = "Cancel",
@@ -594,6 +594,15 @@ public sealed partial class SettingsPage : Page
             if (await dlg.ShowAsync() != ContentDialogResult.Primary)
                 return;
             var secret = pinBox.Password;
+            // If encryption may still be on, require secret so we don't strand books
+            var encLikely = AppLockService.HasClientDek() || AppLockService.IsLockEnabled;
+            if (encLikely && string.IsNullOrEmpty(secret))
+            {
+                AppLockMsgText.Text =
+                    "Enter your PIN/password to turn off lock and at-rest encryption. " +
+                    "Clearing the lock alone would leave books sealed.";
+                return;
+            }
             if (!string.IsNullOrEmpty(secret))
             {
                 await AppLockService.UnlockDatabaseAsync(secret);
@@ -754,7 +763,7 @@ public sealed partial class SettingsPage : Page
     {
         Save_Click(this, new RoutedEventArgs());
         // Seal then restart so FOS_DATA_DIR is picked up without leaving plaintext
-        StatusText.Text = "Sealing / restarting engine…";
+        StatusText.Text = "Locking books / restarting engine…";
         try
         {
             if (App.Backend is not null)
@@ -911,6 +920,12 @@ public sealed partial class SettingsPage : Page
             WdFri.IsChecked = (mask & 16) != 0;
             WdSat.IsChecked = (mask & 32) != 0;
             WdSun.IsChecked = (mask & 64) != 0;
+
+            SelectTag(ComingUpModeBox, JsonUi.Str(s, "coming_up_window_mode", "auto"));
+            ComingUpDaysBox.Value = ParseD(s, "coming_up_calendar_days", 14);
+            SelectTag(ComingUpPaydayCountBox, JsonUi.Int(s, "coming_up_payday_count", 1).ToString());
+            ComingUpShowIncomeBox.IsChecked = !s.TryGetProperty("coming_up_show_income", out var csi)
+                || csi.ValueKind != JsonValueKind.False;
         }
         catch (Exception ex)
         {
@@ -948,6 +963,36 @@ public sealed partial class SettingsPage : Page
                 ["budget_workdays"] = WorkdayMaskFromUi(),
             });
             StatusText.Text = "Budget workweek & reserve settings saved.";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void SaveComingUpSettings_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var mode = TagOf(ComingUpModeBox) ?? "auto";
+            var days = double.IsNaN(ComingUpDaysBox.Value) ? 14 : (int)ComingUpDaysBox.Value;
+            if (days < 7) days = 7;
+            if (days > 14) days = 14;
+            var paydayCount = 1;
+            if (int.TryParse(TagOf(ComingUpPaydayCountBox), out var pc) && (pc == 1 || pc == 2))
+                paydayCount = pc;
+            await api.PatchSettingsAsync(new Dictionary<string, object?>
+            {
+                ["coming_up_window_mode"] = mode,
+                ["coming_up_calendar_days"] = days,
+                ["coming_up_payday_count"] = paydayCount,
+                ["coming_up_show_income"] = ComingUpShowIncomeBox.IsChecked == true,
+            });
+            StatusText.Text = "Coming up window saved — reopen Home to refresh the list.";
         }
         catch (Exception ex)
         {
