@@ -48,6 +48,8 @@ statement balance = max(0, books balance − promo_remaining)
 
 policy "Pay statement in full":
   next payment = max(0, books − promo_remaining) + promo_due
+policy "Pay current balance" (books):
+  next payment = max(0, books)   # full balance, including promo principal
 policy "Minimum only":
   next payment = card min payment (or ~2% / $25 floor)
 policy "Fixed amount":
@@ -58,8 +60,19 @@ policy "None":
   next payment = 0 (no cash schedule)
 ```
 
-Intentional **0% float** stays first-class: statement-in-full does **not** force paying the whole promo principal when installment lines are open — only the non-promo portion plus this month’s installment.
+**When cash leaves** (`payment_timing`):
 
+| Timing | Schedule date |
+|--------|----------------|
+| On due day (default) | Next payment due day |
+| On statement close day | Next close day |
+| Day before statement closes | Calendar day before next close |
+
+**Pay current balance** + close-based timing is the common “zero the card before the statement generates” style. The app shows **educational** credit notes (utilization reporting is often near close; we do **not** compute a FICO/Vantage score). Open promo lines trigger a **warning** that full books may end 0% float early — use statement-in-full to keep installments.
+
+Intentional **0% float** stays first-class under **Pay statement in full**: it does **not** force paying the whole promo principal when installment lines are open — only the non-promo portion plus this month’s installment.
+
+Food / gas / daily envelopes are **Budgets**, not a pad on the card payment amount.
 ### Cash-funded payment schedule
 
 - Name: `Card payment · {nickname}`

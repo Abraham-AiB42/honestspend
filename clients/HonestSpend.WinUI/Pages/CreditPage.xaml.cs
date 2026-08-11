@@ -430,6 +430,7 @@ public sealed partial class CreditPage : Page
             CycleCloseDayBox.Value = ParseD(c, "statement_close_day", 1);
             CycleDueDayBox.Value = ParseD(c, "payment_due_day", 15);
             SelectPolicyTag(CyclePolicyBox, JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy", "statement")));
+            SelectPolicyTag(CycleTimingBox, JsonUi.Str(c, "payment_timing", "on_due"));
             var fixedAmt = ParseD(c, "payment_fixed_amount", double.NaN);
             CycleFixedBox.Value = double.IsNaN(fixedAmt) ? 0 : fixedAmt;
 
@@ -449,9 +450,75 @@ public sealed partial class CreditPage : Page
         CycleProjectedText.Text = $"Projected statement: {JsonUi.Money(c, "statement_balance")}";
         CycleNextPaymentText.Text =
             $"Next payment: {JsonUi.Money(c, "next_payment")} on {JsonUi.Str(c, "next_due")}";
+        var timing = JsonUi.Str(c, "payment_timing", "on_due");
         CycleDatesText.Text =
             $"Last close {JsonUi.Str(c, "last_close")} · next close {JsonUi.Str(c, "next_close")} · " +
-            $"policy {UiCopy.AutopayPolicy(JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy")))}";
+            $"{UiCopy.AutopayPolicy(JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy")))} · " +
+            $"{UiCopy.PaymentTiming(timing)}";
+
+        // Warnings
+        var warnParts = new List<string>();
+        if (c.TryGetProperty("warnings", out var warns) && warns.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var w in warns.EnumerateArray())
+            {
+                var s = w.GetString();
+                if (!string.IsNullOrWhiteSpace(s))
+                    warnParts.Add(s!);
+            }
+        }
+        if (warnParts.Count > 0)
+        {
+            CycleWarningsText.Text = string.Join("\n", warnParts);
+            CycleWarningsText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            CycleWarningsText.Text = "";
+            CycleWarningsText.Visibility = Visibility.Collapsed;
+        }
+
+        ApplyHonestyPanel(c);
+    }
+
+    private void ApplyHonestyPanel(JsonElement c)
+    {
+        if (!c.TryGetProperty("honesty", out var h) || h.ValueKind != JsonValueKind.Object)
+        {
+            CycleHonestyMinText.Text = "Min payment: —";
+            CycleHonestyInterestText.Text = "Est. monthly interest if min only: —";
+            CycleHonestyUtilText.Text = "Utilization: —";
+            CycleAdviceList.ItemsSource = new List<string>();
+            return;
+        }
+
+        var minSrc = JsonUi.Str(h, "min_payment_source", "estimated");
+        CycleHonestyMinText.Text =
+            $"Min payment: {JsonUi.Money(h, "min_payment")} ({minSrc})";
+        CycleHonestyInterestText.Text =
+            $"Est. monthly interest if min only: {JsonUi.Money(h, "estimated_monthly_interest_if_min")}" +
+            (string.IsNullOrEmpty(JsonUi.Str(h, "apr", "")) || JsonUi.Str(h, "apr") == "—"
+                ? " · set APR on the account for a better estimate"
+                : $" · APR {JsonUi.Str(h, "apr")}");
+        var util = JsonUi.Str(h, "utilization_pct", "");
+        CycleHonestyUtilText.Text = string.IsNullOrEmpty(util) || util == "—"
+            ? "Utilization: — (set credit limit)"
+            : $"Utilization: {util}% · pay {JsonUi.Money(h, "amount_to_util_hard")} to hit {JsonUi.Str(h, "util_hard_pct", "30")}% · " +
+              $"pay {JsonUi.Money(h, "amount_to_util_soft")} to hit {JsonUi.Str(h, "util_soft_pct", "10")}%";
+        CycleHonestyDisclaimer.Text = JsonUi.Str(h, "disclaimer",
+            "Educational estimates only. Not a credit score.");
+
+        var advice = new List<string>();
+        if (h.TryGetProperty("advice", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var a in arr.EnumerateArray())
+            {
+                var s = a.GetString();
+                if (!string.IsNullOrWhiteSpace(s))
+                    advice.Add("• " + s);
+            }
+        }
+        CycleAdviceList.ItemsSource = advice;
     }
 
     private async Task LoadPromoLinesAsync(LedgerApiClient api, int accountId)
@@ -543,12 +610,16 @@ public sealed partial class CreditPage : Page
             var policy = "statement";
             if (CyclePolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
                 policy = p;
+            var timing = "on_due";
+            if (CycleTimingBox.SelectedItem is ComboBoxItem { Tag: string t })
+                timing = t;
 
             var body = new Dictionary<string, object?>
             {
                 ["statement_close_day"] = double.IsNaN(CycleCloseDayBox.Value) ? 1 : (int)CycleCloseDayBox.Value,
                 ["payment_due_day"] = double.IsNaN(CycleDueDayBox.Value) ? 15 : (int)CycleDueDayBox.Value,
                 ["autopay_policy"] = policy,
+                ["payment_timing"] = timing,
             };
 
             if (CycleFundingBox.SelectedItem is ComboBoxItem { Tag: int fundId } && fundId > 0)
@@ -571,6 +642,66 @@ public sealed partial class CreditPage : Page
                 $"settings locked as yours";
             await LoadCycleSectionAsync(api);
             await LoadAutopayAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void CyclePayToHard_Click(object sender, RoutedEventArgs e) =>
+        await ApplyUtilTargetAsync(hard: true);
+
+    private async void CyclePayToSoft_Click(object sender, RoutedEventArgs e) =>
+        await ApplyUtilTargetAsync(hard: false);
+
+    private async Task ApplyUtilTargetAsync(bool hard)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int id)
+                throw new InvalidOperationException("Pick a card.");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var c = await api.GetAccountCycleAsync(id);
+            if (!c.TryGetProperty("honesty", out var h) || h.ValueKind != JsonValueKind.Object)
+                throw new InvalidOperationException("Honesty data unavailable.");
+            var key = hard ? "amount_to_util_hard" : "amount_to_util_soft";
+            var amtStr = JsonUi.Str(h, key, "0");
+            if (!decimal.TryParse(amtStr, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var amt))
+                amt = 0m;
+            if (amt <= 0)
+            {
+                CycleMsg.Text = hard
+                    ? "Already at or under the 30% utilization target."
+                    : "Already at or under the 10% utilization target.";
+                return;
+            }
+
+            SelectPolicyTag(CyclePolicyBox, "fixed");
+            CycleFixedBox.Value = (double)amt;
+            var timing = "on_due";
+            if (CycleTimingBox.SelectedItem is ComboBoxItem { Tag: string t })
+                timing = t;
+            var body = new Dictionary<string, object?>
+            {
+                ["autopay_policy"] = "fixed",
+                ["payment_fixed_amount"] = amt,
+                ["payment_timing"] = timing,
+                ["statement_close_day"] = double.IsNaN(CycleCloseDayBox.Value) ? 1 : (int)CycleCloseDayBox.Value,
+                ["payment_due_day"] = double.IsNaN(CycleDueDayBox.Value) ? 15 : (int)CycleDueDayBox.Value,
+            };
+            if (CycleFundingBox.SelectedItem is ComboBoxItem { Tag: int fundId } && fundId > 0)
+                body["payment_funding_account_id"] = fundId;
+            var res = await api.PutAccountCycleConfigAsync(id, body);
+            ApplyCycleProjection(res);
+            CycleMsg.Text =
+                $"Set fixed pay {JsonUi.Money(res, "next_payment")} to aim for " +
+                (hard ? "30%" : "10%") + " utilization · save already applied";
+            await LoadCycleSectionAsync(api);
         }
         catch (Exception ex)
         {

@@ -27,8 +27,18 @@ public static class UiCopy
         "statement" => "Pay statement in full",
         "promo_sink" => "0% promo monthly set-aside",
         "fixed" => "Fixed amount",
+        "books" or "pay_current" => "Pay current balance",
         "none" or "" => "Nothing for now",
         _ => policy ?? "—",
+    };
+
+    /// <summary>When cash leaves for a card payment.</summary>
+    public static string PaymentTiming(string? timing) => (timing ?? "on_due").ToLowerInvariant() switch
+    {
+        "on_close" => "On statement close day",
+        "day_before_close" => "Day before statement closes",
+        "on_due" or "" => "On due day",
+        _ => timing ?? "On due day",
     };
 
     public static string MoneyView(string? scope) =>

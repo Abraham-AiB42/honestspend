@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -370,6 +370,14 @@ def _mig_18_promo_installment_lines(conn) -> None:
     )
 
 
+def _mig_19_payment_timing(conn) -> None:
+    """When to schedule cash card payment: on_due | on_close | day_before_close."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN payment_timing VARCHAR(32)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -390,6 +398,7 @@ MIGRATIONS: dict[int, Callable] = {
     16: _mig_16_account_safety_buffer,
     17: _mig_17_statement_cycles,
     18: _mig_18_promo_installment_lines,
+    19: _mig_19_payment_timing,
 }
 
 

@@ -18,13 +18,15 @@ from financial_os.services.promo_sink import create_promo_sink_bill
 from financial_os.services.statement_cycle import project_card_payment
 
 ZERO = Decimal("0")
-POLICIES = frozenset({"none", "min", "statement", "promo_sink", "fixed"})
+POLICIES = frozenset({"none", "min", "statement", "promo_sink", "fixed", "books"})
 # setup wizard payment_option → autopay_policy
 PAYMENT_OPTION_TO_POLICY = {
     "minimum": "min",
     "statement": "statement",
     "fixed": "fixed",
     "interest_saving": "promo_sink",
+    "books": "books",
+    "pay_current": "books",
 }
 CARD_PAYMENT_NOTES_AUTO = "auto=statement_cycle"
 
@@ -41,8 +43,9 @@ def _card_payment_name(nickname: str) -> str:
     return f"Card payment · {nickname}"
 
 
-def _notes_for_card(card_id: int, policy: str) -> str:
-    return f"card_account_id={card_id}; policy={policy}; {CARD_PAYMENT_NOTES_AUTO}"
+def _notes_for_card(card_id: int, policy: str, timing: str | None = None) -> str:
+    t = (timing or "on_due").lower().strip()
+    return f"card_account_id={card_id}; policy={policy}; timing={t}; {CARD_PAYMENT_NOTES_AUTO}"
 
 
 def _notes_marker(card_id: int) -> str:
@@ -120,7 +123,7 @@ def _suggested_amount(a: Account, policy: str) -> Decimal:
         if a.min_payment is not None:
             return _d(a.min_payment)
         return (bal * Decimal("0.02")).quantize(Decimal("0.01")) or Decimal("25")
-    if policy == "statement":
+    if policy in ("statement", "books"):
         return bal
     if policy == "fixed":
         if a.payment_fixed_amount is not None:
@@ -285,6 +288,7 @@ def recompute_card_payment_schedule(
                 amount=next_payment,
                 next_date=next_due,
                 funding_account_id=int(funding_id),
+                timing=proj.get("payment_timing"),
             )
             # Drop legacy Autopay · rows on the card (cash path owns the payment)
             _end_autopay_schedules(session, a.id)
@@ -300,6 +304,8 @@ def recompute_card_payment_schedule(
         "next_close": proj.get("next_close"),
         "funding_account_id": proj.get("funding_account_id") or a.payment_funding_account_id,
         "policy": policy,
+        "payment_timing": proj.get("payment_timing"),
+        "warnings": proj.get("warnings") or [],
         "schedule": schedule_result,
         "scheduled_id": (schedule_result or {}).get("scheduled_id"),
     }
@@ -380,6 +386,7 @@ def _sync_schedule(
     amount: Decimal | None = None,
     next_date: date | None = None,
     funding_account_id: int | None = None,
+    timing: str | None = None,
 ) -> dict[str, Any]:
     """Upsert cash-funded Card payment schedule (or legacy promo_sink on card).
 
@@ -399,12 +406,13 @@ def _sync_schedule(
     if amt <= ZERO:
         return {"ok": False, "error": "amount is zero"}
 
+    timing = timing or getattr(a, "payment_timing", None) or "on_due"
     funding_id = funding_account_id or a.payment_funding_account_id
     if not funding_id:
         # Legacy fallback: schedule on the card (IFPP skips credit schedules)
         funding_id = a.id
         name = f"Autopay · {policy} · {a.nickname}"
-        notes = f"Autopay policy={policy}"
+        notes = f"Autopay policy={policy}; timing={timing}"
         due = next_date or next_due_date(as_of, a.payment_due_day) or as_of
         existing = (
             session.query(ScheduledItem)
@@ -458,7 +466,7 @@ def _sync_schedule(
 
     due = next_date or next_due_date(as_of, a.payment_due_day) or as_of
     name = _card_payment_name(a.nickname)
-    notes = _notes_for_card(a.id, policy)
+    notes = _notes_for_card(a.id, policy, timing=timing)
     existing = _find_card_payment_schedule(
         session, a, funding_account_id=int(funding_id)
     )

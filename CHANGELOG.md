@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Statement cycles**: close day + due day + pay policy → projected **statement balance** and **next payment**; cash **pay-from** schedule so Safe to spend sees the right card outflow (no day grid; multi-entity; promo installment lines; recompute after books mutations)
+- **Pay policies + honesty**: **Pay current balance** (full books); **when cash leaves** (due day / day before close / on close) for near-zero statement strategies; utilization pay-to-target; est. interest if min; educational credit advice (not a score)
 - **Simple mode**: Home whisper only for soon card payments (within 14 days); full Credit desk stays Full books
 - Docs: [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT + SIMPLE_MODE contract
 

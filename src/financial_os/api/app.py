@@ -350,6 +350,7 @@ class AccountOut(AccountIn):
     statement_balance_cached: Decimal | None = None
     next_payment_amount_cached: Decimal | None = None
     next_payment_date_cached: date | None = None
+    payment_timing: str | None = None
 
 
 class TransactionIn(BaseModel):
@@ -1649,8 +1650,30 @@ def _dec_str(v) -> str | None:
     return str(v)
 
 
-def _cycle_api_dict(proj: dict, account: Account) -> dict:
+def _cycle_api_dict(proj: dict, account: Account, db: Session | None = None) -> dict:
     """Serialize project_card_payment + account cycle config for HTTP JSON."""
+    from financial_os.services.card_honesty import honesty_payload
+
+    soft, hard = 10, 30
+    if db is not None:
+        try:
+            from financial_os.db import AppSettings
+
+            settings = db.query(AppSettings).first()
+            if settings is not None:
+                soft = int(getattr(settings, "utilization_warn_soft", None) or 10)
+                hard = int(getattr(settings, "utilization_warn_hard", None) or 30)
+        except Exception:
+            pass
+
+    honesty = honesty_payload(
+        account,
+        promo_remaining=proj.get("promo_remaining") or 0,
+        soft_pct=soft,
+        hard_pct=hard,
+        policy=proj.get("policy"),
+        timing=proj.get("payment_timing"),
+    )
     return {
         "account_id": account.id,
         "name": account.nickname,
@@ -1663,6 +1686,13 @@ def _cycle_api_dict(proj: dict, account: Account) -> dict:
         "funding_account_id": proj.get("funding_account_id")
         or account.payment_funding_account_id,
         "policy": proj.get("policy") or (account.autopay_policy or "none"),
+        "payment_timing": proj.get("payment_timing")
+        or getattr(account, "payment_timing", None)
+        or "on_due",
+        "warnings": proj.get("warnings") or [],
+        "honesty": honesty,
+        "promo_remaining": _dec_str(proj.get("promo_remaining")),
+        "promo_due": _dec_str(proj.get("promo_due")),
         "statement_close_day": account.statement_close_day,
         "payment_due_day": account.payment_due_day,
         "autopay_policy": account.autopay_policy,
@@ -1714,6 +1744,7 @@ class CycleConfigIn(BaseModel):
     autopay_policy: str | None = None
     payment_funding_account_id: int | None = None
     payment_fixed_amount: Decimal | None = None
+    payment_timing: str | None = None  # on_due | on_close | day_before_close
 
 
 @app.get("/api/accounts/cycles")
@@ -1736,7 +1767,7 @@ def list_account_cycles(
             proj = project_card_payment(db, a.id)
         except ValueError:
             continue
-        items.append(_cycle_api_dict(proj, a))
+        items.append(_cycle_api_dict(proj, a, db))
     return {"count": len(items), "items": items}
 
 
@@ -1752,7 +1783,7 @@ def get_account_cycle(account_id: int, db: Session = Depends(get_db)):
         proj = project_card_payment(db, account_id)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
-    return _cycle_api_dict(proj, row)
+    return _cycle_api_dict(proj, row, db)
 
 
 @app.put("/api/accounts/{account_id}/cycle-config")
@@ -1778,6 +1809,16 @@ def put_account_cycle_config(
                 400, f"autopay_policy must be one of {sorted(POLICIES)}"
             )
         data["autopay_policy"] = policy
+
+    if "payment_timing" in data and data["payment_timing"] is not None:
+        from financial_os.services.statement_cycle import TIMINGS
+
+        timing = str(data["payment_timing"]).lower().strip()
+        if timing not in TIMINGS:
+            raise HTTPException(
+                400, f"payment_timing must be one of {sorted(TIMINGS)}"
+            )
+        data["payment_timing"] = timing
 
     if "statement_close_day" in data and data["statement_close_day"] is not None:
         day = int(data["statement_close_day"])

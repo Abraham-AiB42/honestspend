@@ -118,7 +118,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Statement &amp; payment" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Close day, due day, pay policy, and which cash account pays the card. Projected statement and next payment update as charges land." />
+                        Text="Close day, due day, what to pay, when cash leaves, and which cash account pays the card. Next payment updates as charges land. Food/gas envelopes live under Budgets — not as a pad on the card payment." />
                     <ItemsControl x:Name="CycleSummaryList" />
                     <ComboBox x:Name="CycleCardBox" Header="Card" HorizontalAlignment="Stretch"
                               PlaceholderText="Pick a card" SelectionChanged="CycleCard_Changed" />
@@ -128,6 +128,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
@@ -141,13 +142,22 @@
                             <ComboBoxItem Content="Nothing for now" Tag="none" />
                             <ComboBoxItem Content="Minimum only" Tag="min" />
                             <ComboBoxItem Content="Pay statement in full" Tag="statement" />
+                            <ComboBoxItem Content="Pay current balance" Tag="books"
+                                          ToolTipService.ToolTip="Full books balance so the statement can open near $0. Includes promo principal." />
                             <ComboBoxItem Content="0% promo monthly set-aside" Tag="promo_sink" />
                             <ComboBoxItem Content="Fixed amount" Tag="fixed" />
                         </ComboBox>
+                        <ComboBox x:Name="CycleTimingBox" Header="When cash leaves" SelectedIndex="0" MinWidth="200"
+                                  Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="On due day" Tag="on_due" />
+                            <ComboBoxItem Content="Day before statement closes" Tag="day_before_close"
+                                          ToolTipService.ToolTip="Common for a near-zero statement balance when the bank reports." />
+                            <ComboBoxItem Content="On statement close day" Tag="on_close" />
+                        </ComboBox>
                         <NumberBox x:Name="CycleFixedBox" Header="Fixed amount ($)" Minimum="0" Value="0"
-                                   Grid.Row="1" Grid.Column="1" />
+                                   Grid.Row="2" Grid.Column="0" />
                         <ComboBox x:Name="CycleFundingBox" Header="Pay from (cash)" HorizontalAlignment="Stretch"
-                                  PlaceholderText="Checking / cash" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" />
+                                  PlaceholderText="Checking / cash" Grid.Row="2" Grid.Column="1" />
                     </Grid>
                     <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
                             CornerRadius="8" Padding="12">
@@ -157,6 +167,30 @@
                             <TextBlock x:Name="CycleNextPaymentText" FontWeight="SemiBold" TextWrapping="Wrap"
                                        Text="Next payment: —" />
                             <TextBlock x:Name="CycleDatesText" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock x:Name="CycleWarningsText" Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       FontSize="12" TextWrapping="Wrap" Visibility="Collapsed" />
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            CornerRadius="8" Padding="12">
+                        <StackPanel Spacing="6">
+                            <TextBlock FontWeight="SemiBold" Text="Honesty · utilization · interest" />
+                            <TextBlock x:Name="CycleHonestyMinText" Opacity="0.9" TextWrapping="Wrap"
+                                       Text="Min payment: —" />
+                            <TextBlock x:Name="CycleHonestyInterestText" Opacity="0.9" TextWrapping="Wrap"
+                                       Text="Est. monthly interest if min only: —" />
+                            <TextBlock x:Name="CycleHonestyUtilText" Opacity="0.9" TextWrapping="Wrap"
+                                       Text="Utilization: —" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="CyclePayToHardBtn" Content="Set pay to hit 30% util"
+                                        Click="CyclePayToHard_Click" />
+                                <Button x:Name="CyclePayToSoftBtn" Content="Set pay to hit 10% util"
+                                        Click="CyclePayToSoft_Click" />
+                            </StackPanel>
+                            <TextBlock x:Name="CycleHonestyDisclaimer" Opacity="0.65" FontSize="11" TextWrapping="Wrap"
+                                       Text="Educational estimates only. Not a credit score." />
+                            <TextBlock FontWeight="SemiBold" Margin="0,4,0,0" Text="How this can affect credit" />
+                            <ItemsControl x:Name="CycleAdviceList" />
                         </StackPanel>
                     </Border>
                     <StackPanel Orientation="Horizontal" Spacing="8">

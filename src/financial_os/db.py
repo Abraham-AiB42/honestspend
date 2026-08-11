@@ -160,6 +160,8 @@ class Account(Base):
         Numeric(14, 2), nullable=True
     )
     next_payment_date_cached: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # When cash card payment is scheduled: on_due | on_close | day_before_close
+    payment_timing: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="accounts")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")
