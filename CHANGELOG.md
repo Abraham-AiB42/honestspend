@@ -2,16 +2,24 @@
 
 ## Unreleased
 
+- **Trust bar (full review follow-through)**:
+  - Home: STS primary; soft until = post-reserve base **left after Coming up bills (same cash as Safe)**; capped at Safe (hidden when same $ as STS); “Until …” plain labels (no “horizon”); risk line = **Next risk day** only
+  - Full **Bills · Mark paid** (same match / never-neg confirm as Home Coming up)
+  - Mark paid: match-before-post; `require_match_txn_id` + savepoint auto-advance (no create-on-miss); card side skips already-paired payments; WinUI 409 never-neg confirm dialog
+  - Post-import bill advance: CSV/OFX/**Plaid**/**PDF**; Import UI shows advanced count + non-fatal `schedule_advance_error`
+  - Promo: installment lines own balloon (`effective_promo_balance` on IFPP, promo clock, autopay sink, debt)
+  - Policy: reverse-sync `payment_option` ← `autopay_policy`; Credit All-cards list read-only (edit under Statement & payment)
+
 - **Business entity (AP Agency steals)**: versioned bill series (rent steps), pay-from cash vs card + vendor, **owner draw**, thin **payroll package** (net + employer tax; Bills **Payroll day** UI; legs get `series_id`; cash-only funding), `opex_class` / `income_source`, **entity year P&L** (Reports year picker) — see [BUSINESS_ENTITY.md](docs/BUSINESS_ENTITY.md)
 - **Coming up strip**: Simple Home list of cash-side bills / card payments / optional paychecks through **calendar 7–14 days** or **next 1–2 paydays** (`auto` when income known); full-window totals + truncated list; Settings picker; empty-state hint; prefs `coming_up_*`; `GET /api/coming-up` + embed on home/simple; owner draw as outflow; payroll day legs when scheduled
 - **Statement cycles**: close day + due day + pay policy → projected **statement balance** and **next payment**; cash **pay-from** schedule so Safe to spend sees the right card outflow (no day grid; multi-entity; promo installment lines; recompute after books mutations)
 - **Pay policies + honesty**: **Pay current balance** (full books); **when cash leaves** (due day / day before close / on close) for near-zero statement strategies; utilization pay-to-target; est. interest if min; educational credit advice (not a score)
 - **Promo payoff calendar**: dynamic month span from remaining ÷ monthly (e.g. **24 mo** financing), multi-line merge; Credit UI + `GET …/promo-calendar`
-- **Cash runway strip**: day-by-day cash calendar (`GET /api/cash-runway`); Home risk line shows first red day + busy days
+- **Cash runway API**: day-by-day cash calendar (`GET /api/cash-runway`) for tools/Full; Home risk uses **Next risk day** only (not a busy-day strip)
 - **Statement freeze**: record bank actual vs projected (`…/statement-cycles/freeze`); Credit UI history
 - **Rewards pick**: category → best card by rates (`GET /api/rewards/pick`); Credit **Best card**
 - **Simple mode**: Home whisper only for soon card payments (within 14 days); full Credit desk stays Full books
-- Docs: [BUSINESS_ENTITY.md](docs/BUSINESS_ENTITY.md), [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT + SIMPLE_MODE contract
+- Docs: soft until post-reserve + Simple language table ([SIMPLE_MODE.md](docs/SIMPLE_MODE.md)); [BUSINESS_ENTITY.md](docs/BUSINESS_ENTITY.md), [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT contract
 
 ## 1.0.55 — Trust bar + Simple mode e2e fixes + Store cert
 

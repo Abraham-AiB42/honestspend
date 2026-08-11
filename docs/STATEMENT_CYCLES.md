@@ -136,9 +136,9 @@ Freeze a bank statement actual balance for a close date and compare to projected
 
 Live payment math still uses books + promo lines; freezes are history, not a day grid.
 
-### Cash runway day strip
+### Cash runway API
 
-`GET /api/cash-runway` — day-by-day cash after buffer/tax vault for the Safe horizon (default ~45d). Card bills on credit accounts are **not** double-counted; cash `Card payment · …` schedules **are**. Home surfaces first red day + busy-day count.
+`GET /api/cash-runway` — day-by-day cash after buffer/tax vault for the Safe horizon (default ~45d); available for Full/tools. Card bills on credit accounts are **not** double-counted; cash `Card payment · …` schedules **are**. Home risk line shows **Next risk day** only (same engine path as Safe to spend; no busy-day strip on Home). Simple Home soft until is **left after Coming up bills (same post-reserve cash as Safe)** and may hide when equal to Safe — see [SIMPLE_MODE.md](./SIMPLE_MODE.md).
 
 ### Rewards pick
 
