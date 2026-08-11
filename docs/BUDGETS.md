@@ -24,8 +24,10 @@ Excel **Budget.xlsx** parity: daily (workdays), weekly, and monthly **plans** wi
 
 ## UI
 
-- Full books → **Budgets**  
-- Simple Home → budget summary + cut chips + reserve footnote  
+- Full books → **Budgets** (CRUD, suggestions, **apply cuts**)  
+- Simple Home → budget summary + **tappable cut chips** + reserve footnote  
+- **Can I buy?** → optional budget category; warns if short; cut offers when tight  
+- **Settings** → reserve on/off, week start, workday checkboxes  
 
 ## Settings (app_settings)
 
