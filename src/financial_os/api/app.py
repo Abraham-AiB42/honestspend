@@ -1590,6 +1590,15 @@ def archive_account(account_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Account not found")
     row.archived_at = datetime.now()
     row.is_cash_for_ifpp = False
+    # Credit cards: end cash-funded Card payment schedules so IFPP/cash runway
+    # does not keep counting payments for an archived card.
+    if (row.kind or "") == "credit":
+        from financial_os.services.autopay import _end_card_payment_schedules
+
+        _end_card_payment_schedules(db, row.id)
+        row.statement_balance_cached = None
+        row.next_payment_amount_cached = None
+        row.next_payment_date_cached = None
     db.flush()
     return {
         "ok": True,

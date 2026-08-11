@@ -10,13 +10,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from financial_os.config import settings
-from financial_os.db import Account, Profile, Transaction, init_db
+from financial_os.db import Account, Profile, ScheduledItem, Transaction, init_db
 from financial_os.seed import seed_all
 from financial_os.services.account_balance import apply_amount_to_account
 from financial_os.services.account_ledger import (
     rebuild_running_balance,
     verify_running_balance,
 )
+from financial_os.services.autopay import recompute_card_payment_schedule
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -268,4 +269,80 @@ def test_verify_running_balance(tmp_path: Path, monkeypatch):
     # verify must not write
     s.refresh(card)
     assert Decimal(str(card.current_balance)) == Decimal("50.00")
+    s.close()
+
+
+def _card_payment_schedule(s, card_id: int) -> ScheduledItem | None:
+    marker = f"card_account_id={card_id};"
+    return (
+        s.query(ScheduledItem)
+        .filter(
+            ScheduledItem.active.is_(True),
+            ScheduledItem.notes.like(f"%{marker}%"),
+        )
+        .first()
+    )
+
+
+def test_rebuild_credit_triggers_card_payment_recompute(tmp_path: Path, monkeypatch):
+    """After rebuild writes credit books, cash Card payment schedule/caches refresh."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("3000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Visa",
+        current_balance=Decimal("0"),
+        credit_limit=Decimal("5000"),
+        payment_due_day=15,
+        statement_close_day=1,
+        autopay_policy="statement",
+        payment_funding_account_id=cash.id,
+    )
+    s.add(card)
+    s.flush()
+
+    # Ledger: charge -200 → books owed 200; seed schedule at 200
+    s.add(
+        Transaction(
+            profile_id=p.id,
+            account_id=card.id,
+            txn_date=date(2026, 8, 1),
+            amount=Decimal("-200.00"),
+            payee="Store",
+            status="cleared",
+        )
+    )
+    apply_amount_to_account(card, Decimal("-200.00"))
+    recompute_card_payment_schedule(s, card.id, as_of=date.today())
+    s.commit()
+    sched = _card_payment_schedule(s, card.id)
+    assert sched is not None
+    assert sched.amount == Decimal("-200.00")
+    assert card.next_payment_amount_cached == Decimal("200.00")
+
+    # Corrupt books low; rebuild from ledger should restore 200 and recompute schedule
+    card.current_balance = Decimal("50.00")
+    card.next_payment_amount_cached = Decimal("50.00")
+    s.commit()
+
+    rebuilt = rebuild_running_balance(s, card.id)
+    s.commit()
+    s.refresh(card)
+
+    assert rebuilt == Decimal("200.00")
+    assert Decimal(str(card.current_balance)) == Decimal("200.00")
+    assert card.next_payment_amount_cached == Decimal("200.00")
+    sched2 = _card_payment_schedule(s, card.id)
+    assert sched2 is not None
+    assert sched2.amount == Decimal("-200.00")
     s.close()

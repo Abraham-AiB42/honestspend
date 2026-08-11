@@ -114,11 +114,13 @@ def trust_balance(
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     before_books = _d(a.current_balance)
     before_inst = _d(a.institution_balance) if a.institution_balance is not None else None
+    books_changed = False
     if trust == "institution":
         if a.institution_balance is None:
             raise ValueError("No institution balance to trust")
         a.current_balance = _d(a.institution_balance)
         a.last_reconciled_at = now
+        books_changed = True
     elif trust == "books":
         a.institution_balance = _d(a.current_balance)
         a.last_reconciled_at = now
@@ -144,6 +146,11 @@ def trust_balance(
     except Exception:
         pass
     session.flush()
+    # Credit books drive statement projection + cash Card payment schedules
+    if books_changed and (a.kind or "") == "credit":
+        from financial_os.services.autopay import after_account_balance_changed
+
+        after_account_balance_changed(session, int(a.id))
     return {
         "ok": True,
         "account_id": a.id,

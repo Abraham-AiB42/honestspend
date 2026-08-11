@@ -6,8 +6,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, init_db
+from financial_os.db import Account, Profile, ScheduledItem, init_db
 from financial_os.seed import seed_all
+from financial_os.services.autopay import recompute_card_payment_schedule
 from financial_os.services.reconcile import reconcile_report, set_institution_balance, trust_balance
 
 
@@ -69,4 +70,62 @@ def test_trust_institution_updates_credit_available(tmp_path: Path):
     assert card.current_balance == Decimal("150")
     assert card.available_credit == Decimal("850")
     assert Decimal(str(out.get("books_before"))) == Decimal("200")
+    s.close()
+
+
+def test_trust_institution_recomputes_card_payment_schedule(tmp_path: Path):
+    """When credit books change via trust=institution, cash schedule follows."""
+    eng = create_engine(f"sqlite:///{(tmp_path / 'trust_sched.db').as_posix()}")
+    init_db(eng)
+    SF = sessionmaker(bind=eng)
+    s = SF()
+    seed_all(s)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Ops",
+        current_balance=Decimal("5000"),
+        is_cash_for_ifpp=True,
+    )
+    s.add(cash)
+    s.flush()
+    card = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Visa",
+        current_balance=Decimal("200"),
+        institution_balance=Decimal("350"),
+        credit_limit=Decimal("5000"),
+        available_credit=Decimal("4800"),
+        payment_due_day=15,
+        statement_close_day=1,
+        autopay_policy="statement",
+        payment_funding_account_id=cash.id,
+    )
+    s.add(card)
+    s.flush()
+    recompute_card_payment_schedule(s, card.id)
+    s.commit()
+    marker = f"card_account_id={card.id};"
+    sched = (
+        s.query(ScheduledItem)
+        .filter(ScheduledItem.active.is_(True), ScheduledItem.notes.like(f"%{marker}%"))
+        .first()
+    )
+    assert sched is not None
+    assert sched.amount == Decimal("-200.00")
+
+    trust_balance(s, card.id, trust="institution")
+    s.commit()
+    s.refresh(card)
+    assert card.current_balance == Decimal("350")
+    assert card.next_payment_amount_cached == Decimal("350.00")
+    sched2 = (
+        s.query(ScheduledItem)
+        .filter(ScheduledItem.active.is_(True), ScheduledItem.notes.like(f"%{marker}%"))
+        .first()
+    )
+    assert sched2 is not None
+    assert sched2.amount == Decimal("-350.00")
     s.close()

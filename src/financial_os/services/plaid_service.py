@@ -158,10 +158,15 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
 
     Returns (accounts, balances_missing_current) where missing count is how many
     Plaid accounts omitted balances.current (books/institution left unchanged).
+
+    When a credit account's current_balance snapshot is applied, recomputes that
+    card's payment caches / cash Card payment schedule after the pass.
     """
     data = _post("/accounts/get", _body({"access_token": item.access_token}))
     out: list[Account] = []
     missing_current = 0
+    # Credit accounts whose books snapshot changed this pass → recompute schedules
+    credit_balance_touched: list[int] = []
     for a in data.get("accounts") or []:
         plaid_aid = a["account_id"]
         existing = (
@@ -186,6 +191,8 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
                 if kind in ("checking", "savings", "cash"):
                     # Promote to IFPP cash once we have a real snapshot
                     existing.is_cash_for_ifpp = True
+                if kind == "credit" and existing.id is not None:
+                    credit_balance_touched.append(int(existing.id))
             else:
                 missing_current += 1
             if kind == "credit":
@@ -240,8 +247,16 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
             from financial_os.services.cycle_config import apply_credit_cycle_defaults
 
             apply_credit_cycle_defaults(session, row, source="plaid")
+            if current is not None and row.id is not None:
+                credit_balance_touched.append(int(row.id))
         out.append(row)
     session.flush()
+    if credit_balance_touched:
+        from financial_os.services.autopay import after_account_balance_changed
+
+        # De-dupe in case the same id was recorded twice
+        for aid in dict.fromkeys(credit_balance_touched):
+            after_account_balance_changed(session, aid)
     return out, missing_current
 
 

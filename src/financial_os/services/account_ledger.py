@@ -82,6 +82,11 @@ def rebuild_running_balance(session: Session, account_id: int) -> Decimal:
     if account.kind == "credit" and account.credit_limit is not None:
         account.available_credit = _quantize(_d(account.credit_limit) - rebuilt)
     session.flush()
+    # Credit books drive statement projection + cash Card payment schedules
+    if (account.kind or "") == "credit":
+        from financial_os.services.autopay import after_account_balance_changed
+
+        after_account_balance_changed(session, int(account.id))
     return rebuilt
 
 

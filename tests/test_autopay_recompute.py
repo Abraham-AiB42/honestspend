@@ -275,3 +275,46 @@ def test_missing_funding_ends_stale_cash_schedule(tmp_path: Path, monkeypatch):
     # Caches may still reflect projection
     assert card.next_payment_amount_cached is not None
     s.close()
+
+
+def test_archive_credit_ends_card_payment_schedule(tmp_path: Path, monkeypatch):
+    """POST archive on credit ends cash Card payment schedules for that card."""
+    import financial_os.api.app as app_mod
+    from fastapi.testclient import TestClient
+    from financial_os.db import init_db, make_engine, make_session_factory
+
+    data = tmp_path / "data"
+    data.mkdir(exist_ok=True)
+    monkeypatch.setattr(settings, "data_dir", data)
+    monkeypatch.setattr(settings, "host", "127.0.0.1")
+    monkeypatch.setattr(settings, "require_api_key", False)
+    monkeypatch.setattr(settings, "allow_non_loopback", False)
+
+    app_mod.engine = make_engine()
+    app_mod.SessionLocal = make_session_factory(app_mod.engine)
+    init_db(app_mod.engine)
+    with app_mod.SessionLocal() as s:
+        seed_all(s)
+        s.commit()
+
+    with app_mod.SessionLocal() as s:
+        p, cash, card = _card_and_cash(s, bal=Decimal("175.00"), policy="statement")
+        recompute_card_payment_schedule(s, card.id, as_of=date.today())
+        s.commit()
+        card_id = card.id
+        assert _card_payment_schedule(s, card_id) is not None
+        assert card.next_payment_amount_cached == Decimal("175.00")
+
+    with TestClient(app_mod.app) as client:
+        r = client.post(f"/api/accounts/{card_id}/archive")
+        assert r.status_code == 200, r.text
+        assert r.json().get("archived") is True
+
+    with app_mod.SessionLocal() as s:
+        assert _card_payment_schedule(s, card_id) is None
+        card = s.get(Account, card_id)
+        assert card is not None
+        assert card.archived_at is not None
+        assert card.next_payment_amount_cached is None
+        assert card.statement_balance_cached is None
+        assert card.next_payment_date_cached is None
