@@ -23,7 +23,7 @@
   <Identity
     Name="AgencyinBox42.HonestSpend"
     Publisher="CN=AA975026-9A8A-4BD4-9A1E-623BC6D70EE3"
-    Version="1.0.38.0" />
+    Version="1.0.39.0" />
 
   <Properties>
     <DisplayName>HonestSpend</DisplayName>

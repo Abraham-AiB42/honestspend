@@ -410,6 +410,13 @@ class AppSettings(Base):
     budget_week_starts_on: Mapped[int] = mapped_column(Integer, default=0)  # 0=Mon
     # Mon–Fri default bitmask
     budget_workdays: Mapped[int] = mapped_column(Integer, default=31)
+    # Smart setup wizard (resumable multi-phase)
+    # welcome | path | plaid_keys | plaid_link | ai_keys | cash_loop | import_cash
+    # | discover | liabilities | recurring | categorize | budgets | buffers | manual | done
+    setup_phase: Mapped[str] = mapped_column(String(32), default="welcome")
+    # plaid | csv | manual | null
+    setup_path: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    setup_payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:

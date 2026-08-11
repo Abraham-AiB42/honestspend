@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -247,6 +247,32 @@ def _mig_13_budgets(conn) -> None:
     )
 
 
+def _mig_14_setup_wizard(conn) -> None:
+    """Resumable smart setup wizard phase state."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN setup_phase VARCHAR(32) DEFAULT 'welcome'",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN setup_path VARCHAR(16)",
+    )
+    _exec_ignore(
+        conn,
+        "ALTER TABLE app_settings ADD COLUMN setup_payload_json TEXT",
+    )
+    # Existing completed installs: don't force wizard again
+    try:
+        conn.execute(
+            text(
+                "UPDATE app_settings SET setup_phase = 'done' "
+                "WHERE onboarding_complete = 1 AND (setup_phase IS NULL OR setup_phase = 'welcome')"
+            )
+        )
+    except Exception:
+        pass
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -262,6 +288,7 @@ MIGRATIONS: dict[int, Callable] = {
     11: _mig_11_import_reminders,
     12: _mig_12_month_close,
     13: _mig_13_budgets,
+    14: _mig_14_setup_wizard,
 }
 
 

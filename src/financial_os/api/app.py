@@ -808,17 +808,67 @@ def license_refresh():
 @app.get("/api/onboarding")
 def onboarding_status(db: Session = Depends(get_db)):
     from financial_os.services.onboarding import get_onboarding_status
+    from financial_os.services.setup_wizard import get_setup_state
 
     s = get_onboarding_status(db)
+    setup = get_setup_state(db)
     return {
-        "complete": s.complete,
+        "complete": s.complete or setup.get("onboarding_complete"),
         "has_cash_account": s.has_cash_account,
         "has_credit_account": s.has_credit_account,
         "has_recurring": s.has_recurring,
         "account_count": s.account_count,
         "product_name": s.product_name,
-        "needs_setup": not s.complete and s.account_count == 0,
+        # Smart wizard: needs_setup until setup_phase == done
+        "needs_setup": bool(setup.get("needs_setup")),
+        "setup_phase": setup.get("phase"),
+        "setup_path": setup.get("path"),
+        "setup_progress_pct": setup.get("progress_pct"),
     }
+
+
+@app.get("/api/setup/state")
+def setup_state(db: Session = Depends(get_db)):
+    """Resumable smart setup wizard state."""
+    from financial_os.services.setup_wizard import get_setup_state
+
+    return get_setup_state(db)
+
+
+class SetupAdvanceIn(BaseModel):
+    action: str = "next"  # next | back | skip_phase | jump | complete | set_path
+    path: str | None = None  # plaid | csv | manual
+    target_phase: str | None = None
+    payload: dict | None = None
+
+
+@app.post("/api/setup/advance")
+def setup_advance(body: SetupAdvanceIn, db: Session = Depends(get_db)):
+    from financial_os.services.setup_wizard import advance_setup
+
+    try:
+        return advance_setup(
+            db,
+            action=body.action,
+            path=body.path,
+            payload=body.payload,
+            target_phase=body.target_phase,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class SetupSkipIn(BaseModel):
+    note: str | None = "skipped"
+
+
+@app.post("/api/setup/complete")
+def setup_complete(body: SetupSkipIn | None = None, db: Session = Depends(get_db)):
+    """Mark setup done (skip remaining phases)."""
+    from financial_os.services.setup_wizard import mark_setup_done
+
+    body = body or SetupSkipIn()
+    return mark_setup_done(db, note=body.note)
 
 
 @app.post("/api/onboarding/complete")
@@ -826,7 +876,7 @@ def onboarding_complete(db: Session = Depends(get_db)):
     from financial_os.services.onboarding import complete_onboarding
 
     complete_onboarding(db)
-    return {"ok": True, "onboarding_complete": True}
+    return {"ok": True, "onboarding_complete": True, "setup_phase": "done"}
 
 
 @app.post("/api/onboarding/quick-setup")

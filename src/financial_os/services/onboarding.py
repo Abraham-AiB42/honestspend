@@ -43,6 +43,9 @@ def complete_onboarding(session: Session) -> AppSettings:
         settings = AppSettings(id=1)
         session.add(settings)
     settings.onboarding_complete = True
+    # Keep smart wizard in sync
+    if hasattr(settings, "setup_phase"):
+        settings.setup_phase = "done"
     session.flush()
     try:
         from financial_os.services.backup import create_backup
@@ -124,6 +127,10 @@ def apply_quick_setup(
         created["card_account"] = card_name
 
     settings.onboarding_complete = True
+    if hasattr(settings, "setup_phase"):
+        settings.setup_phase = "done"
+        if not getattr(settings, "setup_path", None):
+            settings.setup_path = "manual"
     session.flush()
     created["onboarding_complete"] = True
 

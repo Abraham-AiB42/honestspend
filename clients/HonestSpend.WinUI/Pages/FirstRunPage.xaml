@@ -8,9 +8,10 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="14" MaxWidth="520">
-            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Welcome" />
-            <TextBlock x:Name="StepLabel" Opacity="0.7" />
+        <StackPanel Spacing="14" MaxWidth="560">
+            <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Get started" />
+            <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="6" />
+            <TextBlock x:Name="StepLabel" Opacity="0.7" TextWrapping="Wrap" />
             <TextBlock x:Name="QuestionText" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap" />
             <TextBlock x:Name="HintText" Opacity="0.8" TextWrapping="Wrap" />
 
@@ -23,6 +24,7 @@
             </StackPanel>
             <TextBlock x:Name="MsgText" TextWrapping="Wrap" Opacity="0.9" />
             <InfoBar x:Name="ErrorBar" IsOpen="False" IsClosable="True" Severity="Error" />
+            <InfoBar x:Name="InfoBar" IsOpen="False" IsClosable="True" Severity="Informational" />
         </StackPanel>
     </ScrollViewer>
 </Page>

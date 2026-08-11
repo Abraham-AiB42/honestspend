@@ -8,12 +8,20 @@ using Microsoft.UI.Xaml.Navigation;
 
 namespace HonestSpend_WinUI.Pages;
 
-/// <summary>2-minute first-run: welcome → checking → card? → biggest bill? → done.</summary>
+/// <summary>
+/// Smart setup wizard shell (PR1): welcome → path (Plaid / CSV / manual) →
+/// manual short path or placeholders for later phases. Resume via setup_phase.
+/// </summary>
 public sealed partial class FirstRunPage : Page
 {
-    private int _step;
-    /// <summary>0 welcome · 1 cash · 2 card · 3 bill · 4 bank tip · 5 review · 6 done</summary>
-    private const int MaxStep = 6;
+    private string _phase = "welcome";
+    private string? _path;
+    private int _progress;
+    private bool _loading;
+
+    // Manual path local steps (legacy first-run)
+    private int _manualStep;
+    private const int ManualMax = 6;
 
     private TextBox? _cashName;
     private TextBox? _inst;
@@ -28,6 +36,8 @@ public sealed partial class FirstRunPage : Page
     private TextBox? _billName;
     private NumberBox? _billAmt;
     private CalendarDatePicker? _billNext;
+    private ComboBox? _importCadenceBox;
+    private ComboBox? _importFocusBox;
 
     private string _cashNameV = "Primary checking";
     private string? _instV;
@@ -42,163 +52,283 @@ public sealed partial class FirstRunPage : Page
     private string _billNameV = "Housing / rent";
     private decimal _billAmtV = 1500;
     private DateTimeOffset _billNextV = DateTimeOffset.Now.AddDays(14);
-    private string _importCadenceV = "weekly"; // off | daily | weekly | monthly
-    private string _importFocusV = "transactions"; // transactions | statements | both
-    private ComboBox? _importCadenceBox;
-    private ComboBox? _importFocusBox;
+    private string _importCadenceV = "weekly";
+    private string _importFocusV = "transactions";
 
     public FirstRunPage()
     {
         InitializeComponent();
     }
 
-    protected override void OnNavigatedTo(NavigationEventArgs e)
+    protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
-        _step = 0;
-        Render();
+        await RefreshStateAsync();
+    }
+
+    private async Task RefreshStateAsync()
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.GetSetupStateAsync();
+            ApplyState(st);
+            Render();
+        }
+        catch (Exception ex)
+        {
+            // Offline: fall back to local welcome
+            _phase = "welcome";
+            StepLabel.Text = "Engine starting…";
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+            Render();
+        }
+    }
+
+    private void ApplyState(JsonElement st)
+    {
+        _phase = JsonUi.Str(st, "phase", "welcome");
+        _path = st.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String
+            ? p.GetString()
+            : null;
+        _progress = 0;
+        if (st.TryGetProperty("progress_pct", out var pct) && pct.TryGetInt32(out var n))
+            _progress = n;
+        ProgressBar.Value = _progress;
+        if (_phase == "manual" && _manualStep == 0)
+            _manualStep = 0;
+        if (_phase == "done")
+        {
+            AppState.ShowSetupNav = false;
+        }
     }
 
     private void Render()
     {
         ErrorBar.IsOpen = false;
+        InfoBar.IsOpen = false;
         Fields.Children.Clear();
-        StepLabel.Text = $"Step {_step + 1} of {MaxStep + 1}";
-        BackBtn.IsEnabled = _step > 0;
-        NextBtn.Content = _step >= MaxStep ? "Finish" : "Next";
+        BackBtn.IsEnabled = _phase is not ("welcome" or "done");
+        NextBtn.Content = "Next";
+        NextBtn.IsEnabled = true;
+        ProgressBar.Value = _progress;
+        StepLabel.Text = $"{_phase.Replace('_', ' ')} · {_progress}%";
 
-        switch (_step)
+        if (_phase == "done")
+        {
+            QuestionText.Text = "You're set";
+            HintText.Text = "Open Home for Safe to spend and Do this next.";
+            NextBtn.Content = "Go to Home";
+            BackBtn.IsEnabled = false;
+            return;
+        }
+
+        if (_phase == "welcome")
+        {
+            QuestionText.Text = "We'll answer one question";
+            HintText.Text =
+                "What can you safely spend without bouncing checking or paying dumb interest?\n\n" +
+                "About 15–40 minutes if you import bank history — or 2 minutes for a quick manual start. " +
+                "You can pause anytime; we remember where you left off.";
+            NextBtn.Content = "Let's go";
+            return;
+        }
+
+        if (_phase == "path")
+        {
+            QuestionText.Text = "How do you want to connect money?";
+            HintText.Text =
+                "Plaid uses your own free trial keys (up to 10 bank connections). " +
+                "CSV never needs bank passwords inside HonestSpend. " +
+                "Quick manual is fastest if you're in a hurry.";
+
+            void addPath(string id, string title, string detail)
+            {
+                var btn = new Button
+                {
+                    Content = new StackPanel
+                    {
+                        Spacing = 2,
+                        Children =
+                        {
+                            new TextBlock { Text = title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                            new TextBlock { Text = detail, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, FontSize = 12 },
+                        },
+                    },
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    Padding = new Thickness(12),
+                    Tag = id,
+                    Margin = new Thickness(0, 0, 0, 4),
+                };
+                btn.Click += async (_, _) => await ChoosePathAsync(id);
+                Fields.Children.Add(btn);
+            }
+
+            addPath("plaid", "Plaid (your keys)", "Signup → paste client id + secret → Link banks. Best for ongoing sync.");
+            addPath("csv", "CSV / OFX imports", "Add cash accounts one-by-one with bank download guides. Free forever.");
+            addPath("manual", "Quick manual (2 min)", "One checking, optional card & bill. Import later.");
+            NextBtn.IsEnabled = false;
+            NextBtn.Content = "Pick a path above";
+            return;
+        }
+
+        if (_phase == "manual")
+        {
+            RenderManual();
+            return;
+        }
+
+        // Placeholder phases until PR2+
+        var (title, hint, nextLabel) = _phase switch
+        {
+            "plaid_keys" => (
+                "Plaid keys (next update)",
+                "You'll enter client id + secret here with secure local storage, then Link. " +
+                "For now: Settings/env, or pick CSV / Quick manual. Skip advances the wizard.",
+                "Continue (placeholder)"),
+            "plaid_link" => (
+                "Link banks (next update)",
+                "App-owned Plaid Link — up to 10 institutions on trial. Placeholder; Next continues.",
+                "Continue"),
+            "ai_keys" => (
+                "AI helpers (optional)",
+                "After Plaid: connect Grok or another LLM you prefer (BYOK, local only). Skip for now.",
+                "Skip AI for now"),
+            "cash_loop" => (
+                "Cash accounts (next update)",
+                "Pattern: + Cash account → type → bank → import. Placeholder; use Quick manual or wait for next build.",
+                "Continue"),
+            "import_cash" => (
+                "Import cash history",
+                "Bank guides + CSV import per account. Coming next — you can use Full books → Import now.",
+                "Continue"),
+            "discover" => (
+                "Find cards & bills",
+                "We'll skim debits for card payments, loans, and recurring investments. Coming soon.",
+                "Continue"),
+            "liabilities" => (
+                "Set up debts",
+                "Cards get payment options: minimum, fixed, statement, interest-saving. Coming soon.",
+                "Continue"),
+            "recurring" => (
+                "Recurring bills",
+                "Accept detected bills and recurring investments. Coming soon.",
+                "Continue"),
+            "categorize" => (
+                "Categories",
+                "Auto-categorize + confirm top ambiguous payees. Coming soon.",
+                "Continue"),
+            "budgets" => (
+                "Budgets",
+                "Seed from history and review amounts. Coming soon.",
+                "Continue"),
+            "buffers" => (
+                "Safety buffers",
+                "Per-account buffer + total cash floor. Coming soon.",
+                "Finish setup"),
+            _ => (
+                _phase.Replace('_', ' '),
+                "Continue setup or skip for now.",
+                "Next"),
+        };
+        QuestionText.Text = title;
+        HintText.Text = hint;
+        NextBtn.Content = nextLabel;
+        InfoBar.Title = "Wizard foundation";
+        InfoBar.Message = "Path saved. Full steps ship in the next builds — you can still skip to Home.";
+        InfoBar.IsOpen = true;
+    }
+
+    private void RenderManual()
+    {
+        StepLabel.Text = $"Quick manual · step {_manualStep + 1} of {ManualMax + 1}";
+        NextBtn.Content = _manualStep >= ManualMax ? "Finish" : "Next";
+        BackBtn.IsEnabled = _manualStep > 0 || _phase != "welcome";
+
+        switch (_manualStep)
         {
             case 0:
-                QuestionText.Text = "We'll answer one question";
-                HintText.Text =
-                    "What can you safely spend without bouncing checking or paying dumb interest? " +
-                    "About two minutes. No spreadsheet.";
-                break;
-            case 1:
                 QuestionText.Text = "Your primary checking";
-                HintText.Text = "Rainy-day floor stays out of Safe to spend (default $1,000).";
+                HintText.Text = "Rainy-day floor stays out of Safe to spend (default $1,000 total buffer for now).";
                 _cashName = new TextBox { Header = "Nickname", Text = _cashNameV };
                 _inst = new TextBox { Header = "Bank (optional)", Text = _instV ?? "" };
                 _cashBal = new NumberBox { Header = "Balance today ($)", Value = (double)_cashBalV, Minimum = 0 };
-                _buffer = new NumberBox { Header = "Rainy-day floor ($)", Value = (double)_bufferV, Minimum = 0 };
+                _buffer = new NumberBox { Header = "Total rainy-day floor ($)", Value = (double)_bufferV, Minimum = 0 };
                 Fields.Children.Add(_cashName);
                 Fields.Children.Add(_inst);
                 Fields.Children.Add(_cashBal);
                 Fields.Children.Add(_buffer);
                 break;
-            case 2:
+            case 1:
                 QuestionText.Text = "Add a credit card now?";
-                HintText.Text = "Optional. Due day lets us prove interest-free charges.";
+                HintText.Text = "Optional. Due day helps interest-free planning.";
                 _wantCard = new CheckBox { Content = "Yes — add a card", IsChecked = _wantCardV };
                 _wantCard.Checked += (_, _) => CardFields(true);
                 _wantCard.Unchecked += (_, _) => CardFields(false);
                 Fields.Children.Add(_wantCard);
                 CardFields(_wantCardV);
                 break;
-            case 3:
+            case 2:
                 QuestionText.Text = "Biggest monthly bill?";
-                HintText.Text = "Optional. Rent/housing makes Safe to spend realistic on day one.";
+                HintText.Text = "Optional. Makes Safe to spend realistic on day one.";
                 _wantBill = new CheckBox { Content = "Yes — add one bill", IsChecked = _wantBillV };
                 _wantBill.Checked += (_, _) => BillFields(true);
                 _wantBill.Unchecked += (_, _) => BillFields(false);
                 Fields.Children.Add(_wantBill);
                 BillFields(_wantBillV);
                 break;
-            case 4:
+            case 3:
                 QuestionText.Text = "How often should we remind you to refresh from your bank?";
-                HintText.Text =
-                    "Free & local: download CSV/OFX (or statements) from your bank site, then Import. " +
-                    "We never store bank passwords. Optional live link = your own Plaid keys later.";
-                var cadenceBox = new ComboBox
-                {
-                    Header = "Reminder cadence",
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                };
-                _importCadenceBox = cadenceBox;
-                void addCadence(string tag, string label, bool selected)
-                {
-                    var item = new ComboBoxItem { Content = label, Tag = tag };
-                    cadenceBox.Items.Add(item);
-                    if (selected) cadenceBox.SelectedItem = item;
-                }
-                addCadence("off", "Off — I update myself (daily sheet habit)", _importCadenceV == "off");
-                addCadence("daily", "Daily", _importCadenceV == "daily");
-                addCadence("weekly", "Weekly (good default)", _importCadenceV == "weekly");
-                addCadence("monthly", "Monthly (open rarely / statements)", _importCadenceV == "monthly");
-                if (cadenceBox.SelectedItem is null && cadenceBox.Items.Count > 0)
-                    cadenceBox.SelectedIndex = 2;
-
-                var focusBox = new ComboBox
-                {
-                    Header = "What to download",
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                };
-                _importFocusBox = focusBox;
-                void addFocus(string tag, string label, bool selected)
-                {
-                    var item = new ComboBoxItem { Content = label, Tag = tag };
-                    focusBox.Items.Add(item);
-                    if (selected) focusBox.SelectedItem = item;
-                }
-                addFocus("transactions", "Transactions CSV/OFX (mid-cycle accuracy)", _importFocusV == "transactions");
-                addFocus("statements", "Monthly statements (PDF/CSV)", _importFocusV == "statements");
-                addFocus("both", "Both transactions and statements", _importFocusV == "both");
-                if (focusBox.SelectedItem is null && focusBox.Items.Count > 0)
-                    focusBox.SelectedIndex = 0;
-
-                Fields.Children.Add(cadenceBox);
-                Fields.Children.Add(focusBox);
-                Fields.Children.Add(new TextBlock
-                {
-                    TextWrapping = TextWrapping.Wrap,
-                    Opacity = 0.75,
-                    Text =
-                        "After setup: Full books → Import shows bank how-tos (login links + download steps). " +
-                        "Drop CSVs or statement PDFs into the inbox folder — tray has “Import inbox now”. " +
-                        "Optional: Banks (Plaid) or Grok with your own keys. Core app stays free forever.",
-                });
+                HintText.Text = "Download CSV/OFX yourself — we never store bank passwords.";
+                _importCadenceBox = new ComboBox { Header = "Reminder cadence", HorizontalAlignment = HorizontalAlignment.Stretch };
+                AddCombo(_importCadenceBox, "off", "Off", _importCadenceV == "off");
+                AddCombo(_importCadenceBox, "daily", "Daily", _importCadenceV == "daily");
+                AddCombo(_importCadenceBox, "weekly", "Weekly (default)", _importCadenceV is "weekly" or null or "");
+                AddCombo(_importCadenceBox, "monthly", "Monthly", _importCadenceV == "monthly");
+                _importFocusBox = new ComboBox { Header = "What to download", HorizontalAlignment = HorizontalAlignment.Stretch };
+                AddCombo(_importFocusBox, "transactions", "Transactions CSV/OFX", _importFocusV is "transactions" or null or "");
+                AddCombo(_importFocusBox, "statements", "Statements", _importFocusV == "statements");
+                AddCombo(_importFocusBox, "both", "Both", _importFocusV == "both");
+                Fields.Children.Add(_importCadenceBox);
+                Fields.Children.Add(_importFocusBox);
                 break;
-            case 5:
+            case 4:
                 QuestionText.Text = "Review";
-                HintText.Text = "We'll create these and show your first Safe to spend number.";
+                HintText.Text = "We'll create these and mark setup complete.";
                 var lines = new List<string>
                 {
                     $"Checking: {_cashNameV} · {_cashBalV:C}",
-                    $"Rainy-day floor: {_bufferV:C}",
+                    $"Total buffer: {_bufferV:C}",
                 };
                 if (_wantCardV)
                     lines.Add($"Card: {_cardNameV} · owed {_cardBalV:C} · due day {_cardDueV}");
                 if (_wantBillV)
                     lines.Add($"Bill: {_billNameV} · {_billAmtV:C}/mo");
-                var cadLabel = _importCadenceV switch
-                {
-                    "off" => "off (no nag)",
-                    "daily" => "daily",
-                    "monthly" => "monthly",
-                    _ => "weekly",
-                };
-                var focLabel = _importFocusV switch
-                {
-                    "statements" => "statements",
-                    "both" => "transactions + statements",
-                    _ => "transactions CSV/OFX",
-                };
-                lines.Add($"Money-in reminders: {cadLabel} · {focLabel}");
-                lines.Add("Plaid / Grok: optional BYOK later (not required)");
                 Fields.Children.Add(new ItemsControl { ItemsSource = lines });
                 break;
             default:
                 QuestionText.Text = "You're set";
-                HintText.Text = "Open Home for Safe to spend, Do this next, and your 3-minute check.";
+                HintText.Text = MsgText.Text.Length > 0 ? MsgText.Text : "Open Home for Safe to spend.";
                 NextBtn.Content = "Go to Home";
                 break;
         }
     }
 
+    private static void AddCombo(ComboBox box, string tag, string label, bool selected)
+    {
+        var item = new ComboBoxItem { Content = label, Tag = tag };
+        box.Items.Add(item);
+        if (selected) box.SelectedItem = item;
+        if (box.SelectedItem is null && box.Items.Count == 1)
+            box.SelectedIndex = 0;
+    }
+
     private void CardFields(bool show)
     {
-        // remove previous card fields beyond checkbox
         while (Fields.Children.Count > 1)
             Fields.Children.RemoveAt(Fields.Children.Count - 1);
         if (!show) return;
@@ -225,7 +355,7 @@ public sealed partial class FirstRunPage : Page
         Fields.Children.Add(_billNext);
     }
 
-    private void Capture()
+    private void CaptureManual()
     {
         if (_cashName is not null) _cashNameV = _cashName.Text?.Trim() ?? "Primary checking";
         if (_inst is not null) _instV = string.IsNullOrWhiteSpace(_inst.Text) ? null : _inst.Text.Trim();
@@ -246,53 +376,16 @@ public sealed partial class FirstRunPage : Page
             _importFocusV = foc;
     }
 
-    private void Back_Click(object sender, RoutedEventArgs e)
+    private async Task ChoosePathAsync(string path)
     {
-        if (_step > 0)
-        {
-            Capture();
-            _step--;
-            Render();
-        }
-    }
-
-    private async void Next_Click(object sender, RoutedEventArgs e)
-    {
-        ErrorBar.IsOpen = false;
         try
         {
-            Capture();
-            if (_step == 1 && string.IsNullOrWhiteSpace(_cashNameV))
-                throw new InvalidOperationException("Name your checking account.");
-            if (_step == 2 && _wantCardV && (_cardDueV < 1 || _cardDueV > 31))
-                throw new InvalidOperationException("Card needs a payment due day (1–31).");
-            if (_step == 3 && _wantBillV && _billAmtV <= 0)
-                throw new InvalidOperationException("Bill amount must be greater than zero.");
-
-            // 0–4 advance; 5 = review → submit; 6 = go home
-            if (_step < 5)
-            {
-                _step++;
-                Render();
-                return;
-            }
-
-            if (_step == 5)
-            {
-                await SubmitAsync();
-                _step = 6;
-                QuestionText.Text = "You're set";
-                HintText.Text = string.IsNullOrWhiteSpace(MsgText.Text)
-                    ? "Open Home for Safe to spend, Do this next, and your 3-minute check."
-                    : MsgText.Text;
-                Fields.Children.Clear();
-                NextBtn.Content = "Go to Home";
-                StepLabel.Text = "Done";
-                BackBtn.IsEnabled = false;
-                return;
-            }
-
-            Frame?.Navigate(typeof(HomePage));
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.SetupAdvanceAsync("set_path", path: path);
+            ApplyState(st);
+            _manualStep = 0;
+            Render();
         }
         catch (Exception ex)
         {
@@ -301,7 +394,114 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
-    private async Task SubmitAsync()
+    private async void Back_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_phase == "manual" && _manualStep > 0)
+            {
+                CaptureManual();
+                _manualStep--;
+                Render();
+                return;
+            }
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.SetupAdvanceAsync("back");
+            ApplyState(st);
+            Render();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void Next_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        if (_loading) return;
+        try
+        {
+            _loading = true;
+            if (_phase == "done")
+            {
+                Frame?.Navigate(typeof(HomePage));
+                return;
+            }
+
+            if (_phase == "path")
+                return; // must pick a button
+
+            if (_phase == "manual")
+            {
+                await ManualNextAsync();
+                return;
+            }
+
+            if (_phase == "welcome")
+            {
+                using var api = new LedgerApiClient();
+                await api.EnsureBackendAsync();
+                var st = await api.SetupAdvanceAsync("next");
+                ApplyState(st);
+                Render();
+                return;
+            }
+
+            // Placeholder phases: advance server state
+            using (var api = new LedgerApiClient())
+            {
+                await api.EnsureBackendAsync();
+                var st = await api.SetupAdvanceAsync("next");
+                ApplyState(st);
+                if (_phase == "done")
+                    AppState.ShowSetupNav = false;
+                Render();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ManualNextAsync()
+    {
+        CaptureManual();
+        if (_manualStep == 0 && string.IsNullOrWhiteSpace(_cashNameV))
+            throw new InvalidOperationException("Name your checking account.");
+        if (_manualStep == 1 && _wantCardV && (_cardDueV < 1 || _cardDueV > 31))
+            throw new InvalidOperationException("Card needs a payment due day (1–31).");
+        if (_manualStep == 2 && _wantBillV && _billAmtV <= 0)
+            throw new InvalidOperationException("Bill amount must be greater than zero.");
+
+        if (_manualStep < 4)
+        {
+            _manualStep++;
+            Render();
+            return;
+        }
+
+        if (_manualStep == 4)
+        {
+            await SubmitManualAsync();
+            _manualStep = 5;
+            Render();
+            return;
+        }
+
+        Frame?.Navigate(typeof(HomePage));
+    }
+
+    private async Task SubmitManualAsync()
     {
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync();
@@ -313,6 +513,8 @@ public sealed partial class FirstRunPage : Page
             ["cash_institution"] = _instV,
             ["safety_buffer"] = _bufferV,
             ["ifpp_mode"] = "conservative",
+            ["import_reminder_cadence"] = _importCadenceV,
+            ["import_reminder_focus"] = _importFocusV,
         };
         if (_wantCardV)
         {
@@ -325,21 +527,17 @@ public sealed partial class FirstRunPage : Page
         {
             body["bill_name"] = _billNameV;
             body["bill_amount"] = _billAmtV;
-            body["bill_next_date"] = _billNextV.Date.ToString("yyyy-MM-dd");
+            body["bill_next_date"] = _billNextV.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
-        body["import_reminder_cadence"] = _importCadenceV;
-        body["import_reminder_focus"] = _importFocusV;
 
         var res = await api.FirstRunAsync(body);
-        var home = await api.GetHomeSimpleAsync();
-        var safe = JsonUi.Str(home, "safe_to_spend");
-        if (decimal.TryParse(safe, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
-            safe = d.ToString("C", CultureInfo.CurrentCulture);
-        MsgText.Text =
-            $"Created. Safe to spend right now: {safe}. " +
-            JsonUi.Str(res, "backup", "") is { Length: > 0 } bak
-                ? $"Backup saved ({bak})."
-                : "";
+        MsgText.Text = JsonUi.Str(res, "message");
+        if (string.IsNullOrEmpty(MsgText.Text) || MsgText.Text == "—")
+            MsgText.Text = "Accounts created. Safe to spend is ready on Home.";
+        // first-run marks setup done on server
+        var st = await api.GetSetupStateAsync();
+        ApplyState(st);
+        AppState.ShowSetupNav = false;
     }
 
     private async void Skip_Click(object sender, RoutedEventArgs e)
@@ -348,7 +546,8 @@ public sealed partial class FirstRunPage : Page
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            await api.CompleteOnboardingAsync();
+            await api.SetupCompleteAsync("skipped-from-wizard");
+            AppState.ShowSetupNav = false;
             Frame?.Navigate(typeof(HomePage));
         }
         catch (Exception ex)

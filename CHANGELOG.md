@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.39 — Smart setup wizard foundation (PR1)
+
+- **Resumable setup state**: `setup_phase`, `setup_path`, payload (schema v14)
+- **API**: `GET /api/setup/state`, `POST /api/setup/advance`, `POST /api/setup/complete`
+- **Paths**: Plaid · CSV · Quick manual (manual fully works; other phases placeholders)
+- **WinUI Get started**: progress bar, path choice, resume after restart
+- Onboarding `needs_setup` follows wizard phase (not only empty accounts)
+- Plan locked: BYOK secrets store, app-owned Link, +cash loop, card payment options, per-account buffers, multi-LLM keys after Plaid
+
 ## 1.0.38 — Can I buy? respects budget reserve
 
 - **Pre-purchase cash path** uses **Safe to spend** (cash − period budget reserve), same as Home
