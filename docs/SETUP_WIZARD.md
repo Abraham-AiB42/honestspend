@@ -8,7 +8,7 @@ Resumable multi-phase onboarding (v1.0.39+). Goal: choose **where books live** +
 |-------|---------|
 | **Welcome** | Time honesty |
 | **Storage** | This PC only · OneDrive / Dropbox / iCloud / custom folder (`FOS_DATA_DIR`). Cloud = single-writer honesty. |
-| **Security** | App lock: none · PIN · password · Windows Hello (Face ID / fingerprint catalog for future clients). Secrets stay on device. |
+| **Security** | App lock: none · PIN · password · Windows Hello. **PIN/password/Hello also enable AES-256 at-rest encryption** of books (sealed file). Forget the secret → sealed books unrecoverable. Face ID / etc. catalog for future clients. |
 
 ## Paths (money)
 

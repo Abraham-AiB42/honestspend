@@ -433,8 +433,16 @@ def _set_sqlite_pragma(dbapi_conn, _connection_record) -> None:
 
 
 def make_engine(url: str | None = None):
-    engine = create_engine(url or settings.sqlalchemy_url, future=True)
-    if (url or settings.sqlalchemy_url).startswith("sqlite"):
+    u = url or settings.sqlalchemy_url
+    kwargs: dict = {"future": True}
+    if u.startswith("sqlite"):
+        # NullPool releases file handles immediately (needed to seal DB on Windows)
+        from sqlalchemy.pool import NullPool
+
+        kwargs["poolclass"] = NullPool
+        kwargs["connect_args"] = {"check_same_thread": False}
+    engine = create_engine(u, **kwargs)
+    if u.startswith("sqlite"):
         event.listen(engine, "connect", _set_sqlite_pragma)
     return engine
 

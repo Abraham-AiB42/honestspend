@@ -81,7 +81,7 @@
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="App lock (this device)" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                Text="Optional PIN, password, or Windows Hello. Stops casual access to the UI — not full database encryption. Change anytime; clearing lock does not delete books." />
+                Text="PIN, password, or Windows Hello also encrypts books at rest (AES-256). Forget the secret and sealed books cannot be recovered. Clearing lock does not delete books." />
             <TextBlock x:Name="AppLockStatusText" Opacity="0.8" TextWrapping="Wrap" Text="Checking…" />
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Content="No lock" Click="AppLockNone_Click" />

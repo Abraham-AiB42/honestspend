@@ -27,21 +27,27 @@ def cmd_init_db(_args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    # Ensure DB + tax COA (no Excel dependency)
-    cmd_init_db(args)
-    if settings.seed_demo:
-        from financial_os.services.demo_seed import seed_demo_if_empty
+    from financial_os.services import db_crypto as dc
 
-        engine = make_engine()
-        session = make_session_factory(engine)()
-        try:
-            if seed_demo_if_empty(session):
-                session.commit()
-                print("Seeded demo accounts (FOS_SEED_DEMO=1).")
-        finally:
-            session.close()
+    # If sealed, skip local init — lifespan will wait for unlock
+    if dc.needs_unlock():
+        print("Database is sealed. Start the app and unlock to open books.")
     else:
-        print("HonestSpend ready — complete setup in the app (no spreadsheet required).")
+        # Ensure DB + tax COA (no Excel dependency)
+        cmd_init_db(args)
+        if settings.seed_demo:
+            from financial_os.services.demo_seed import seed_demo_if_empty
+
+            engine = make_engine()
+            session = make_session_factory(engine)()
+            try:
+                if seed_demo_if_empty(session):
+                    session.commit()
+                    print("Seeded demo accounts (FOS_SEED_DEMO=1).")
+            finally:
+                session.close()
+        else:
+            print("HonestSpend ready — complete setup in the app (no spreadsheet required).")
 
     print(f"Open http://{args.host or settings.host}:{args.port or settings.port}")
     uvicorn.run(

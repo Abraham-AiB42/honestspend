@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.49 — Full DB encryption with unlock key
+
+- **At-rest encryption**: when app lock ≠ none, books use AES-256-GCM seal (`financial_os.db.sealed` + `crypto.json` key wrap)
+- **Unlock key hierarchy**: PIN/password → KEK (PBKDF2) → DEK; Windows Hello uses client-held DEK
+- Engine boots sealed (HTTP 423 until unlock); `POST /api/crypto/unlock|enable|lock|disable`
+- WinUI: lock screen unseals; setup/Settings enable encryption with lock; seal on clean shutdown
+- NullPool SQLite so Windows can seal without file locks; poison plaintext if delete fails
+- Docs: forget PIN = unrecoverable sealed books
+
 ## 1.0.48 — Storage + app lock in setup
 
 - **Setup first steps**: **Where books live** (local / OneDrive / Dropbox / iCloud / custom) then **App lock**

@@ -506,6 +506,38 @@ public sealed class LedgerApiClient : IDisposable
             advance,
         }, ct);
 
+    public Task<JsonElement> CryptoStatusAsync(CancellationToken ct = default)
+        => GetJsonAsync("api/crypto/status", ct);
+
+    public Task<JsonElement> CryptoUnlockAsync(
+        string? secret = null,
+        string? dekB64 = null,
+        CancellationToken ct = default)
+        => PostJsonAsync("api/crypto/unlock", new { secret, dek_b64 = dekB64 }, ct);
+
+    public Task<JsonElement> CryptoEnableAsync(
+        string? secret = null,
+        string modeHint = "pin",
+        string wrap = "password",
+        string? dekB64 = null,
+        CancellationToken ct = default)
+        => PostJsonAsync("api/crypto/enable", new
+        {
+            secret,
+            mode_hint = modeHint,
+            wrap,
+            dek_b64 = dekB64,
+        }, ct);
+
+    public Task<JsonElement> CryptoLockAsync(CancellationToken ct = default)
+        => PostJsonAsync("api/crypto/lock", new { }, ct);
+
+    public Task<JsonElement> CryptoDisableAsync(
+        string? secret = null,
+        string? dekB64 = null,
+        CancellationToken ct = default)
+        => PostJsonAsync("api/crypto/disable", new { secret, dek_b64 = dekB64 }, ct);
+
     public Task<JsonElement> GetSetupCashAsync(int? profileId = null, CancellationToken ct = default)
     {
         var q = "api/setup/cash";

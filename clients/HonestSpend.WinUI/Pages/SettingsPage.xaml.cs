@@ -597,11 +597,20 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private void AppLockNone_Click(object sender, RoutedEventArgs e)
+    private async void AppLockNone_Click(object sender, RoutedEventArgs e)
     {
-        AppLockService.SetNone();
-        AppLockMsgText.Text = "App lock disabled.";
-        RefreshAppLockStatus();
+        try
+        {
+            AppLockService.SetNone();
+            AppLockMsgText.Text =
+                "App lock UI disabled. If books were encrypted, use Clear lock with your PIN to also decrypt, or leave sealed.";
+            RefreshAppLockStatus();
+        }
+        catch (Exception ex)
+        {
+            AppLockMsgText.Text = ex.Message;
+        }
+        await Task.CompletedTask;
     }
 
     private async void AppLockPin_Click(object sender, RoutedEventArgs e)
@@ -611,11 +620,17 @@ public sealed partial class SettingsPage : Page
             var pinBox = new PasswordBox { Header = "PIN (4–8 digits)", MaxLength = 8 };
             var confBox = new PasswordBox { Header = "Confirm PIN", MaxLength = 8 };
             var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Also encrypts books at rest (AES-256). Forget this PIN and sealed books cannot be recovered.",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.85,
+            });
             panel.Children.Add(pinBox);
             panel.Children.Add(confBox);
             var dlg = new ContentDialog
             {
-                Title = "Set app PIN",
+                Title = "Set app PIN + encrypt books",
                 Content = panel,
                 PrimaryButtonText = "Save",
                 CloseButtonText = "Cancel",
@@ -626,7 +641,8 @@ public sealed partial class SettingsPage : Page
             if (pinBox.Password != confBox.Password)
                 throw new InvalidOperationException("PIN confirmation does not match.");
             AppLockService.SetPin(pinBox.Password);
-            AppLockMsgText.Text = "PIN saved. You’ll unlock on next launch.";
+            await AppLockService.EnableDatabaseEncryptionAsync(pinBox.Password, "pin", "password");
+            AppLockMsgText.Text = "PIN saved and database encryption enabled.";
             RefreshAppLockStatus();
         }
         catch (Exception ex)
@@ -642,11 +658,17 @@ public sealed partial class SettingsPage : Page
             var passBox = new PasswordBox { Header = "Password (min 8)" };
             var confBox = new PasswordBox { Header = "Confirm password" };
             var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Also encrypts books at rest. Not your bank password.",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.85,
+            });
             panel.Children.Add(passBox);
             panel.Children.Add(confBox);
             var dlg = new ContentDialog
             {
-                Title = "Set app password",
+                Title = "Set app password + encrypt books",
                 Content = panel,
                 PrimaryButtonText = "Save",
                 CloseButtonText = "Cancel",
@@ -657,7 +679,8 @@ public sealed partial class SettingsPage : Page
             if (passBox.Password != confBox.Password)
                 throw new InvalidOperationException("Password confirmation does not match.");
             AppLockService.SetPassword(passBox.Password);
-            AppLockMsgText.Text = "Password saved. You’ll unlock on next launch.";
+            await AppLockService.EnableDatabaseEncryptionAsync(passBox.Password, "password", "password");
+            AppLockMsgText.Text = "Password saved and database encryption enabled.";
             RefreshAppLockStatus();
         }
         catch (Exception ex)
@@ -676,7 +699,8 @@ public sealed partial class SettingsPage : Page
             if (!ok)
                 throw new InvalidOperationException("Windows Hello cancelled.");
             AppLockService.SetPlatform("windows_hello");
-            AppLockMsgText.Text = "Windows Hello lock enabled.";
+            await AppLockService.EnableDatabaseEncryptionAsync(null, "platform", "client");
+            AppLockMsgText.Text = "Windows Hello lock + device-bound encryption key enabled.";
             RefreshAppLockStatus();
         }
         catch (Exception ex)
@@ -685,12 +709,44 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private void AppLockClear_Click(object sender, RoutedEventArgs e)
+    private async void AppLockClear_Click(object sender, RoutedEventArgs e)
     {
-        AppLockService.ClearLock();
-        AppLockService.SetNone();
-        AppLockMsgText.Text = "Lock cleared. Books were not deleted.";
-        RefreshAppLockStatus();
+        try
+        {
+            var pinBox = new PasswordBox { Header = "Current PIN/password (if encrypted)" };
+            var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Clears UI lock. If books are encrypted, enter PIN/password to decrypt to plaintext.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+            panel.Children.Add(pinBox);
+            var dlg = new ContentDialog
+            {
+                Title = "Clear app lock",
+                Content = panel,
+                PrimaryButtonText = "Clear",
+                CloseButtonText = "Cancel",
+                XamlRoot = XamlRoot,
+            };
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary)
+                return;
+            var secret = pinBox.Password;
+            if (!string.IsNullOrEmpty(secret))
+            {
+                await AppLockService.UnlockDatabaseAsync(secret);
+                try { await AppLockService.DisableDatabaseEncryptionAsync(secret); }
+                catch { /* may already be off */ }
+            }
+            AppLockService.ClearLock();
+            AppLockService.SetNone();
+            AppLockMsgText.Text = "Lock cleared. Books were not deleted.";
+            RefreshAppLockStatus();
+        }
+        catch (Exception ex)
+        {
+            AppLockMsgText.Text = ex.Message;
+        }
     }
 
     private async void StartEngine_Click(object sender, RoutedEventArgs e)

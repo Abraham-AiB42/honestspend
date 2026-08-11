@@ -88,6 +88,13 @@ public partial class App : Application
         // Release mutex if process dies cleanly so the next launch is not blocked.
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
+            try
+            {
+                // Best-effort seal before engine die (sync; process exiting)
+                if (AppLockService.IsLockEnabled)
+                    AppLockService.SealDatabaseAsync().GetAwaiter().GetResult();
+            }
+            catch { /* ignore */ }
             try { SingleInstance.Release(); } catch { /* ignore */ }
             try { Backend?.Dispose(); } catch { /* ignore */ }
         };

@@ -25,9 +25,6 @@ from financial_os.db import (
     Profile,
     ScheduledItem,
     Transaction,
-    init_db,
-    make_engine,
-    make_session_factory,
 )
 from financial_os.seed import seed_all
 from financial_os.services.bank_csv import import_bank_csv
@@ -42,13 +39,37 @@ from financial_os.services.ifpp_service import ifpp_to_dict, run_ifpp
 from financial_os.services.payoff import plan_card_payoff, plan_to_dict
 from financial_os.engine.ifpp import CardView
 from financial_os.services import plaid_service
+from financial_os.services import db_runtime
 from financial_os.services.tax_packet import build_tax_packet, packet_to_csv_files, write_tax_packet_dir
 
-engine = make_engine()
-SessionLocal = make_session_factory(engine)
 WEB_DIR = Path(__file__).resolve().parents[3] / "web"
 
+# Paths allowed while the ledger is sealed (unlock required for everything else)
+_CRYPTO_OPEN_PATHS = frozenset(
+    {
+        "/api/health",
+        "/api/crypto/status",
+        "/api/crypto/unlock",
+        "/api/system/info",
+        "/api/system/paths",
+    }
+)
+
 from contextlib import asynccontextmanager
+
+
+def _seed_if_open() -> None:
+    factory = db_runtime.session_factory()
+    if factory is None:
+        return
+    session = factory()
+    try:
+        seed_all(session)
+        if app_settings.seed_demo:
+            seed_demo_if_empty(session)
+        session.commit()
+    finally:
+        session.close()
 
 
 @asynccontextmanager
@@ -64,28 +85,26 @@ async def lifespan(_app: FastAPI):
             "or FOS_ALLOW_NON_LOOPBACK=1"
         )
 
-    init_db(engine)
+    boot = db_runtime.boot()
     try:
         from financial_os.services.secrets_store import apply_secrets_to_settings
 
         apply_secrets_to_settings()
     except Exception:
         pass
-    session = SessionLocal()
-    try:
-        seed_all(session)
-        if app_settings.seed_demo:
-            seed_demo_if_empty(session)
-        session.commit()
-    finally:
-        session.close()
 
-    try:
-        from financial_os.services.auto_backup import start_auto_backup_loop
+    if boot.get("unlocked"):
+        _seed_if_open()
+        try:
+            from financial_os.services.auto_backup import start_auto_backup_loop
 
-        start_auto_backup_loop(SessionLocal, check_seconds=900)
-    except Exception:
-        pass
+            fac = db_runtime.session_factory()
+            if fac is not None:
+                start_auto_backup_loop(fac, check_seconds=900)
+        except Exception:
+            pass
+    else:
+        print("HonestSpend engine: database sealed — unlock from the app to continue.")
 
     yield
 
@@ -95,13 +114,25 @@ async def lifespan(_app: FastAPI):
         stop_auto_backup_loop()
     except Exception:
         pass
+    # Seal on clean shutdown when encryption is enabled and we hold a DEK
+    try:
+        if db_runtime.is_unlocked() and db_runtime.get_session_dek() is not None:
+            db_runtime.lock_and_seal()
+            print("HonestSpend: sealed database on shutdown.")
+    except Exception as e:
+        print(f"HonestSpend: seal on shutdown skipped: {e}")
 
 
 app = FastAPI(title=settings.app_name, version=__version__, lifespan=lifespan)
 
 
 def get_db():
-    session = SessionLocal()
+    db_runtime.require_unlocked()
+    factory = db_runtime.session_factory()
+    if factory is None:
+        db_runtime.require_unlocked()
+        raise HTTPException(503, "Database session factory unavailable")
+    session = factory()
     try:
         yield session
         session.commit()
@@ -113,6 +144,24 @@ def get_db():
 
 
 @app.middleware("http")
+async def crypto_lock_middleware(request: Request, call_next):
+    """Block ledger APIs while books are sealed."""
+    path = request.url.path
+    if path.startswith("/api/") and path not in _CRYPTO_OPEN_PATHS:
+        if not db_runtime.is_unlocked():
+            # Allow setup state only if not using DB heavily — still needs unlock
+            return JSONResponse(
+                {
+                    "detail": "Database is locked. Unlock with your PIN/password or Windows Hello.",
+                    "needs_unlock": True,
+                    "crypto": db_runtime.status(),
+                },
+                status_code=423,
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def permission_middleware(request: Request, call_next):
     """X-API-Key → role enforcement.
 
@@ -120,10 +169,15 @@ async def permission_middleware(request: Request, call_next):
     Non-loopback or multi-user (2+ active users): key required.
     """
     path = request.url.path
-    if not path.startswith("/api/") or path in ("/api/health",):
+    if not path.startswith("/api/") or path in ("/api/health", "/api/crypto/status", "/api/crypto/unlock"):
         return await call_next(request)
+    if not db_runtime.is_unlocked():
+        return await call_next(request)  # crypto middleware already handled ledger
     token = request.headers.get("X-API-Key") or request.headers.get("x-api-key")
-    session = SessionLocal()
+    factory = db_runtime.session_factory()
+    if factory is None:
+        return await call_next(request)
+    session = factory()
     try:
         from financial_os.services.permissions import (
             capability_for_request,
@@ -558,7 +612,102 @@ class ImportPathIn(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "version": __version__, "app": settings.app_name, "product": "HonestSpend"}
+    crypto = db_runtime.status()
+    return {
+        "ok": True,
+        "version": __version__,
+        "app": settings.app_name,
+        "product": "HonestSpend",
+        "db_unlocked": db_runtime.is_unlocked(),
+        "needs_unlock": bool(crypto.get("needs_unlock")),
+        "encryption_enabled": bool(crypto.get("enabled")),
+    }
+
+
+# --- At-rest DB encryption (sealed books + unlock) ---
+
+
+@app.get("/api/crypto/status")
+def crypto_status():
+    return db_runtime.status()
+
+
+class CryptoUnlockIn(BaseModel):
+    secret: str | None = None  # PIN or password
+    dek_b64: str | None = None  # raw DEK for Windows Hello / client vault
+
+
+@app.post("/api/crypto/unlock")
+def crypto_unlock(body: CryptoUnlockIn):
+    """Unseal books and open the ledger (loopback). Clears sealed → plaintext for this process."""
+    try:
+        result = db_runtime.unlock(secret=body.secret, dek_b64=body.dek_b64)
+        if result.get("unlocked"):
+            _seed_if_open()
+            try:
+                from financial_os.services.auto_backup import start_auto_backup_loop
+
+                fac = db_runtime.session_factory()
+                if fac is not None:
+                    start_auto_backup_loop(fac, check_seconds=900)
+            except Exception:
+                pass
+        # Never echo secrets; dek_b64 only if enable returns it elsewhere
+        return {
+            "ok": True,
+            "unlocked": True,
+            "encryption_enabled": result.get("enabled"),
+            "process_unlocked": db_runtime.is_unlocked(),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e)) from e
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class CryptoEnableIn(BaseModel):
+    secret: str | None = None
+    mode_hint: str = "pin"  # pin | password | platform
+    wrap: str = "password"  # password | client
+    dek_b64: str | None = None  # optional pre-generated DEK
+
+
+@app.post("/api/crypto/enable")
+def crypto_enable(body: CryptoEnableIn):
+    """Enable at-rest encryption while books are open. Returns dek_b64 once for client vault (Hello)."""
+    try:
+        out = db_runtime.enable(
+            secret=body.secret,
+            dek_b64=body.dek_b64,
+            mode_hint=body.mode_hint,
+            wrap=body.wrap,
+        )
+        return out
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/crypto/lock")
+def crypto_lock():
+    """Seal books and drop the DB connection (encryption must be enabled)."""
+    try:
+        return db_runtime.lock_and_seal()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+class CryptoDisableIn(BaseModel):
+    secret: str | None = None
+    dek_b64: str | None = None
+
+
+@app.post("/api/crypto/disable")
+def crypto_disable(body: CryptoDisableIn):
+    """Turn off encryption (requires unlock / secret). Books remain as plaintext."""
+    try:
+        return db_runtime.disable(secret=body.secret, dek_b64=body.dek_b64)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # --- License (buy once / all clients; local-first) ---

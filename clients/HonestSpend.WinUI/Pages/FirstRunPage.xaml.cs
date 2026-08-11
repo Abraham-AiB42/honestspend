@@ -1195,9 +1195,9 @@ public sealed partial class FirstRunPage : Page
     {
         QuestionText.Text = "Protect this app on this device?";
         HintText.Text =
-            "Optional. Stops others from opening HonestSpend while you’re away. " +
-            "This is an app lock — not bank-grade vault encryption. Your Windows login still matters. " +
-            "Each device sets its own lock.";
+            "Optional. PIN / password / Windows Hello also encrypts your books at rest " +
+            "(AES-256). Without that secret, sealed books cannot be recovered. " +
+            "Your Windows login still matters. Each device keeps its own Hello key.";
         NextBtn.Content = "Continue";
         Fields.Children.Clear();
 
@@ -1278,6 +1278,8 @@ public sealed partial class FirstRunPage : Page
     private async Task SaveSecurityAndAdvanceAsync()
     {
         string? capability = null;
+        string? secretForCrypto = null;
+        string wrap = "password";
         switch (_securityMode)
         {
             case "none":
@@ -1289,6 +1291,7 @@ public sealed partial class FirstRunPage : Page
                 if (pin != pin2)
                     throw new InvalidOperationException("PIN confirmation does not match.");
                 AppLockService.SetPin(pin);
+                secretForCrypto = pin;
                 break;
             case "password":
                 var pw = _secPassBox?.Password ?? "";
@@ -1296,6 +1299,7 @@ public sealed partial class FirstRunPage : Page
                 if (pw != pw2)
                     throw new InvalidOperationException("Password confirmation does not match.");
                 AppLockService.SetPassword(pw);
+                secretForCrypto = pw;
                 break;
             case "platform":
                 if (!await AppLockService.IsWindowsHelloAvailableAsync())
@@ -1306,11 +1310,36 @@ public sealed partial class FirstRunPage : Page
                     throw new InvalidOperationException("Windows Hello was cancelled. Try again or choose PIN.");
                 AppLockService.SetPlatform("windows_hello");
                 capability = "windows_hello";
+                wrap = "client";
                 break;
             default:
                 AppLockService.SetNone();
                 _securityMode = "none";
                 break;
+        }
+
+        // Full DB encryption whenever lock ≠ none (books sealed at rest)
+        if (_securityMode is not "none")
+        {
+            try
+            {
+                await AppLockService.EnableDatabaseEncryptionAsync(
+                    secretForCrypto,
+                    modeHint: _securityMode,
+                    wrap: wrap);
+                MsgText.Text =
+                    "App lock on — books will be encrypted at rest when the app seals them. " +
+                    "Remember your PIN/password; without it sealed books cannot be recovered.";
+            }
+            catch (Exception ex)
+            {
+                // UI lock still works; warn about encryption
+                ErrorBar.Message =
+                    "App lock saved, but database encryption could not be enabled yet: " +
+                    ex.Message +
+                    " (You can retry from Settings after setup.)";
+                ErrorBar.IsOpen = true;
+            }
         }
 
         using var api = new LedgerApiClient();
@@ -1327,6 +1356,7 @@ public sealed partial class FirstRunPage : Page
                     app_lock_mode = _securityMode,
                     app_lock_capability = capability,
                     security_configured = true,
+                    db_encryption = _securityMode != "none",
                 });
                 ApplyState(st2);
             }
@@ -1338,6 +1368,7 @@ public sealed partial class FirstRunPage : Page
                 app_lock_mode = _securityMode,
                 app_lock_capability = capability,
                 security_configured = true,
+                db_encryption = _securityMode != "none",
             });
             ApplyState(st);
         }

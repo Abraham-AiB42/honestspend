@@ -87,7 +87,9 @@ public static class AppLockService
         ClearLock();
         try
         {
-            ApplicationData.Current.LocalSettings.Values["AppLockMode"] = "none";
+            var ls = ApplicationData.Current.LocalSettings.Values;
+            ls["AppLockMode"] = "none";
+            ls.Remove("AppLockDek");
         }
         catch { /* ignore */ }
         IsUnlocked = true;
@@ -128,6 +130,73 @@ public static class AppLockService
             throw new InvalidOperationException("Could not save Windows Hello lock: " + ex.Message, ex);
         }
         IsUnlocked = true;
+    }
+
+    /// <summary>Enable at-rest DB encryption with the same secret (PIN/password) or client DEK (Hello).</summary>
+    public static async Task EnableDatabaseEncryptionAsync(
+        string? secret,
+        string modeHint,
+        string wrap = "password",
+        CancellationToken ct = default)
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync(ct);
+        // Engine must be open (plaintext) to enable
+        var res = await api.CryptoEnableAsync(secret, modeHint, wrap, ct: ct);
+        if (res.TryGetProperty("dek_b64", out var d) && d.ValueKind == JsonValueKind.String)
+        {
+            var dek = d.GetString();
+            if (!string.IsNullOrEmpty(dek) && wrap == "client")
+            {
+                try { ApplicationData.Current.LocalSettings.Values["AppLockDek"] = dek; }
+                catch { /* ignore */ }
+            }
+        }
+    }
+
+    /// <summary>Unseal books in the engine after UI unlock.</summary>
+    public static async Task<bool> UnlockDatabaseAsync(string? secret = null, CancellationToken ct = default)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync(ct);
+            string? dek = null;
+            if (Mode == LockMode.Platform)
+            {
+                try { dek = ApplicationData.Current.LocalSettings.Values["AppLockDek"] as string; }
+                catch { /* ignore */ }
+            }
+            await api.CryptoUnlockAsync(secret, dek, ct);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public static async Task SealDatabaseAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            if (!await api.HealthAsync(ct)) return;
+            await api.CryptoLockAsync(ct);
+        }
+        catch { /* best-effort */ }
+    }
+
+    public static async Task DisableDatabaseEncryptionAsync(string? secret, CancellationToken ct = default)
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync(ct);
+        string? dek = null;
+        try { dek = ApplicationData.Current.LocalSettings.Values["AppLockDek"] as string; }
+        catch { /* ignore */ }
+        await api.CryptoDisableAsync(secret, dek, ct);
+        try { ApplicationData.Current.LocalSettings.Values.Remove("AppLockDek"); }
+        catch { /* ignore */ }
     }
 
     public static bool VerifyPinOrPassword(string secret)
