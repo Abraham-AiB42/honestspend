@@ -1596,9 +1596,18 @@ def list_accounts(
 
 
 def _apply_payment_option_alias(row: Account) -> None:
-    """If deprecated payment_option was set, write autopay_policy (sole authority)."""
+    """Map deprecated payment_option → autopay_policy only when policy is blank.
+
+    Matches ``ensure_autopay_policy_from_payment_option``: backfill only when
+    ``autopay_policy`` is null/blank. Explicit ``autopay_policy="none"`` (and any
+    other set policy) is sticky — never overwritten from the wizard alias.
+    """
     from financial_os.services.autopay import PAYMENT_OPTION_TO_POLICY
 
+    raw = getattr(row, "autopay_policy", None)
+    if raw is not None and str(raw).strip() != "":
+        # Explicit policy (including sticky "none") — do not clobber from alias.
+        return
     opt = (getattr(row, "payment_option", None) or "").lower().strip()
     if not opt:
         return

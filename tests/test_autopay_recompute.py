@@ -482,3 +482,99 @@ def test_promo_sink_suggested_falls_back_to_balloon_months(
     # 1200 / 4 = 300
     assert sug == Decimal("300.00")
     s.close()
+
+
+def test_payment_option_alias_does_not_clobber_sticky_none(tmp_path: Path, monkeypatch):
+    """API alias only maps payment_option when autopay_policy is blank.
+
+    Explicit none (and any other set policy) must stay sticky — same contract as
+    ensure_autopay_policy_from_payment_option.
+    """
+    from financial_os.api.app import _apply_payment_option_alias
+
+    s = _session(tmp_path, monkeypatch)
+    _p, _cash, card = _card_and_cash(s, bal=Decimal("100.00"), policy="none")
+    card.payment_option = "statement"
+    card.autopay_policy = "none"
+    s.flush()
+
+    _apply_payment_option_alias(card)
+    assert card.autopay_policy == "none"
+
+    # Other explicit policies also stick
+    card.autopay_policy = "min"
+    card.payment_option = "interest_saving"
+    _apply_payment_option_alias(card)
+    assert card.autopay_policy == "min"
+
+    # Null/blank policy still backfills from wizard alias
+    card.autopay_policy = None
+    card.payment_option = "statement"
+    _apply_payment_option_alias(card)
+    assert card.autopay_policy == "statement"
+
+    card.autopay_policy = ""
+    card.payment_option = "minimum"
+    _apply_payment_option_alias(card)
+    assert card.autopay_policy == "min"
+    s.close()
+
+
+def test_statement_suggested_carves_out_open_promo(tmp_path: Path, monkeypatch):
+    """statement suggested_amount = max(0, bal - promo_remaining) + promo_due.
+
+    Matches project_card_payment / compute_next_payment and the cash schedule
+    amount so list_autopay stays honest with open promo lines.
+    books remains full balance.
+    """
+    s = _session(tmp_path, monkeypatch)
+    # Use today so list_autopay (session only, as_of=today) sees the same open lines.
+    as_of = date.today()
+    # bal 1000, promo remaining 400, monthly due 50 → statement pay 650
+    _p, cash, card = _card_and_cash(s, bal=Decimal("1000.00"), policy="statement")
+    create_promo_line(
+        s,
+        card.id,
+        name="TV 0%",
+        principal_remaining=Decimal("400"),
+        monthly_payment=Decimal("50"),
+        start_date=as_of - timedelta(days=30),
+        end_date=as_of + timedelta(days=180),
+    )
+    s.commit()
+
+    promo_rem, promo_due = open_promo_totals(s, card.id, as_of=as_of)
+    assert promo_rem == Decimal("400.00")
+    assert promo_due == Decimal("50.00")
+    expected = Decimal("650.00")  # max(0, 1000-400) + 50
+
+    sug = _suggested_amount(card, "statement", session=s, as_of=as_of)
+    assert sug == expected
+
+    # books ignores carve-out
+    assert _suggested_amount(card, "books", session=s, as_of=as_of) == Decimal(
+        "1000.00"
+    )
+
+    # Without session, statement falls back to full balance
+    assert _suggested_amount(card, "statement", session=None, as_of=as_of) == Decimal(
+        "1000.00"
+    )
+
+    proj = project_card_payment(s, card.id, as_of=as_of)
+    assert Decimal(str(proj["next_payment"])) == expected
+    assert Decimal(str(proj["statement_balance"])) == Decimal("600.00")
+
+    out = recompute_card_payment_schedule(s, card.id, as_of=as_of)
+    s.commit()
+    assert Decimal(str(out["next_payment"])) == expected
+    sched = _card_payment_schedule(s, card.id)
+    assert sched is not None
+    assert sched.account_id == cash.id
+    assert sched.amount == -expected
+
+    items = list_autopay(s)["items"]
+    row = next(i for i in items if i["account_id"] == card.id)
+    assert row["policy"] == "statement"
+    assert Decimal(row["suggested_amount"]) == expected
+    s.close()

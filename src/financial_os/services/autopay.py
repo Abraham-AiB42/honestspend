@@ -163,7 +163,18 @@ def _suggested_amount(
         if a.min_payment is not None:
             return _d(a.min_payment)
         return (bal * Decimal("0.02")).quantize(Decimal("0.01")) or Decimal("25")
-    if policy in ("statement", "books"):
+    if policy == "books":
+        # Full books — zero-statement strategy (includes promo principal).
+        return bal
+    if policy == "statement":
+        # max(0, bal − promo_remaining) + promo_due — matches project_card_payment /
+        # compute_next_payment when session available; else full balance.
+        if session is not None:
+            as_of_d = as_of or date.today()
+            promo_remaining, promo_due = open_promo_totals(session, a.id, as_of=as_of_d)
+            return (max(ZERO, bal - promo_remaining) + promo_due).quantize(
+                Decimal("0.01")
+            )
         return bal
     if policy == "fixed":
         if a.payment_fixed_amount is not None:
