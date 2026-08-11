@@ -53,6 +53,7 @@ def apply_amount_to_account(
     *,
     confirm_unsafe: bool = False,
     session: Any | None = None,
+    recompute: bool = True,
 ) -> None:
     """Mirror create_transaction balance rules.
 
@@ -61,7 +62,8 @@ def apply_amount_to_account(
 
     When session is provided and amount would push checking negative, runs never-neg.
     Credit accounts also recompute next payment / cash schedule when a session is
-    available (passed in or via SQLAlchemy object_session).
+    available (passed in or via SQLAlchemy object_session), unless recompute=False
+    (mark-paid settles next_date itself and must not double-advance mid-flight).
     """
     amt = _d(amount)
     if session is not None and amt < ZERO and (account.kind or "") == "checking":
@@ -80,7 +82,8 @@ def apply_amount_to_account(
         if account.credit_limit is not None:
             bal = _d(account.current_balance)
             account.available_credit = _d(account.credit_limit) - bal
-        _maybe_recompute_credit(account, session)
+        if recompute:
+            _maybe_recompute_credit(account, session)
 
 
 def reverse_amount_on_account(
@@ -88,8 +91,14 @@ def reverse_amount_on_account(
     amount: Decimal | Any,
     *,
     session: Any | None = None,
+    recompute: bool = True,
 ) -> None:
-    """Undo apply_amount_to_account (void path)."""
+    """Undo apply_amount_to_account (void path).
+
+    Credit accounts recompute Card payment · schedules by default (symmetric with
+    apply). Callers that void transfer pairs may pass recompute=False and invoke
+    recompute_card_payment_schedule once after both balance and status settle.
+    """
     amt = _d(amount)
     if account.kind != "credit":
         account.current_balance = _d(account.current_balance) - amt
@@ -98,4 +107,5 @@ def reverse_amount_on_account(
         if account.credit_limit is not None:
             bal = _d(account.current_balance)
             account.available_credit = _d(account.credit_limit) - bal
-        _maybe_recompute_credit(account, session)
+        if recompute:
+            _maybe_recompute_credit(account, session)
