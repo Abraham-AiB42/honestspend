@@ -166,6 +166,44 @@ def create_promo_line(
     return row
 
 
+def update_promo_line(
+    session: Session,
+    line_id: int,
+    *,
+    principal_remaining: Decimal | None = None,
+    monthly_payment: Decimal | None = None,
+    name: str | None = None,
+    active: bool | None = None,
+) -> PromoInstallmentLine:
+    """Patch remaining principal and/or monthly payment (and optional name/active).
+
+    Raises ValueError if the line is not found.
+    principal_remaining <= 0 deactivates the line.
+    """
+    line = session.get(PromoInstallmentLine, line_id)
+    if not line:
+        raise ValueError(f"Promo line {line_id} not found")
+    if name is not None:
+        line.name = (name or "").strip() or line.name
+    if principal_remaining is not None:
+        rem = _q(_d(principal_remaining))
+        if rem < ZERO:
+            raise ValueError("principal_remaining must be >= 0")
+        line.principal_remaining = rem
+        if rem <= ZERO:
+            line.principal_remaining = ZERO
+            line.active = False
+    if monthly_payment is not None:
+        pay = _q(_d(monthly_payment))
+        if pay < ZERO:
+            raise ValueError("monthly_payment must be >= 0")
+        line.monthly_payment = pay
+    if active is not None:
+        line.active = bool(active)
+    session.flush()
+    return line
+
+
 def line_to_dict(line: PromoInstallmentLine) -> dict[str, Any]:
     return {
         "id": line.id,

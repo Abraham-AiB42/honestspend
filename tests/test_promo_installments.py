@@ -396,6 +396,40 @@ def test_api_promo_line_not_found(client: TestClient):
     assert r.status_code == 404
 
 
+def test_api_promo_line_patch(client: TestClient):
+    """PATCH remaining + monthly updates line and recomputes caches."""
+    import financial_os.api.app as app_mod
+
+    card_id = _seed_credit(app_mod)
+    r = client.post(
+        f"/api/accounts/{card_id}/promo-lines",
+        json={
+            "name": "Edit me",
+            "principal_remaining": "600.00",
+            "monthly_payment": "50.00",
+            "start_date": "2020-01-01",
+        },
+    )
+    assert r.status_code == 200, r.text
+    line_id = r.json()["id"]
+
+    r = client.patch(
+        f"/api/accounts/{card_id}/promo-lines/{line_id}",
+        json={"principal_remaining": "400.00", "monthly_payment": "40.00", "name": "Edited"},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["name"] == "Edited"
+    assert Decimal(body["principal_remaining"]) == Decimal("400.00")
+    assert Decimal(body["monthly_payment"]) == Decimal("40.00")
+
+    with app_mod.SessionLocal() as s:
+        card = s.get(Account, card_id)
+        # (5000 - 400) + 40 = 4640
+        assert card.next_payment_amount_cached == Decimal("4640.00")
+        assert card.statement_balance_cached == Decimal("4600.00")
+
+
 def test_api_promo_create_and_roll_recomputes_cache(client: TestClient):
     """POST create/roll should refresh next_payment_amount_cached via recompute."""
     import financial_os.api.app as app_mod

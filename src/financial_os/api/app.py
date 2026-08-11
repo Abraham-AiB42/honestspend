@@ -343,6 +343,13 @@ class AccountOut(AccountIn):
     plaid_account_id: str | None = None
     institution_balance: Decimal | None = None
     last_reconciled_at: datetime | None = None
+    # Statement cycle / autopay caches (credit cards)
+    autopay_policy: str | None = None
+    payment_funding_account_id: int | None = None
+    cycle_config_source: str | None = None
+    statement_balance_cached: Decimal | None = None
+    next_payment_amount_cached: Decimal | None = None
+    next_payment_date_cached: date | None = None
 
 
 class TransactionIn(BaseModel):
@@ -1841,6 +1848,15 @@ class PromoLineIn(BaseModel):
     active: bool | None = True
 
 
+class PromoLinePatch(BaseModel):
+    """Partial update for promo installment remaining / monthly payment."""
+
+    principal_remaining: Decimal | None = None
+    monthly_payment: Decimal | None = None
+    name: str | None = None
+    active: bool | None = None
+
+
 @app.get("/api/accounts/{account_id}/promo-lines")
 def list_account_promo_lines(account_id: int, db: Session = Depends(get_db)):
     """List promo installment lines for an account."""
@@ -1888,6 +1904,52 @@ def create_account_promo_line(
         source=(body.source or "user"),
         active=True if body.active is None else bool(body.active),
     )
+    recompute_card_payment_schedule(db, account_id)
+    return line_to_dict(line)
+
+
+@app.patch("/api/accounts/{account_id}/promo-lines/{line_id}")
+def patch_account_promo_line(
+    account_id: int,
+    line_id: int,
+    body: PromoLinePatch,
+    db: Session = Depends(get_db),
+):
+    """Update remaining principal and/or monthly payment on a promo line."""
+    from financial_os.services.autopay import recompute_card_payment_schedule
+    from financial_os.services.promo_installments import line_to_dict, update_promo_line
+
+    row = db.get(Account, account_id)
+    if not row:
+        raise HTTPException(404, "Account not found")
+    existing = db.get(PromoInstallmentLine, line_id)
+    if not existing or existing.account_id != account_id:
+        raise HTTPException(404, "Promo line not found")
+
+    data = body.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(400, "No fields to update")
+    if "principal_remaining" in data and data["principal_remaining"] is not None:
+        if data["principal_remaining"] < 0:
+            raise HTTPException(400, "principal_remaining must be >= 0")
+    if "monthly_payment" in data and data["monthly_payment"] is not None:
+        if data["monthly_payment"] < 0:
+            raise HTTPException(400, "monthly_payment must be >= 0")
+
+    try:
+        line = update_promo_line(
+            db,
+            line_id,
+            principal_remaining=data.get("principal_remaining"),
+            monthly_payment=data.get("monthly_payment"),
+            name=data.get("name"),
+            active=data.get("active"),
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
     recompute_card_payment_schedule(db, account_id)
     return line_to_dict(line)
 

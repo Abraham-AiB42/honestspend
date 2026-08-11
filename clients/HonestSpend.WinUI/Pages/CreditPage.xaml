@@ -168,8 +168,10 @@
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Promo / installment lines"
                                Margin="0,12,0,0" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="0% plans and installments: remaining principal is carved out of statement pay; monthly amount still due this cycle." />
+                        Text="0% plans and installments: remaining principal is carved out of statement pay; monthly amount still due this cycle. Pick a plan to edit remaining/monthly, or roll one month." />
                     <ItemsControl x:Name="PromoLineList" />
+                    <ComboBox x:Name="PromoEditPickBox" Header="Plan to edit" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a plan" SelectionChanged="PromoEditPick_Changed" />
                     <Grid ColumnSpacing="12" RowSpacing="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -186,7 +188,12 @@
                         <NumberBox x:Name="PromoMonthlyBox" Header="Monthly payment ($)" Minimum="0" Value="0"
                                    Grid.Row="1" Grid.Column="1" />
                     </Grid>
-                    <Button Content="Add promo line" Click="PromoAdd_Click" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Add promo line" Click="PromoAdd_Click" />
+                        <Button Content="Save plan changes" Click="PromoSave_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Roll one month" Click="PromoRoll_Click"
+                                ToolTipService.ToolTip="Reduces remaining by the monthly payment" />
+                    </StackPanel>
                     <TextBlock x:Name="PromoMsg" Opacity="0.85" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
@@ -197,7 +204,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Autopay (quick)" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Quick policy-only change. Prefer Statement &amp; payment above for close/due and pay-from cash." />
+                        Text="Quick policy-only change. For fixed dollar amounts, use Statement &amp; payment above (policy + Fixed amount box)." />
                     <ItemsControl x:Name="AutopayList" />
                     <ComboBox x:Name="AutopayCardBox" Header="Card" HorizontalAlignment="Stretch"
                               PlaceholderText="Pick a card" />
@@ -206,7 +213,6 @@
                         <ComboBoxItem Content="Minimum only" Tag="min" />
                         <ComboBoxItem Content="Pay statement in full" Tag="statement" />
                         <ComboBoxItem Content="0% promo monthly set-aside" Tag="promo_sink" />
-                        <ComboBoxItem Content="Fixed amount" Tag="fixed" />
                     </ComboBox>
                     <Button Content="Save autopay" Click="Autopay_Click" Style="{StaticResource AccentButtonStyle}" />
                     <TextBlock x:Name="AutopayMsg" Opacity="0.85" TextWrapping="Wrap" />

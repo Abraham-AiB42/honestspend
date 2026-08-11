@@ -279,6 +279,19 @@ public sealed partial class AccountsPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             await api.PatchAccountAsync(row.Id, body);
+
+            // Close/due drive payment schedules — recompute via cycle-config PUT
+            if (row.Kind == "credit")
+            {
+                var cycleBody = new Dictionary<string, object?>();
+                if (!double.IsNaN(closeBox.Value) && closeBox.Value is >= 1 and <= 31)
+                    cycleBody["statement_close_day"] = (int)closeBox.Value;
+                if (!double.IsNaN(dueBox.Value) && dueBox.Value is >= 1 and <= 31)
+                    cycleBody["payment_due_day"] = (int)dueBox.Value;
+                if (cycleBody.Count > 0)
+                    await api.PutAccountCycleConfigAsync(row.Id, cycleBody);
+            }
+
             MsgText.Text = $"Updated {nickBox.Text?.Trim() ?? row.Title}.";
             await LoadAsync();
         }

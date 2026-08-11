@@ -12,6 +12,7 @@ public sealed partial class CreditPage : Page
 {
     private readonly Dictionary<int, string> _cashNames = new();
     private bool _suppressCycleCardChange;
+    private bool _suppressPromoPickChange;
 
     public CreditPage()
     {
@@ -384,6 +385,7 @@ public sealed partial class CreditPage : Page
         {
             CycleSummaryList.ItemsSource = new List<string> { "Could not load statement cycles: " + ex.Message };
             PromoLineList.ItemsSource = new List<string> { "—" };
+            PromoEditPickBox.Items.Clear();
         }
     }
 
@@ -458,19 +460,47 @@ public sealed partial class CreditPage : Page
         {
             var res = await api.GetPromoLinesAsync(accountId);
             var lines = new List<string>();
-            if (res.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            _suppressPromoPickChange = true;
+            try
             {
-                foreach (var ln in arr.EnumerateArray())
+                PromoEditPickBox.Items.Clear();
+                PromoEditPickBox.Items.Add(new ComboBoxItem
                 {
-                    var active = !ln.TryGetProperty("active", out var act) || act.ValueKind != JsonValueKind.False;
-                    var status = active ? "open" : "closed";
-                    lines.Add(
-                        $"{JsonUi.Str(ln, "name")} · remaining {JsonUi.Money(ln, "principal_remaining")} · " +
-                        $"monthly {JsonUi.Money(ln, "monthly_payment")} · {status}" +
-                        (string.IsNullOrEmpty(JsonUi.Str(ln, "end_date", "")) || JsonUi.Str(ln, "end_date") == "—"
-                            ? ""
-                            : $" · ends {JsonUi.Str(ln, "end_date")}"));
+                    Content = "(new plan — not editing)",
+                    Tag = (PromoPick?)null,
+                });
+                if (res.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var ln in arr.EnumerateArray())
+                    {
+                        var active = !ln.TryGetProperty("active", out var act) || act.ValueKind != JsonValueKind.False;
+                        var status = active ? "open" : "closed";
+                        var name = JsonUi.Str(ln, "name");
+                        lines.Add(
+                            $"{name} · remaining {JsonUi.Money(ln, "principal_remaining")} · " +
+                            $"monthly {JsonUi.Money(ln, "monthly_payment")} · {status}" +
+                            (string.IsNullOrEmpty(JsonUi.Str(ln, "end_date", "")) || JsonUi.Str(ln, "end_date") == "—"
+                                ? ""
+                                : $" · ends {JsonUi.Str(ln, "end_date")}"));
+                        var lineId = ln.TryGetProperty("id", out var idEl) && idEl.TryGetInt32(out var lid) ? lid : 0;
+                        if (lineId > 0)
+                        {
+                            var rem = ParseD(ln, "principal_remaining", 0);
+                            var mon = ParseD(ln, "monthly_payment", 0);
+                            var pick = new PromoPick(lineId, name, rem, mon);
+                            PromoEditPickBox.Items.Add(new ComboBoxItem
+                            {
+                                Content = $"{name} · rem {JsonUi.Money(ln, "principal_remaining")}",
+                                Tag = pick,
+                            });
+                        }
+                    }
                 }
+                PromoEditPickBox.SelectedIndex = 0;
+            }
+            finally
+            {
+                _suppressPromoPickChange = false;
             }
             PromoLineList.ItemsSource = lines.Count > 0
                 ? lines
@@ -479,8 +509,28 @@ public sealed partial class CreditPage : Page
         catch
         {
             PromoLineList.ItemsSource = new List<string> { "Promo lines unavailable." };
+            PromoEditPickBox.Items.Clear();
         }
     }
+
+    private void PromoEditPick_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressPromoPickChange) return;
+        if (PromoEditPickBox.SelectedItem is not ComboBoxItem { Tag: PromoPick pick })
+            return;
+        PromoNameBox.Text = pick.Name;
+        PromoRemainingBox.Value = double.IsNaN(pick.Remaining) ? 0 : pick.Remaining;
+        PromoMonthlyBox.Value = double.IsNaN(pick.Monthly) ? 0 : pick.Monthly;
+    }
+
+    private int? SelectedPromoLineId()
+    {
+        if (PromoEditPickBox.SelectedItem is ComboBoxItem { Tag: PromoPick pick })
+            return pick.Id;
+        return null;
+    }
+
+    private sealed record PromoPick(int Id, string Name, double Remaining, double Monthly);
 
     private async void CycleSave_Click(object sender, RoutedEventArgs e)
     {
@@ -582,6 +632,71 @@ public sealed partial class CreditPage : Page
             PromoNameBox.Text = "";
             PromoRemainingBox.Value = 0;
             PromoMonthlyBox.Value = 0;
+            await ApplySelectedCycleAsync(api);
+            await LoadCycleSectionAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void PromoSave_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int cardId)
+                throw new InvalidOperationException("Pick a card first.");
+            if (SelectedPromoLineId() is not int lineId)
+                throw new InvalidOperationException("Pick a plan to edit (or use Add for a new plan).");
+            var remaining = double.IsNaN(PromoRemainingBox.Value) ? 0m : (decimal)PromoRemainingBox.Value;
+            var monthly = double.IsNaN(PromoMonthlyBox.Value) ? 0m : (decimal)PromoMonthlyBox.Value;
+            if (remaining < 0 || monthly < 0)
+                throw new InvalidOperationException("Amounts must be zero or more.");
+
+            var body = new Dictionary<string, object?>
+            {
+                ["principal_remaining"] = remaining,
+                ["monthly_payment"] = monthly,
+            };
+            var name = PromoNameBox.Text?.Trim();
+            if (!string.IsNullOrEmpty(name))
+                body["name"] = name;
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.PatchPromoLineAsync(cardId, lineId, body);
+            PromoMsg.Text =
+                $"Updated “{JsonUi.Str(res, "name")}” · remaining {JsonUi.Money(res, "principal_remaining")} · " +
+                $"monthly {JsonUi.Money(res, "monthly_payment")}";
+            await ApplySelectedCycleAsync(api);
+            await LoadCycleSectionAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void PromoRoll_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int cardId)
+                throw new InvalidOperationException("Pick a card first.");
+            if (SelectedPromoLineId() is not int lineId)
+                throw new InvalidOperationException("Pick a plan to roll one month.");
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.RollPromoLineAsync(cardId, lineId);
+            PromoMsg.Text =
+                $"Rolled “{JsonUi.Str(res, "name")}” · remaining now {JsonUi.Money(res, "principal_remaining")} " +
+                $"(reduced by monthly payment)";
             await ApplySelectedCycleAsync(api);
             await LoadCycleSectionAsync(api);
         }

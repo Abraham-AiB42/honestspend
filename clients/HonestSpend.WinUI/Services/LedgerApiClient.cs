@@ -380,8 +380,23 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> GetAccountCycleAsync(int accountId, CancellationToken ct = default)
         => GetJsonAsync($"api/accounts/{accountId}/cycle", ct);
 
-    public Task<JsonElement> PutAccountCycleConfigAsync(int accountId, object body, CancellationToken ct = default)
-        => PutJsonAsync($"api/accounts/{accountId}/cycle-config", body, ct);
+    /// <summary>
+    /// PUT cycle-config. Uses null-preserving JSON so clearing pay-from cash
+    /// (<c>payment_funding_account_id: null</c>) reaches the server (default
+    /// serializer omits nulls via WhenWritingNull).
+    /// </summary>
+    public async Task<JsonElement> PutAccountCycleConfigAsync(int accountId, object body, CancellationToken ct = default)
+    {
+        var path = $"api/accounts/{accountId}/cycle-config";
+        var opts = new JsonSerializerOptions(JsonOpts)
+        {
+            DefaultIgnoreCondition = JsonIgnoreCondition.Never,
+        };
+        var json = JsonSerializer.Serialize(body, opts);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        var r = await _http.PutAsync(path, content, ct);
+        return await ReadJsonAsync(r, path, ct);
+    }
 
     public Task<JsonElement> RecomputeAccountCycleAsync(int accountId, CancellationToken ct = default)
         => PostJsonAsync($"api/accounts/{accountId}/recompute-cycle", new { }, ct);
@@ -391,6 +406,9 @@ public sealed class LedgerApiClient : IDisposable
 
     public Task<JsonElement> CreatePromoLineAsync(int accountId, object body, CancellationToken ct = default)
         => PostJsonAsync($"api/accounts/{accountId}/promo-lines", body, ct);
+
+    public Task<JsonElement> PatchPromoLineAsync(int accountId, int lineId, object body, CancellationToken ct = default)
+        => PatchJsonAsync($"api/accounts/{accountId}/promo-lines/{lineId}", body, ct);
 
     public Task<JsonElement> RollPromoLineAsync(int accountId, int lineId, CancellationToken ct = default)
         => PostJsonAsync($"api/accounts/{accountId}/promo-lines/{lineId}/roll", new { }, ct);

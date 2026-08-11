@@ -248,6 +248,48 @@ def test_post_recompute_cycle(client: TestClient):
     assert body.get("schedule") is not None
 
 
+def test_put_cycle_config_clears_funding_with_null(client: TestClient):
+    """Explicit null payment_funding_account_id clears server-side funding."""
+    import financial_os.api.app as app_mod
+
+    card_id, cash_id = _seed_card_and_cash(app_mod)
+    r = client.put(
+        f"/api/accounts/{card_id}/cycle-config",
+        json={"payment_funding_account_id": cash_id},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["payment_funding_account_id"] == cash_id
+
+    r = client.put(
+        f"/api/accounts/{card_id}/cycle-config",
+        json={"payment_funding_account_id": None},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["payment_funding_account_id"] is None
+    with app_mod.SessionLocal() as s:
+        card = s.get(Account, card_id)
+        assert card.payment_funding_account_id is None
+
+
+def test_list_accounts_includes_cycle_caches(client: TestClient):
+    """AccountOut serializes statement/next-payment caches for AccountsPage."""
+    import financial_os.api.app as app_mod
+
+    card_id, _ = _seed_card_and_cash(app_mod)
+    r = client.post(f"/api/accounts/{card_id}/recompute-cycle")
+    assert r.status_code == 200, r.text
+
+    r = client.get("/api/accounts")
+    assert r.status_code == 200, r.text
+    card = next(a for a in r.json() if a["id"] == card_id)
+    assert "statement_balance_cached" in card
+    assert "next_payment_amount_cached" in card
+    assert "next_payment_date_cached" in card
+    assert Decimal(str(card["statement_balance_cached"])) == Decimal("5000.00")
+    assert Decimal(str(card["next_payment_amount_cached"])) == Decimal("5000.00")
+    assert card.get("payment_funding_account_id") is not None
+
+
 def test_post_recompute_cycle_not_found(client: TestClient):
     r = client.post("/api/accounts/999999/recompute-cycle")
     assert r.status_code == 404
