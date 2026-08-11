@@ -41,6 +41,13 @@ def _credit_ids_for_void_recompute(session: Session, row: Transaction) -> set[in
     return ids
 
 
+def _mark_leg_void(row: Transaction, *, reason: str | None, stamp: str) -> None:
+    row.status = "void"
+    note = (row.memo or "").strip()
+    void_note = f"[voided {stamp}" + (f": {reason}" if reason else "") + "]"
+    row.memo = f"{note} {void_note}".strip() if note else void_note
+
+
 def void_transaction(
     session: Session,
     txn_id: int,
@@ -51,9 +58,10 @@ def void_transaction(
 
     Idempotent if already void. Does not remove the row.
 
-    Card payment transfer pairs (mark-paid cash + credit legs): after reverse,
-    recompute each related credit Card payment · schedule **once** so next_date
-    and amount stay consistent — not double-stepped from mid-flight recompute.
+    Transfer pairs (e.g. mark-paid cash + credit legs): voiding either leg also
+    voids the paired txn (skip if already void) so half-void pairs do not linger.
+    Reverse both balances with recompute deferred, then recompute each related
+    credit Card payment · schedule **once**.
     """
     row = session.get(Transaction, txn_id)
     if not row:
@@ -66,27 +74,42 @@ def void_transaction(
             "already_void": True,
         }
 
-    acct = session.get(Account, row.account_id)
-    amt = _d(row.amount)
-    credit_ids = _credit_ids_for_void_recompute(session, row)
+    from financial_os.services.account_balance import reverse_amount_on_account
 
-    if acct and (row.status or "cleared").lower() != "void":
-        from financial_os.services.account_balance import reverse_amount_on_account
+    # Primary + paired leg (if any and not already void). No recursion: we void
+    # the pair in this pass only, never re-enter void_transaction for the pair.
+    legs: list[Transaction] = [row]
+    pair_row: Transaction | None = None
+    pair_id = row.transfer_pair_id
+    if pair_id:
+        pair_row = session.get(Transaction, pair_id)
+        if pair_row is not None and (pair_row.status or "").lower() != "void":
+            legs.append(pair_row)
 
-        # Defer credit recompute until after status=void so schedule projection
-        # sees the voided payment and runs exactly once for this void.
-        reverse_amount_on_account(
-            acct,
-            amt,
-            session=session,
-            recompute=False,
-        )
+    credit_ids: set[int] = set()
+    for leg in legs:
+        credit_ids |= _credit_ids_for_void_recompute(session, leg)
 
-    row.status = "void"
-    note = (row.memo or "").strip()
     stamp = datetime.now().isoformat(timespec="seconds")
-    void_note = f"[voided {stamp}" + (f": {reason}" if reason else "") + "]"
-    row.memo = f"{note} {void_note}".strip() if note else void_note
+    primary_amt = _d(row.amount)
+    primary_acct = session.get(Account, row.account_id)
+
+    for leg in legs:
+        if (leg.status or "").lower() == "void":
+            continue
+        acct = session.get(Account, leg.account_id)
+        amt = _d(leg.amount)
+        if acct is not None:
+            # Defer credit recompute until after both legs are status=void so
+            # schedule projection sees the full reverse and runs once.
+            reverse_amount_on_account(
+                acct,
+                amt,
+                session=session,
+                recompute=False,
+            )
+        _mark_leg_void(leg, reason=reason, stamp=stamp)
+
     session.flush()
 
     recomputed: list[int] = []
@@ -104,9 +127,14 @@ def void_transaction(
         "status": "void",
         "already_void": False,
         "account_id": row.account_id,
-        "reversed_amount": str(amt),
-        "account_balance": str(_d(acct.current_balance)) if acct else None,
+        "reversed_amount": str(primary_amt),
+        "account_balance": (
+            str(_d(primary_acct.current_balance)) if primary_acct else None
+        ),
     }
+    if pair_row is not None and pair_row.id is not None:
+        out["paired_transaction_id"] = pair_row.id
+        out["paired_voided"] = (pair_row.status or "").lower() == "void"
     if recomputed:
         out["recomputed_card_account_ids"] = recomputed
     return out

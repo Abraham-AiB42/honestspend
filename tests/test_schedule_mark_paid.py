@@ -401,7 +401,11 @@ def test_mark_paid_card_payment_advances_next_date_once(tmp_path: Path):
 
 
 def test_mark_paid_card_import_only_no_double_apply(tmp_path: Path):
-    """Card payment already on credit books — mark paid must not re-apply card."""
+    """Card payment already on credit books — mark paid must not re-apply card.
+
+    Post-settle recompute still runs on matched card legs, then restores the
+    single cadence step (next_date) so amount/caches refresh without double-advance.
+    """
     s = _session(tmp_path)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
     cash = Account(
@@ -420,6 +424,8 @@ def test_mark_paid_card_import_only_no_double_apply(tmp_path: Path):
         available_credit=Decimal("1800"),
         is_cash_for_ifpp=False,
         autopay_policy="statement",
+        payment_due_day=15,
+        statement_close_day=1,
     )
     s.add_all([cash, card])
     s.flush()
@@ -457,10 +463,15 @@ def test_mark_paid_card_import_only_no_double_apply(tmp_path: Path):
 
     s.refresh(card)
     s.refresh(cash)
+    s.refresh(item)
     assert Decimal(str(card.current_balance)) == card_bal  # no second payment on card
     assert Decimal(str(cash.current_balance)) == Decimal("800.00")  # cash still posts
     assert out.get("card_matched") is True
     assert out.get("card_transaction_id") == card_pay.id
+    # Recompute-on-match restores settled next_date (single monthly step)
+    assert out["next_date"] == "2026-08-15"
+    assert item.next_date == date(2026, 8, 15)
+    assert item.active is True
     s.close()
 
 

@@ -108,7 +108,7 @@ def test_mark_paid_card_new_legs_next_date_plus_one_month(tmp_path: Path):
 
 
 def test_void_card_leg_after_mark_paid_recomputes_once(tmp_path: Path):
-    """Void card payment txn after mark-paid → schedule not double-stepped.
+    """Void card payment txn after mark-paid → pair voided, schedule not double-stepped.
 
     Recompute once from projection (full rewrite OK). next_date must not land
     more than one extra month past an honest standalone recompute. Amount must
@@ -131,14 +131,21 @@ def test_void_card_leg_after_mark_paid_recomputes_once(tmp_path: Path):
     s.commit()
 
     assert vout.get("recomputed_card_account_ids") == [card.id]
+    assert vout.get("paired_transaction_id") == cash_txn_id
+    assert vout.get("paired_voided") is True
 
     s.refresh(item)
     s.refresh(card)
-    # Card payment reversed → owed restored
+    s.refresh(cash)
+    # Both legs reversed → books restored
     assert Decimal(str(card.current_balance)) == Decimal("400.00")
+    assert Decimal(str(cash.current_balance)) == Decimal("1000.00")
     card_txn = s.get(Transaction, card_txn_id)
     assert card_txn is not None
     assert card_txn.status == "void"
+    cash_txn = s.get(Transaction, cash_txn_id)
+    assert cash_txn is not None
+    assert cash_txn.status == "void"
 
     # Honest recompute baseline (same books as after void)
     honest = recompute_card_payment_schedule(s, card.id, as_of=date(2026, 8, 11))
@@ -164,17 +171,14 @@ def test_void_card_leg_after_mark_paid_recomputes_once(tmp_path: Path):
         # Prefer exact match to honest recompute (not one step past)
         assert item.next_date == honest_due
 
-    cash_txn = s.get(Transaction, cash_txn_id)
-    assert cash_txn is not None
-    assert cash_txn.status != "void"
     s.close()
 
 
-def test_void_cash_leg_after_mark_paid_recomputes_card_schedule(tmp_path: Path):
-    """Void cash side of transfer-pair card payment still triggers one card recompute.
+def test_void_cash_leg_after_mark_paid_voids_pair_and_recomputes_once(tmp_path: Path):
+    """mark paid (both legs) → void cash → both void, schedule recomputed once.
 
-    Regression: cash void used to leave Card payment · next_date/amount stale
-    (no credit reverse → no recompute). Corrupt schedule must be rewritten once.
+    Transfer-pair void must not leave a half-void pair. Card books reverse with
+    the paired leg; recompute runs once after both are status=void.
     """
     s = _session(tmp_path)
     original = date(2026, 7, 15)
@@ -196,16 +200,19 @@ def test_void_cash_leg_after_mark_paid_recomputes_card_schedule(tmp_path: Path):
     s.commit()
 
     assert vout.get("recomputed_card_account_ids") == [card.id]
+    assert vout.get("paired_transaction_id") == card_txn_id
+    assert vout.get("paired_voided") is True
 
     s.refresh(item)
     s.refresh(cash)
     s.refresh(card)
     cash_txn = s.get(Transaction, cash_txn_id)
+    card_txn = s.get(Transaction, card_txn_id)
     assert cash_txn is not None and cash_txn.status == "void"
+    assert card_txn is not None and card_txn.status == "void"
     assert Decimal(str(cash.current_balance)) == Decimal("1000.00")
-
-    # Cash void does not reverse card books — card still shows payment applied
-    assert Decimal(str(card.current_balance)) == Decimal("200.00")
+    # Paired card leg reversed with cash void
+    assert Decimal(str(card.current_balance)) == Decimal("400.00")
 
     honest = recompute_card_payment_schedule(s, card.id, as_of=date(2026, 8, 11))
     s.flush()
@@ -220,15 +227,11 @@ def test_void_cash_leg_after_mark_paid_recomputes_card_schedule(tmp_path: Path):
     honest_amt = Decimal(str(honest.get("next_payment") or 0))
     if honest_amt > 0:
         assert abs(Decimal(str(item.amount))) == honest_amt
-
-    card_txn = s.get(Transaction, card_txn_id)
-    assert card_txn is not None
-    assert card_txn.status != "void"
     s.close()
 
 
 def test_void_both_legs_recompute_once_not_double(tmp_path: Path):
-    """Void both transfer legs → schedule matches honest recompute (idempotent)."""
+    """Void both transfer legs → second void is idempotent; schedule honest once."""
     s = _session(tmp_path)
     original = date(2026, 7, 15)
     _, cash, card, item = _card_payment_setup(s, next_date=original)
@@ -238,15 +241,23 @@ def test_void_both_legs_recompute_once_not_double(tmp_path: Path):
     cash_txn_id = out["transaction_id"]
     card_txn_id = out["card_transaction_id"]
 
-    void_transaction(s, cash_txn_id, reason="undo cash")
-    void_transaction(s, card_txn_id, reason="undo card")
+    v1 = void_transaction(s, cash_txn_id, reason="undo cash")
+    # Pair already voided with cash — second call must not re-reverse books
+    v2 = void_transaction(s, card_txn_id, reason="undo card")
     s.commit()
+
+    assert v1.get("paired_voided") is True
+    assert v2.get("already_void") is True
 
     s.refresh(item)
     s.refresh(cash)
     s.refresh(card)
     assert Decimal(str(cash.current_balance)) == Decimal("1000.00")
     assert Decimal(str(card.current_balance)) == Decimal("400.00")
+    cash_txn = s.get(Transaction, cash_txn_id)
+    card_txn = s.get(Transaction, card_txn_id)
+    assert cash_txn is not None and cash_txn.status == "void"
+    assert card_txn is not None and card_txn.status == "void"
 
     honest = recompute_card_payment_schedule(s, card.id, as_of=date(2026, 8, 11))
     s.flush()
