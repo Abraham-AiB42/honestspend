@@ -17,7 +17,7 @@
                 <StackPanel>
                     <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Credit &amp; debts" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="Payoff plans · autopay · educational score (not a bureau/FICO)" />
+                        Text="Statement &amp; payment · payoff plans · educational score (not a bureau/FICO)" />
                 </StackPanel>
                 <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
             </Grid>
@@ -116,9 +116,88 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="10">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Autopay" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Statement &amp; payment" />
                     <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="Pick a card by name. We’ll schedule minimum, full statement, or a 0% set-aside." />
+                        Text="Close day, due day, pay policy, and which cash account pays the card. Projected statement and next payment update as charges land." />
+                    <ItemsControl x:Name="CycleSummaryList" />
+                    <ComboBox x:Name="CycleCardBox" Header="Card" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a card" SelectionChanged="CycleCard_Changed" />
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <NumberBox x:Name="CycleCloseDayBox" Header="Close day (1–31)" Minimum="1" Maximum="31"
+                                   Value="1" Grid.Row="0" Grid.Column="0" />
+                        <NumberBox x:Name="CycleDueDayBox" Header="Due day (1–31)" Minimum="1" Maximum="31"
+                                   Value="15" Grid.Row="0" Grid.Column="1" />
+                        <ComboBox x:Name="CyclePolicyBox" Header="What to pay" SelectedIndex="2" MinWidth="200"
+                                  Grid.Row="1" Grid.Column="0" HorizontalAlignment="Stretch">
+                            <ComboBoxItem Content="Nothing for now" Tag="none" />
+                            <ComboBoxItem Content="Minimum only" Tag="min" />
+                            <ComboBoxItem Content="Pay statement in full" Tag="statement" />
+                            <ComboBoxItem Content="0% promo monthly set-aside" Tag="promo_sink" />
+                            <ComboBoxItem Content="Fixed amount" Tag="fixed" />
+                        </ComboBox>
+                        <NumberBox x:Name="CycleFixedBox" Header="Fixed amount ($)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="1" />
+                        <ComboBox x:Name="CycleFundingBox" Header="Pay from (cash)" HorizontalAlignment="Stretch"
+                                  PlaceholderText="Checking / cash" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" />
+                    </Grid>
+                    <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            CornerRadius="8" Padding="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="CycleProjectedText" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Text="Projected statement: —" />
+                            <TextBlock x:Name="CycleNextPaymentText" FontWeight="SemiBold" TextWrapping="Wrap"
+                                       Text="Next payment: —" />
+                            <TextBlock x:Name="CycleDatesText" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Save settings" Click="CycleSave_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Recompute" Click="CycleRecompute_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="CycleMsg" Opacity="0.85" TextWrapping="Wrap" />
+
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Promo / installment lines"
+                               Margin="0,12,0,0" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="0% plans and installments: remaining principal is carved out of statement pay; monthly amount still due this cycle." />
+                    <ItemsControl x:Name="PromoLineList" />
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBox x:Name="PromoNameBox" Header="Plan name" PlaceholderText="Amazon 0% · Apple Card"
+                                 Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" />
+                        <NumberBox x:Name="PromoRemainingBox" Header="Principal remaining ($)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="0" />
+                        <NumberBox x:Name="PromoMonthlyBox" Header="Monthly payment ($)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="1" />
+                    </Grid>
+                    <Button Content="Add promo line" Click="PromoAdd_Click" />
+                    <TextBlock x:Name="PromoMsg" Opacity="0.85" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Autopay (quick)" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Quick policy-only change. Prefer Statement &amp; payment above for close/due and pay-from cash." />
                     <ItemsControl x:Name="AutopayList" />
                     <ComboBox x:Name="AutopayCardBox" Header="Card" HorizontalAlignment="Stretch"
                               PlaceholderText="Pick a card" />
@@ -127,6 +206,7 @@
                         <ComboBoxItem Content="Minimum only" Tag="min" />
                         <ComboBoxItem Content="Pay statement in full" Tag="statement" />
                         <ComboBoxItem Content="0% promo monthly set-aside" Tag="promo_sink" />
+                        <ComboBoxItem Content="Fixed amount" Tag="fixed" />
                     </ComboBox>
                     <Button Content="Save autopay" Click="Autopay_Click" Style="{StaticResource AccentButtonStyle}" />
                     <TextBlock x:Name="AutopayMsg" Opacity="0.85" TextWrapping="Wrap" />

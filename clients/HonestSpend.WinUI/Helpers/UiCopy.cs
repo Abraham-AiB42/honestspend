@@ -26,6 +26,7 @@ public static class UiCopy
         "min" => "Minimum only",
         "statement" => "Pay statement in full",
         "promo_sink" => "0% promo monthly set-aside",
+        "fixed" => "Fixed amount",
         "none" or "" => "Nothing for now",
         _ => policy ?? "—",
     };

@@ -10,6 +10,9 @@ namespace HonestSpend_WinUI.Pages;
 
 public sealed partial class CreditPage : Page
 {
+    private readonly Dictionary<int, string> _cashNames = new();
+    private bool _suppressCycleCardChange;
+
     public CreditPage()
     {
         InitializeComponent();
@@ -44,6 +47,7 @@ public sealed partial class CreditPage : Page
             }
 
             await LoadHistoryFormAsync(api);
+            await LoadCycleSectionAsync(api);
             await LoadAutopayAsync(api);
 
             var health = await api.GetCreditHealthAsync();
@@ -297,6 +301,339 @@ public sealed partial class CreditPage : Page
         }
     }
 
+    private async Task LoadCycleSectionAsync(LedgerApiClient api)
+    {
+        try
+        {
+            _cashNames.Clear();
+            CycleFundingBox.Items.Clear();
+            CycleFundingBox.Items.Add(new ComboBoxItem { Content = "(no cash selected)", Tag = 0 });
+
+            var accounts = await api.GetAccountsAsync();
+            if (accounts.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var a in accounts.EnumerateArray())
+                {
+                    var kind = JsonUi.Str(a, "kind").ToLowerInvariant();
+                    var isCash = a.TryGetProperty("is_cash_for_ifpp", out var f) && f.ValueKind == JsonValueKind.True;
+                    if (kind is "checking" or "savings" or "cash" || isCash)
+                    {
+                        var id = a.GetProperty("id").GetInt32();
+                        var name = JsonUi.Str(a, "nickname");
+                        _cashNames[id] = name;
+                        CycleFundingBox.Items.Add(new ComboBoxItem
+                        {
+                            Content = $"{name} · {UiCopy.AccountKind(kind)} · {JsonUi.Money(a, "current_balance")}",
+                            Tag = id,
+                        });
+                    }
+                }
+            }
+            if (CycleFundingBox.Items.Count > 0)
+                CycleFundingBox.SelectedIndex = 0;
+
+            var cycles = await api.GetAccountCyclesAsync();
+            var summary = new List<string>();
+            var prevId = SelectedCycleCardId();
+
+            _suppressCycleCardChange = true;
+            CycleCardBox.Items.Clear();
+            if (cycles.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var it in arr.EnumerateArray())
+                {
+                    var id = JsonUi.Int(it, "account_id");
+                    var name = JsonUi.Str(it, "name");
+                    var policy = UiCopy.AutopayPolicy(JsonUi.Str(it, "policy", JsonUi.Str(it, "autopay_policy")));
+                    var fundId = JsonUi.Int(it, "funding_account_id",
+                        JsonUi.Int(it, "payment_funding_account_id"));
+                    var fund = fundId > 0 && _cashNames.TryGetValue(fundId, out var fn) ? fn : "—";
+                    summary.Add(
+                        $"{name} · close {JsonUi.Str(it, "statement_close_day", "?")} · " +
+                        $"due {JsonUi.Str(it, "payment_due_day", "?")} · {policy} · " +
+                        $"from {fund} · statement {JsonUi.Money(it, "statement_balance")} · " +
+                        $"next {JsonUi.Money(it, "next_payment")} on {JsonUi.Str(it, "next_due")}");
+                    CycleCardBox.Items.Add(new ComboBoxItem { Content = name, Tag = id });
+                }
+            }
+            CycleSummaryList.ItemsSource = summary.Count > 0
+                ? summary
+                : new List<string> { "No credit cards yet — Add → Credit card from Home." };
+
+            if (CycleCardBox.Items.Count > 0)
+            {
+                var sel = 0;
+                if (prevId is int keep)
+                {
+                    for (var i = 0; i < CycleCardBox.Items.Count; i++)
+                    {
+                        if (CycleCardBox.Items[i] is ComboBoxItem { Tag: int tid } && tid == keep)
+                        {
+                            sel = i;
+                            break;
+                        }
+                    }
+                }
+                CycleCardBox.SelectedIndex = sel;
+            }
+            _suppressCycleCardChange = false;
+
+            await ApplySelectedCycleAsync(api);
+        }
+        catch (Exception ex)
+        {
+            CycleSummaryList.ItemsSource = new List<string> { "Could not load statement cycles: " + ex.Message };
+            PromoLineList.ItemsSource = new List<string> { "—" };
+        }
+    }
+
+    private int? SelectedCycleCardId()
+    {
+        if (CycleCardBox.SelectedItem is ComboBoxItem { Tag: int id } && id > 0)
+            return id;
+        return null;
+    }
+
+    private async void CycleCard_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressCycleCardChange) return;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await ApplySelectedCycleAsync(api);
+        }
+        catch (Exception ex)
+        {
+            CycleMsg.Text = ex.Message;
+        }
+    }
+
+    private async Task ApplySelectedCycleAsync(LedgerApiClient api)
+    {
+        if (SelectedCycleCardId() is not int id)
+        {
+            CycleProjectedText.Text = "Projected statement: —";
+            CycleNextPaymentText.Text = "Next payment: —";
+            CycleDatesText.Text = "";
+            PromoLineList.ItemsSource = new List<string> { "Pick a card to see promo lines." };
+            return;
+        }
+
+        try
+        {
+            var c = await api.GetAccountCycleAsync(id);
+            ApplyCycleProjection(c);
+
+            CycleCloseDayBox.Value = ParseD(c, "statement_close_day", 1);
+            CycleDueDayBox.Value = ParseD(c, "payment_due_day", 15);
+            SelectPolicyTag(CyclePolicyBox, JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy", "statement")));
+            var fixedAmt = ParseD(c, "payment_fixed_amount", double.NaN);
+            CycleFixedBox.Value = double.IsNaN(fixedAmt) ? 0 : fixedAmt;
+
+            var fundId = JsonUi.Int(c, "funding_account_id", JsonUi.Int(c, "payment_funding_account_id"));
+            SelectIntTag(CycleFundingBox, fundId);
+
+            await LoadPromoLinesAsync(api, id);
+        }
+        catch (Exception ex)
+        {
+            CycleMsg.Text = "Could not load card cycle: " + ex.Message;
+        }
+    }
+
+    private void ApplyCycleProjection(JsonElement c)
+    {
+        CycleProjectedText.Text = $"Projected statement: {JsonUi.Money(c, "statement_balance")}";
+        CycleNextPaymentText.Text =
+            $"Next payment: {JsonUi.Money(c, "next_payment")} on {JsonUi.Str(c, "next_due")}";
+        CycleDatesText.Text =
+            $"Last close {JsonUi.Str(c, "last_close")} · next close {JsonUi.Str(c, "next_close")} · " +
+            $"policy {UiCopy.AutopayPolicy(JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy")))}";
+    }
+
+    private async Task LoadPromoLinesAsync(LedgerApiClient api, int accountId)
+    {
+        try
+        {
+            var res = await api.GetPromoLinesAsync(accountId);
+            var lines = new List<string>();
+            if (res.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var ln in arr.EnumerateArray())
+                {
+                    var active = !ln.TryGetProperty("active", out var act) || act.ValueKind != JsonValueKind.False;
+                    var status = active ? "open" : "closed";
+                    lines.Add(
+                        $"{JsonUi.Str(ln, "name")} · remaining {JsonUi.Money(ln, "principal_remaining")} · " +
+                        $"monthly {JsonUi.Money(ln, "monthly_payment")} · {status}" +
+                        (string.IsNullOrEmpty(JsonUi.Str(ln, "end_date", "")) || JsonUi.Str(ln, "end_date") == "—"
+                            ? ""
+                            : $" · ends {JsonUi.Str(ln, "end_date")}"));
+                }
+            }
+            PromoLineList.ItemsSource = lines.Count > 0
+                ? lines
+                : new List<string> { "No promo/installment lines on this card." };
+        }
+        catch
+        {
+            PromoLineList.ItemsSource = new List<string> { "Promo lines unavailable." };
+        }
+    }
+
+    private async void CycleSave_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int id)
+                throw new InvalidOperationException("Pick a card.");
+
+            var policy = "statement";
+            if (CyclePolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
+                policy = p;
+
+            var body = new Dictionary<string, object?>
+            {
+                ["statement_close_day"] = double.IsNaN(CycleCloseDayBox.Value) ? 1 : (int)CycleCloseDayBox.Value,
+                ["payment_due_day"] = double.IsNaN(CycleDueDayBox.Value) ? 15 : (int)CycleDueDayBox.Value,
+                ["autopay_policy"] = policy,
+            };
+
+            if (CycleFundingBox.SelectedItem is ComboBoxItem { Tag: int fundId } && fundId > 0)
+                body["payment_funding_account_id"] = fundId;
+            else
+                body["payment_funding_account_id"] = null;
+
+            if (policy == "fixed")
+            {
+                var amt = double.IsNaN(CycleFixedBox.Value) ? 0m : (decimal)CycleFixedBox.Value;
+                body["payment_fixed_amount"] = amt;
+            }
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.PutAccountCycleConfigAsync(id, body);
+            ApplyCycleProjection(res);
+            CycleMsg.Text =
+                $"Saved · next {JsonUi.Money(res, "next_payment")} on {JsonUi.Str(res, "next_due")} · " +
+                $"settings locked as yours";
+            await LoadCycleSectionAsync(api);
+            await LoadAutopayAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void CycleRecompute_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int id)
+                throw new InvalidOperationException("Pick a card.");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.RecomputeAccountCycleAsync(id);
+            ApplyCycleProjection(res);
+            CycleMsg.Text =
+                $"Recomputed · statement {JsonUi.Money(res, "statement_balance")} · " +
+                $"next {JsonUi.Money(res, "next_payment")} on {JsonUi.Str(res, "next_due")}";
+            await LoadCycleSectionAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void PromoAdd_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (SelectedCycleCardId() is not int id)
+                throw new InvalidOperationException("Pick a card first.");
+            var name = PromoNameBox.Text?.Trim();
+            if (string.IsNullOrEmpty(name))
+                throw new InvalidOperationException("Enter a plan name.");
+            var remaining = double.IsNaN(PromoRemainingBox.Value) ? 0m : (decimal)PromoRemainingBox.Value;
+            var monthly = double.IsNaN(PromoMonthlyBox.Value) ? 0m : (decimal)PromoMonthlyBox.Value;
+            if (remaining < 0 || monthly < 0)
+                throw new InvalidOperationException("Amounts must be zero or more.");
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.CreatePromoLineAsync(id, new
+            {
+                name,
+                principal_remaining = remaining,
+                monthly_payment = monthly,
+                start_date = DateTime.Today.ToString("yyyy-MM-dd"),
+                source = "user",
+                active = true,
+            });
+            PromoMsg.Text = $"Added “{name}” · remaining {remaining:C} · monthly {monthly:C}";
+            PromoNameBox.Text = "";
+            PromoRemainingBox.Value = 0;
+            PromoMonthlyBox.Value = 0;
+            await ApplySelectedCycleAsync(api);
+            await LoadCycleSectionAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private static void SelectPolicyTag(ComboBox box, string policy)
+    {
+        var want = (policy ?? "statement").ToLowerInvariant();
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem { Tag: string t } &&
+                string.Equals(t, want, StringComparison.OrdinalIgnoreCase))
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        // default statement
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem { Tag: string t } && t == "statement")
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        if (box.Items.Count > 0) box.SelectedIndex = 0;
+    }
+
+    private static void SelectIntTag(ComboBox box, int id)
+    {
+        if (id <= 0)
+        {
+            if (box.Items.Count > 0) box.SelectedIndex = 0;
+            return;
+        }
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem { Tag: int t } && t == id)
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        if (box.Items.Count > 0) box.SelectedIndex = 0;
+    }
+
     private async Task LoadAutopayAsync(LedgerApiClient api)
     {
         try
@@ -348,6 +685,7 @@ public sealed partial class CreditPage : Page
                 $"{JsonUi.Str(res, "name")} → {UiCopy.AutopayPolicy(JsonUi.Str(res, "policy"))} · " +
                 $"about ${JsonUi.Str(res, "suggested_amount")}/mo";
             await LoadAutopayAsync(api);
+            await LoadCycleSectionAsync(api);
         }
         catch (Exception ex)
         {

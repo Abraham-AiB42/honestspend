@@ -51,6 +51,8 @@
                                    Margin="0,4,0,0" Text="—" />
                         <TextBlock x:Name="FloatWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
                                    Visibility="Collapsed" />
+                        <TextBlock x:Name="CardPayWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
+                                   Visibility="Collapsed" />
                         <TextBlock x:Name="WhyOneLiner" Opacity="0.7" FontSize="13" TextWrapping="Wrap" />
                         <TextBlock x:Name="BudgetReserveLine" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
                         <TextBlock x:Name="StatusLine" FontSize="16" FontWeight="SemiBold" Text="—" />

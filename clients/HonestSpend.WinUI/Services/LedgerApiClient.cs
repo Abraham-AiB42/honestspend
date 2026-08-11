@@ -365,6 +365,36 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> PutAccountAsync(int id, object body, CancellationToken ct = default)
         => PutJsonAsync($"api/accounts/{id}", body, ct);
 
+    // --- Statement cycle / live card payment ---
+
+    public Task<JsonElement> GetAccountCyclesAsync(int? profileId = null, CancellationToken ct = default)
+    {
+        var q = "api/accounts/cycles";
+        if (profileId is int pid)
+            q += $"?profile_id={pid}";
+        else if (AppState.SelectedProfileId is int sp && AppState.IfppScope == "entity")
+            q += $"?profile_id={sp}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> GetAccountCycleAsync(int accountId, CancellationToken ct = default)
+        => GetJsonAsync($"api/accounts/{accountId}/cycle", ct);
+
+    public Task<JsonElement> PutAccountCycleConfigAsync(int accountId, object body, CancellationToken ct = default)
+        => PutJsonAsync($"api/accounts/{accountId}/cycle-config", body, ct);
+
+    public Task<JsonElement> RecomputeAccountCycleAsync(int accountId, CancellationToken ct = default)
+        => PostJsonAsync($"api/accounts/{accountId}/recompute-cycle", new { }, ct);
+
+    public Task<JsonElement> GetPromoLinesAsync(int accountId, CancellationToken ct = default)
+        => GetJsonAsync($"api/accounts/{accountId}/promo-lines", ct);
+
+    public Task<JsonElement> CreatePromoLineAsync(int accountId, object body, CancellationToken ct = default)
+        => PostJsonAsync($"api/accounts/{accountId}/promo-lines", body, ct);
+
+    public Task<JsonElement> RollPromoLineAsync(int accountId, int lineId, CancellationToken ct = default)
+        => PostJsonAsync($"api/accounts/{accountId}/promo-lines/{lineId}/roll", new { }, ct);
+
     public Task<JsonElement> GetScheduledAsync(bool activeOnly = true, CancellationToken ct = default)
         => GetJsonAsync($"api/scheduled?active_only={activeOnly.ToString().ToLowerInvariant()}", ct);
 

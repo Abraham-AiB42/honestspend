@@ -80,6 +80,7 @@ public sealed partial class HomePage : Page
 
             SafeText.Text = Money(_home, "safe_to_spend");
             ApplyFloatWhisper(_home);
+            await ApplyCardPayWhisperAsync(api);
             ApplyWhyThisNumber(_home);
             ApplyBudgetSummary(_home);
             ApplyBudgetSeedHint(_home);
@@ -551,6 +552,67 @@ public sealed partial class HomePage : Page
         catch
         {
             FloatWhisper.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>
+    /// Optional urgency line under float whisper: soonest card payment with amount + due date.
+    /// Shows when a payment is due within 14 days and amount &gt; 0.
+    /// </summary>
+    private async Task ApplyCardPayWhisperAsync(LedgerApiClient api)
+    {
+        try
+        {
+            CardPayWhisper.Visibility = Visibility.Collapsed;
+            CardPayWhisper.Text = "";
+            var cycles = await api.GetAccountCyclesAsync();
+            if (!cycles.TryGetProperty("items", out var arr) || arr.ValueKind != JsonValueKind.Array)
+                return;
+
+            decimal bestAmt = 0;
+            DateTime? bestDue = null;
+            var today = DateTime.Today;
+            foreach (var it in arr.EnumerateArray())
+            {
+                var dueStr = JsonUi.Str(it, "next_due", "");
+                if (string.IsNullOrEmpty(dueStr) || dueStr == "—") continue;
+                if (!DateTime.TryParse(dueStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var due))
+                    continue;
+                var payStr = JsonUi.Str(it, "next_payment", "0");
+                if (!decimal.TryParse(payStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var pay) || pay <= 0)
+                    continue;
+                var days = (due.Date - today).TotalDays;
+                if (days < 0 || days > 14) continue;
+                if (bestDue is null || due.Date < bestDue.Value.Date ||
+                    (due.Date == bestDue.Value.Date && pay > bestAmt))
+                {
+                    bestDue = due.Date;
+                    bestAmt = pay;
+                }
+            }
+
+            // Sum all payments on that soonest due date for a single plain-language line
+            if (bestDue is null) return;
+            decimal sum = 0;
+            foreach (var it in arr.EnumerateArray())
+            {
+                var dueStr = JsonUi.Str(it, "next_due", "");
+                if (!DateTime.TryParse(dueStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var due))
+                    continue;
+                if (due.Date != bestDue.Value.Date) continue;
+                var payStr = JsonUi.Str(it, "next_payment", "0");
+                if (decimal.TryParse(payStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var pay) && pay > 0)
+                    sum += pay;
+            }
+            if (sum <= 0) return;
+
+            CardPayWhisper.Text =
+                $"Next card payments: {sum.ToString("C", CultureInfo.CurrentCulture)} on {bestDue.Value:MMM d}";
+            CardPayWhisper.Visibility = Visibility.Visible;
+        }
+        catch
+        {
+            CardPayWhisper.Visibility = Visibility.Collapsed;
         }
     }
 

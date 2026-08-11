@@ -69,7 +69,9 @@ public sealed partial class AccountsPage : Page
                 var sub = $"{pname} · {bal}";
                 if (kind == "credit")
                 {
-                    sub += $" · due day {JsonUi.Str(a, "payment_due_day", "?")} · limit {JsonUi.Money(a, "credit_limit")}";
+                    sub +=
+                        $" · close {JsonUi.Str(a, "statement_close_day", "?")} · " +
+                        $"due day {JsonUi.Str(a, "payment_due_day", "?")} · limit {JsonUi.Money(a, "credit_limit")}";
                     if (a.TryGetProperty("promo_end_date", out var pe) && pe.ValueKind != JsonValueKind.Null)
                         sub += $" · promo ends {pe.GetString()}";
                 }
@@ -79,6 +81,22 @@ public sealed partial class AccountsPage : Page
                     meta += (meta.Length > 0 ? " · " : "") + $"APY {apy}";
                 if (a.TryGetProperty("is_cash_for_ifpp", out var ifpp) && ifpp.ValueKind == JsonValueKind.True)
                     meta += " · Safe to spend";
+                if (kind == "credit")
+                {
+                    var nextPay = JsonUi.Str(a, "next_payment_amount_cached", "");
+                    var nextDue = JsonUi.Str(a, "next_payment_date_cached", "");
+                    if (!string.IsNullOrEmpty(nextPay) && nextPay != "—" && nextPay != "0" && nextPay != "0.00")
+                    {
+                        meta += (meta.Length > 0 ? " · " : "") +
+                                $"next pay {JsonUi.Money(a, "next_payment_amount_cached")}";
+                        if (!string.IsNullOrEmpty(nextDue) && nextDue != "—")
+                            meta += $" on {nextDue}";
+                    }
+                    var stmt = JsonUi.Str(a, "statement_balance_cached", "");
+                    if (!string.IsNullOrEmpty(stmt) && stmt != "—" && stmt != "0" && stmt != "0.00")
+                        meta += (meta.Length > 0 ? " · " : "") +
+                                $"statement {JsonUi.Money(a, "statement_balance_cached")}";
+                }
                 rows.Add(new AccountRow(id, title, sub, meta, kind));
             }
             AccountList.ItemsSource = rows;
@@ -167,6 +185,13 @@ public sealed partial class AccountsPage : Page
             Maximum = 31,
             Value = ParseDouble(JsonUi.Str(a0, "payment_due_day", "NaN")),
         };
+        var closeBox = new NumberBox
+        {
+            Header = "Statement close day (1–31)",
+            Minimum = 1,
+            Maximum = 31,
+            Value = ParseDouble(JsonUi.Str(a0, "statement_close_day", "NaN")),
+        };
         var promoAprBox = new NumberBox
         {
             Header = "Promo APR (0 for 0%)",
@@ -194,6 +219,7 @@ public sealed partial class AccountsPage : Page
         if (row.Kind == "credit")
         {
             panel.Children.Add(limitBox);
+            panel.Children.Add(closeBox);
             panel.Children.Add(dueBox);
             panel.Children.Add(promoAprBox);
             panel.Children.Add(promoEndBox);
@@ -240,6 +266,8 @@ public sealed partial class AccountsPage : Page
                     var bal = double.IsNaN(balBox.Value) ? 0 : balBox.Value;
                     body["available_credit"] = (decimal)Math.Max(0, limitBox.Value - bal);
                 }
+                if (!double.IsNaN(closeBox.Value) && closeBox.Value is >= 1 and <= 31)
+                    body["statement_close_day"] = (int)closeBox.Value;
                 if (!double.IsNaN(dueBox.Value) && dueBox.Value is >= 1 and <= 31)
                     body["payment_due_day"] = (int)dueBox.Value;
                 if (!double.IsNaN(promoAprBox.Value))
