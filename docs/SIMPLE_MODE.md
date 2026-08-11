@@ -6,7 +6,8 @@
 
 | Surface | Purpose |
 |---------|---------|
-| **Home** | Safe to spend · status · Do this next · Up next · wealth basics |
+| **Home** | Safe to spend · status · Do this next · **Coming up** · wealth basics |
+| **Home · Coming up** | Short cash-side list until **N calendar days (7–14)** or the **next 1–2 paydays** (auto when income known). Empty: “Nothing scheduled in this window — add a bill or paycheck in Add” |
 | **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
 | **Add** | Wizards: cash, savings, card, loan, bill, income, business, child |
 | **Get started** | First-run wizard (~2 min) |
@@ -24,6 +25,44 @@
 
 See [STATEMENT_CYCLES.md](./STATEMENT_CYCLES.md).
 
+## Coming up strip
+
+Plain list on Simple Home: bills, card cash payments, and optional paychecks through a short window — not a day grid (that stays Full books / `cash-runway`).
+
+### Window modes
+
+| Mode | End date | Default |
+|------|----------|---------|
+| **auto** | If ≥1 active income schedule in scope → **paydays** (N=1); else **calendar** 14 days | Yes |
+| **calendar** | `today + calendar_days` | Days **7–14** (default **14**) |
+| **paydays** | Date of the **Nth** future paycheck (N **1 or 2**, default **1**) | Cap: never past **today + 45** days (`window_capped`) |
+
+- No income + mode `paydays` → fall back to calendar 14 (`window_fallback: no_income`); subtitle may say “no paycheck scheduled”.
+- Subtitle examples: `Next 14 days` · `Until Fri Mar 6 (next payday)` · `Until … (2nd payday)`.
+
+### Cash-side rule (what appears)
+
+| Include | Skip |
+|---------|------|
+| Active schedules on **cash** (checking/savings) in the window | Schedules on **credit** accounts (e.g. Netflix on the card) — same skip as Safe to spend |
+| **`Card payment · {nickname}`** on the pay-from checking account | Engine jargon (“horizon”, IFPP) |
+| Optional **income** rows (default on; `coming_up_show_income`) | — |
+
+Sort by date, then larger |amount|. Simple shows top **8** rows.
+
+### Settings & API
+
+| Pref (`AppSettings`) | Values | Default |
+|----------------------|--------|---------|
+| `coming_up_window_mode` | `auto` · `calendar` · `paydays` | `auto` |
+| `coming_up_calendar_days` | 7–14 | 14 |
+| `coming_up_payday_count` | 1–2 | 1 |
+| `coming_up_show_income` | bool | true |
+
+- Embedded in `GET /api/home/simple` as `coming_up`
+- Standalone: `GET /api/coming-up` (query overrides: `mode`, `calendar_days`, `payday_count`, `show_income`, `limit`)
+- Persist: `PATCH /api/settings` with `coming_up_*` (WinUI Settings UI may follow later)
+
 ## Language
 
 | Avoid | Say |
@@ -39,7 +78,8 @@ See [STATEMENT_CYCLES.md](./STATEMENT_CYCLES.md).
 
 ## APIs
 
-- `GET /api/home/simple` — primary Home payload  
+- `GET /api/home/simple` — primary Home payload (includes `coming_up`)  
+- `GET /api/coming-up` — Coming up strip (window + cash-side items)  
 - `POST /api/onboarding/first-run` — atomic first-run (cash + optional card + bill)  
 - Existing account/scheduled/profile endpoints for wizards  
 

@@ -80,6 +80,7 @@ Food / gas / daily envelopes are **Budgets**, not a pad on the card payment amou
 - Amount = **−next payment**, date = next due
 - Safe to spend **does** reserve this cash outflow
 - Card charge / recurring expense schedules on the credit account **do not** double-count against cash
+- Same cash-side row appears in Simple Home **Coming up** (credit-account bills do not)
 
 ### Config priority
 

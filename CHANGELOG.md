@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Coming up strip**: Simple Home list of cash-side bills / card payments / optional paychecks through **calendar 7–14 days** or **next 1–2 paydays** (`auto` when income known); empty-state hint; prefs `coming_up_*`; `GET /api/coming-up` + embed on home/simple
 - **Statement cycles**: close day + due day + pay policy → projected **statement balance** and **next payment**; cash **pay-from** schedule so Safe to spend sees the right card outflow (no day grid; multi-entity; promo installment lines; recompute after books mutations)
 - **Pay policies + honesty**: **Pay current balance** (full books); **when cash leaves** (due day / day before close / on close) for near-zero statement strategies; utilization pay-to-target; est. interest if min; educational credit advice (not a score)
 - **Promo payoff calendar**: dynamic month span from remaining ÷ monthly (e.g. **24 mo** financing), multi-line merge; Credit UI + `GET …/promo-calendar`
