@@ -1,4 +1,4 @@
-# Solid A grades SDD progress
+﻿# Solid A grades SDD progress
 
 Plan: docs/superpowers/plans/2026-08-11-solid-a-grades.md
 Branch: feature/statement-cycles
@@ -39,4 +39,11 @@ Task 3.1: complete (46e814b, Credit progressive disclosure; WinUI Debug x64 gree
 
 Task 3.1: complete (f27ef1f)
 
-Task 3.2: complete (13744a0, plain power copy; payroll success without schedule ids; WinUI Debug x64 green)
+Task 3.2: complete (ac3d64c, plain power copy; payroll success without schedule ids; WinUI Debug x64 green)
+
+Task 3.3: complete (65019bc, plain Settings never-neg + pending labels; WinUI Debug x64 green)
+
+
+
+
+

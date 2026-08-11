@@ -1052,7 +1052,7 @@ public sealed partial class SettingsPage : Page
                 ["ifpp_scope"] = dict["ifpp_scope"],
                 ["opportunity_rate"] = dict.GetValueOrDefault("opportunity_rate"),
             });
-            StatusText.Text = "Fiscal settings saved (PATCH) · buffer, scope, cleared-only applied.";
+            StatusText.Text = "Fiscal settings saved · buffer, protection, and pending treatment applied.";
         }
         catch (Exception ex)
         {

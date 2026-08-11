@@ -145,10 +145,12 @@
             <NumberBox x:Name="BufferBox" Header="Total cash buffer ($)" Minimum="0" Value="1000" />
             <StackPanel x:Name="AccountBuffersPanel" Spacing="8" />
             <ComboBox x:Name="NeverNegEnforceBox" Header="Protect checking when posting expenses" SelectedIndex="1">
-                <ComboBoxItem Content="Off (just warn later)" Tag="off" />
-                <ComboBoxItem Content="Ask me first (recommended)" Tag="warn" IsSelected="True" />
-                <ComboBoxItem Content="Always block" Tag="hard" />
+                <ComboBoxItem Content="Off — allow negative checking" Tag="off" />
+                <ComboBoxItem Content="Warn — ask before going negative (recommended)" Tag="warn" IsSelected="True" />
+                <ComboBoxItem Content="Hard — never allow negative checking" Tag="hard" />
             </ComboBox>
+            <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                Text="Off lets a post go through even if checking would go below zero. Warn asks you first. Hard blocks the post." />
             <Button Content="Save safety &amp; buffers" Click="SaveBuffersAndFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Budgets (workweek &amp; reserve)" />
@@ -200,9 +202,9 @@
                         <ComboBoxItem Content="Careful" Tag="conservative" />
                         <ComboBoxItem Content="Optimistic" Tag="expected" />
                     </ComboBox>
-                    <ComboBox x:Name="ScopeBox" Header="Never-negative pool" SelectedIndex="0">
-                        <ComboBoxItem Content="checking only" Tag="checking" />
-                        <ComboBoxItem Content="all cash accounts" Tag="all_cash" />
+                    <ComboBox x:Name="ScopeBox" Header="Which accounts must stay non-negative" SelectedIndex="0">
+                        <ComboBoxItem Content="Checking only" Tag="checking" />
+                        <ComboBoxItem Content="All cash accounts" Tag="all_cash" />
                     </ComboBox>
                     <NumberBox x:Name="HorizonBox" Header="Look-ahead days" Minimum="7" Maximum="365" Value="45" />
                     <NumberBox x:Name="OppRateBox" Header="Cash yield hurdle (e.g. 0.06)" Minimum="0" Maximum="1"
@@ -215,10 +217,12 @@
                     </ComboBox>
                     <NumberBox x:Name="ExtraBox" Header="Extra $/month toward debt" Minimum="0" Value="0" />
                     <CheckBox x:Name="AutoCatBox" Content="Auto-categorize on import" IsChecked="True" />
-                    <CheckBox x:Name="ClearedOnlyBox" Content="Flag pending before trusting books" IsChecked="True" />
+                    <CheckBox x:Name="ClearedOnlyBox" Content="Treat pending as already spent" IsChecked="True" />
+                    <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                        Text="When on, pending outflows reduce Safe to spend. When off, pending is a warning only." />
                     <ComboBox x:Name="IfppScopeDefaultBox" Header="Default money view" SelectedIndex="0">
-                        <ComboBoxItem Content="This money (silo)" Tag="entity" />
-                        <ComboBoxItem Content="All money (combined)" Tag="group" />
+                        <ComboBoxItem Content="This money" Tag="entity" />
+                        <ComboBoxItem Content="All money" Tag="group" />
                     </ComboBox>
                     <Button Content="Save advanced settings" Click="SaveFiscal_Click" />
                 </StackPanel>
