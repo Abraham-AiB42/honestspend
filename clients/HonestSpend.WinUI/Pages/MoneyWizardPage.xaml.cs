@@ -35,6 +35,8 @@ public sealed partial class MoneyWizardPage : Page
     private CheckBox? _promoBox;
     private ComboBox? _autopayBox;
     private CheckBox? _certaintyBox;
+    private RewardsRatesUi? _rewardsUi;
+    private Dictionary<string, decimal>? _rewardsRates;
 
     public MoneyWizardPage()
     {
@@ -206,8 +208,8 @@ public sealed partial class MoneyWizardPage : Page
         }
         else
         {
-            QuestionText.Text = "Autopay preference";
-            HintText.Text = "We can create a monthly reminder. Change anytime.";
+            QuestionText.Text = "Autopay & rewards";
+            HintText.Text = "Optional autopay reminder and category cash-back rates for card picking.";
             _autopayBox = new ComboBox { Header = "Autopay" };
             _autopayBox.Items.Add(new ComboBoxItem { Content = "None for now", Tag = "none" });
             _autopayBox.Items.Add(new ComboBoxItem { Content = "Minimum only", Tag = "min" });
@@ -215,6 +217,10 @@ public sealed partial class MoneyWizardPage : Page
             _autopayBox.Items.Add(new ComboBoxItem { Content = "0% promo set-aside", Tag = "promo_sink" });
             _autopayBox.SelectedIndex = 0;
             FieldsPanel.Children.Add(_autopayBox);
+            _rewardsUi = RewardsRatesUi.Build(compact: true);
+            if (_rewardsRates is { Count: > 0 })
+                _rewardsUi.ApplyRates(_rewardsRates);
+            FieldsPanel.Children.Add(_rewardsUi.Root);
         }
     }
 
@@ -489,6 +495,8 @@ public sealed partial class MoneyWizardPage : Page
         // promo balance reuses _balBox on promo step — capture to _promoBal
         if (_kind == "card" && _step == 4 && _balBox is not null && !double.IsNaN(_balBox.Value))
             _promoBal = (decimal)_balBox.Value;
+        if (_kind == "card" && _rewardsUi is not null)
+            _rewardsRates = _rewardsUi.CollectRates();
     }
 
     private async Task FinishAsync()
@@ -539,6 +547,10 @@ public sealed partial class MoneyWizardPage : Page
             var id = created.GetProperty("id").GetInt32();
             if (_autopay != "none")
                 await api.SetAutopayAsync(id, _autopay);
+            if (_rewardsRates is { Count: > 0 })
+                await api.PutRewardsRatesAsync(id, _rewardsRates);
+            else if (_rewardsUi is not null && _rewardsUi.HasRates())
+                await api.PutRewardsRatesAsync(id, _rewardsUi.CollectRates());
             MsgText.Text = "Card added. We can prove interest-free charges when due day is set.";
         }
         else if (_kind == "loan")

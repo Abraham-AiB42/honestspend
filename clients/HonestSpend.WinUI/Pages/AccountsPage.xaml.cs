@@ -12,10 +12,26 @@ public sealed partial class AccountsPage : Page
 {
     private readonly List<(int Id, string Name)> _profiles = new();
     private JsonElement _accountsRaw = default;
+    private RewardsRatesUi? _createRewards;
 
     public AccountsPage()
     {
         InitializeComponent();
+        KindBox.SelectionChanged += KindBox_SelectionChanged;
+        _createRewards = RewardsRatesUi.Build(compact: true);
+        RewardsHost.Children.Add(_createRewards.Root);
+        UpdateRewardsVisibility();
+    }
+
+    private void KindBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        UpdateRewardsVisibility();
+
+    private void UpdateRewardsVisibility()
+    {
+        var kind = "checking";
+        if (KindBox.SelectedItem is ComboBoxItem k && k.Tag is string kt)
+            kind = kt;
+        RewardsHost.Visibility = kind == "credit" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -207,6 +223,10 @@ public sealed partial class AccountsPage : Page
             IsChecked = a0.TryGetProperty("is_cash_for_ifpp", out var ifpp) && ifpp.ValueKind == JsonValueKind.True,
         };
 
+        RewardsRatesUi? editRewards = null;
+        if (row.Kind == "credit")
+            editRewards = RewardsRatesUi.Build(compact: true);
+
         var panel = new StackPanel { Spacing = 10, MinWidth = 320 };
         panel.Children.Add(nickBox);
         panel.Children.Add(instBox);
@@ -223,6 +243,32 @@ public sealed partial class AccountsPage : Page
             panel.Children.Add(dueBox);
             panel.Children.Add(promoAprBox);
             panel.Children.Add(promoEndBox);
+            if (editRewards is not null)
+                panel.Children.Add(editRewards.Root);
+        }
+
+        // Prefetch rewards rates for credit edit
+        if (editRewards is not null)
+        {
+            try
+            {
+                using var preApi = new LedgerApiClient();
+                await preApi.EnsureBackendAsync();
+                var rr = await preApi.GetRewardsRatesAsync(row.Id);
+                if (rr.TryGetProperty("rates", out var ratesEl) && ratesEl.ValueKind == JsonValueKind.Object)
+                {
+                    var strMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var p in ratesEl.EnumerateObject())
+                        strMap[p.Name] = p.Value.ValueKind == JsonValueKind.String
+                            ? (p.Value.GetString() ?? "0")
+                            : p.Value.ToString();
+                    editRewards.ApplyFromStrings(strMap);
+                }
+            }
+            catch
+            {
+                /* leave blank */
+            }
         }
 
         var dlg = new ContentDialog
@@ -231,7 +277,7 @@ public sealed partial class AccountsPage : Page
             Content = new ScrollViewer
             {
                 Content = panel,
-                MaxHeight = 480,
+                MaxHeight = 560,
             },
             PrimaryButtonText = "Save",
             CloseButtonText = "Cancel",
@@ -290,6 +336,13 @@ public sealed partial class AccountsPage : Page
                     cycleBody["payment_due_day"] = (int)dueBox.Value;
                 if (cycleBody.Count > 0)
                     await api.PutAccountCycleConfigAsync(row.Id, cycleBody);
+
+                if (editRewards is not null)
+                {
+                    var rates = editRewards.CollectRates();
+                    // Always PUT so clearing rates is supported
+                    await api.PutRewardsRatesAsync(row.Id, rates);
+                }
             }
 
             MsgText.Text = $"Updated {nickBox.Text?.Trim() ?? row.Title}.";
@@ -347,7 +400,12 @@ public sealed partial class AccountsPage : Page
 
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            await api.CreateAccountAsync(body);
+            var created = await api.CreateAccountAsync(body);
+            if (kind == "credit" && _createRewards is not null && _createRewards.HasRates())
+            {
+                var id = created.GetProperty("id").GetInt32();
+                await api.PutRewardsRatesAsync(id, _createRewards.CollectRates());
+            }
             MsgText.Text = "Account saved.";
             NameBox.Text = "";
             await LoadAsync();

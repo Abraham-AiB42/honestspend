@@ -78,6 +78,8 @@ public sealed partial class FirstRunPage : Page
     private NumberBox? _cardBal;
     private NumberBox? _cardLimit;
     private NumberBox? _cardDue;
+    private RewardsRatesUi? _cardRewards;
+    private Dictionary<string, decimal>? _cardRewardsRates;
     private CheckBox? _wantBill;
     private TextBox? _billName;
     private NumberBox? _billAmt;
@@ -216,6 +218,16 @@ public sealed partial class FirstRunPage : Page
         NextBtn.IsEnabled = true;
         ProgressBar.Value = _progress;
         StepLabel.Text = $"{_phaseTitle} · {_progress}%";
+        if (SkipBtn is not null)
+        {
+            SkipBtn.Content = _phase switch
+            {
+                "welcome" or "path" => "Leave for later",
+                "power_menu" => "I'm not ready — Home",
+                "done" => "Go to Home",
+                _ => "Skip this step",
+            };
+        }
 
         if (_phase == "done")
         {
@@ -564,7 +576,7 @@ public sealed partial class FirstRunPage : Page
         HintText.Text =
             "Add checking, savings, or money market one at a time. " +
             "After each account we’ll show how to download a CSV from your bank (~90 days).";
-        NextBtn.Content = "Next — find cards & bills";
+        NextBtn.Content = "Continue — make it smarter";
         NextBtn.IsEnabled = JsonUi.Int(st, "count", 0) > 0
             || (st.TryGetProperty("has_cash", out var hc) && hc.ValueKind == JsonValueKind.True);
 
@@ -919,6 +931,12 @@ public sealed partial class FirstRunPage : Page
                     $"Checking: {_cashNameV} · {_cashBalV:C}",
                     $"Total buffer: {_bufferV:C}",
                 };
+                if (_cashBalV < _bufferV)
+                {
+                    lines.Add(
+                        $"Note: with ${_cashBalV:0} in checking and a ${_bufferV:0} floor, " +
+                        "Safe to spend starts at $0 until balance covers the floor — enter today's real balance.");
+                }
                 if (_wantCardV)
                     lines.Add($"Card: {_cardNameV} · owed {_cardBalV:C} · due day {_cardDueV}");
                 if (_wantBillV)
@@ -1388,7 +1406,11 @@ public sealed partial class FirstRunPage : Page
     {
         while (Fields.Children.Count > 1)
             Fields.Children.RemoveAt(Fields.Children.Count - 1);
-        if (!show) return;
+        if (!show)
+        {
+            _cardRewards = null;
+            return;
+        }
         _cardName = new TextBox { Header = "Card nickname", Text = _cardNameV };
         _cardBal = new NumberBox { Header = "Balance owed ($)", Value = (double)_cardBalV, Minimum = 0 };
         _cardLimit = new NumberBox { Header = "Credit limit ($)", Value = (double)_cardLimitV, Minimum = 0 };
@@ -1397,6 +1419,10 @@ public sealed partial class FirstRunPage : Page
         Fields.Children.Add(_cardBal);
         Fields.Children.Add(_cardLimit);
         Fields.Children.Add(_cardDue);
+        _cardRewards = RewardsRatesUi.Build(compact: true);
+        if (_cardRewardsRates is { Count: > 0 })
+            _cardRewards.ApplyRates(_cardRewardsRates);
+        Fields.Children.Add(_cardRewards.Root);
     }
 
     private void BillFields(bool show)
@@ -1423,6 +1449,8 @@ public sealed partial class FirstRunPage : Page
         if (_cardBal is not null && !double.IsNaN(_cardBal.Value)) _cardBalV = (decimal)_cardBal.Value;
         if (_cardLimit is not null && !double.IsNaN(_cardLimit.Value)) _cardLimitV = (decimal)_cardLimit.Value;
         if (_cardDue is not null && !double.IsNaN(_cardDue.Value)) _cardDueV = (int)_cardDue.Value;
+        if (_cardRewards is not null)
+            _cardRewardsRates = _cardRewards.CollectRates();
         if (_wantBill is not null) _wantBillV = _wantBill.IsChecked == true;
         if (_billName is not null) _billNameV = _billName.Text?.Trim() ?? "Bill";
         if (_billAmt is not null && !double.IsNaN(_billAmt.Value)) _billAmtV = (decimal)_billAmt.Value;
@@ -1683,6 +1711,29 @@ public sealed partial class FirstRunPage : Page
         MsgText.Text = JsonUi.Str(res, "message");
         if (string.IsNullOrEmpty(MsgText.Text) || MsgText.Text == "—")
             MsgText.Text = "Accounts created. Safe to spend is ready — optional smarter steps next.";
+
+        // Optional rewards rates on the card just created
+        if (_wantCardV && _cardRewardsRates is { Count: > 0 })
+        {
+            try
+            {
+                var accounts = await api.GetAccountsAsync();
+                foreach (var a in accounts.EnumerateArray())
+                {
+                    if (JsonUi.Str(a, "kind") != "credit") continue;
+                    if (!string.Equals(JsonUi.Str(a, "nickname"), _cardNameV, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    var cardId = a.GetProperty("id").GetInt32();
+                    await api.PutRewardsRatesAsync(cardId, _cardRewardsRates);
+                    break;
+                }
+            }
+            catch
+            {
+                /* non-fatal — card exists without rates */
+            }
+        }
+
         var st = await api.GetSetupStateAsync();
         // Ensure power_menu if server still on manual
         if (JsonUi.Str(st, "phase") is "manual" or "")
@@ -1842,8 +1893,8 @@ public sealed partial class FirstRunPage : Page
                 if (string.IsNullOrEmpty(id) || id == "—")
                     id = Guid.NewGuid().ToString("N");
                 var selected = !(p.TryGetProperty("selected", out var sel) && sel.ValueKind == JsonValueKind.False);
-                var payDef = JsonUi.Str(p, "default_payment_option", "interest_saving");
-                if (payDef == "—") payDef = "interest_saving";
+                var payDef = JsonUi.Str(p, "default_payment_option", "statement");
+                if (payDef == "—" || string.IsNullOrEmpty(payDef)) payDef = "statement";
                 _discoverItems[id] = (selected, payDef, p);
 
                 var type = JsonUi.Str(p, "type");
@@ -1892,7 +1943,7 @@ public sealed partial class FirstRunPage : Page
                         payBox.Items.Add(it);
                         if (on) payBox.SelectedItem = it;
                     }
-                    addPay("interest_saving", "Interest-saving (recommended)", payDef == "interest_saving");
+                    addPay("interest_saving", "Interest-saving (0% / float strategy)", payDef == "interest_saving");
                     addPay("statement", "Statement balance", payDef == "statement");
                     addPay("fixed", "Fixed payment", payDef == "fixed");
                     addPay("minimum", "Minimum payment", payDef == "minimum");
@@ -1937,7 +1988,7 @@ public sealed partial class FirstRunPage : Page
                 ["selected"] = true,
             };
             if (type is "credit" or "loan")
-                row["payment_option"] = payOpt ?? "interest_saving";
+                row["payment_option"] = payOpt ?? "statement";
             accepted.Add(row);
         }
 
@@ -1958,7 +2009,9 @@ public sealed partial class FirstRunPage : Page
     private async Task RenderRecurringAsync()
     {
         QuestionText.Text = "Any more recurring bills?";
-        HintText.Text = "Patterns still on cash that aren’t scheduled yet. Uncheck noise; accept real bills.";
+        HintText.Text =
+            "Repeat charges from checking or cards. Card patterns default to that card " +
+            "(won’t double-hit Safe to spend). Check the ones you want — you can change account later.";
         NextBtn.Content = "Save selected & continue";
         _recurringItems.Clear();
 
@@ -1985,13 +2038,21 @@ public sealed partial class FirstRunPage : Page
             {
                 var name = JsonUi.Str(s, "name");
                 var key = JsonUi.Str(s, "normalized", name);
-                _recurringItems[key] = (true, s);
+                // Default off — matches discover conservative selected:false (avoid junk bills)
+                _recurringItems[key] = (false, s);
+                var pays = JsonUi.Str(s, "pays_from", "cash");
+                var acctName = JsonUi.Str(s, "suggested_account_name", "");
+                var acctBit = string.IsNullOrEmpty(acctName) || acctName == "—"
+                    ? ""
+                    : pays == "card"
+                        ? $" · card {acctName}"
+                        : $" · {acctName}";
                 var cb = new CheckBox
                 {
                     Content =
                         $"{name} · ${JsonUi.Str(s, "amount_abs")} · {JsonUi.Str(s, "cadence")} " +
-                        $"({JsonUi.Int(s, "occurrences", 0)}×)",
-                    IsChecked = true,
+                        $"({JsonUi.Int(s, "occurrences", 0)}×){acctBit}",
+                    IsChecked = false,
                     Tag = key,
                 };
                 cb.Checked += (_, _) =>
@@ -2030,12 +2091,17 @@ public sealed partial class FirstRunPage : Page
         {
             if (!kv.Value.Selected) continue;
             var s = kv.Value.Raw;
+            var aid = JsonUi.Int(s, "suggested_account_id", 0);
+            if (aid <= 0)
+                aid = JsonUi.Int(s, "account_id", 0);
             accepted.Add(new Dictionary<string, object?>
             {
                 ["name"] = JsonUi.Str(s, "name"),
                 ["amount_abs"] = JsonUi.Str(s, "amount_abs"),
                 ["cadence"] = JsonUi.Str(s, "cadence", "monthly"),
                 ["suggested_next_date"] = JsonUi.Str(s, "suggested_next_date"),
+                ["account_id"] = aid > 0 ? aid : null,
+                ["suggested_account_id"] = aid > 0 ? aid : null,
                 ["selected"] = true,
             });
         }
@@ -2310,7 +2376,7 @@ public sealed partial class FirstRunPage : Page
         QuestionText.Text = "Safety buffers";
         HintText.Text =
             "Total cash floor never spent. Per-account buffers reserve money inside each checking/savings. " +
-            "IFPP uses the larger of total floor vs sum of per-account reserves.";
+            "Safe to spend uses the larger of total floor vs sum of per-account reserves.";
         NextBtn.Content = "Save & finish setup";
         _acctBufferBoxes.Clear();
 
@@ -2401,7 +2467,7 @@ public sealed partial class FirstRunPage : Page
             _loading = true;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            // Skip this step only — never mark setup complete from Skip
+            // Leave for later vs skip phase — never mark setup complete from Skip
             if (_phase is "welcome" or "path" or "done" or "power_menu")
             {
                 // Leave for later: Home while needs_setup stays true

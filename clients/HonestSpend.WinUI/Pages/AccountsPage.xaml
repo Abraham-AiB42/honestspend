@@ -90,6 +90,8 @@
                 <CalendarDatePicker x:Name="PromoEndBox" Header="Promo end" Grid.Row="4" Grid.Column="1" />
             </Grid>
             <CheckBox x:Name="IfppBox" Content="Count toward Safe to spend" IsChecked="True" />
+            <!-- Rewards rates: populated in code when Kind=credit -->
+            <StackPanel x:Name="RewardsHost" Visibility="Collapsed" Spacing="0" />
             <Button Content="Save account" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
             <TextBlock x:Name="MsgText" Opacity="0.8" TextWrapping="Wrap" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
