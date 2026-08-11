@@ -99,7 +99,40 @@ def test_create_payroll_package_two_items(tmp_path: Path, monkeypatch):
     assert net.active and tax.active
     assert f"package_id={result['package_id']}" in (net.notes or "")
     assert f"package_id={result['package_id']}" in (tax.notes or "")
-    assert net.series_label == "Payroll 2026"
+    assert net.series_label == "Payroll 2026 · net"
+    assert tax.series_label == "Payroll 2026 · employer tax"
+    # Independent series so amount steps work per leg
+    assert result.get("net_series_id")
+    assert result.get("tax_series_id")
+    assert result["net_series_id"] != result["tax_series_id"]
+    assert net.series_id == result["net_series_id"]
+    assert tax.series_id == result["tax_series_id"]
+    s.close()
+
+
+def test_payroll_package_rejects_credit_funding(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Amex",
+        current_balance=Decimal("100"),
+        credit_limit=Decimal("5000"),
+    )
+    s.add(card)
+    s.flush()
+    with pytest.raises(ValueError, match="cash-like"):
+        create_payroll_package(
+            s,
+            profile_id=p.id,
+            name="Payroll",
+            pay_date=date(2026, 8, 15),
+            cadence="biweekly",
+            net_payroll=Decimal("1000"),
+            employer_tax=Decimal("100"),
+            cash_account_id=card.id,
+        )
     s.close()
 
 

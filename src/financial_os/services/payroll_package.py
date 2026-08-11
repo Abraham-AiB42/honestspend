@@ -13,9 +13,11 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from financial_os.db import Account, Profile, ScheduledItem
+from financial_os.services.schedule_series import new_series_id
 
 ZERO = Decimal("0")
 _ALLOWED_CADENCE = frozenset({"biweekly", "semimonthly", "monthly", "weekly"})
+_CASH_KINDS = frozenset({"checking", "savings", "cash"})
 
 
 def create_payroll_package(
@@ -35,8 +37,8 @@ def create_payroll_package(
       1) name="{name} · net" amount=-net
       2) name="{name} · employer tax" amount=-tax
 
-    Both notes include package_id=<uuid> so the pair can be found later.
-    Returns {package_id, net_id, tax_id}.
+    Both notes include package_id=<uuid>. Each leg gets its own series_id so
+    "Change amount on date…" works independently. Returns package + ids + series.
     """
     if not session.get(Profile, profile_id):
         raise ValueError("Profile not found")
@@ -46,6 +48,11 @@ def create_payroll_package(
         raise ValueError("cash_account_id not found")
     if int(acct.profile_id) != int(profile_id):
         raise ValueError("cash_account_id must belong to the same profile")
+    kind = (acct.kind or "").lower()
+    if kind not in _CASH_KINDS and not bool(getattr(acct, "is_cash_for_ifpp", False)):
+        raise ValueError(
+            "cash_account_id must be a cash-like account (checking/savings/cash)"
+        )
 
     cad = (cadence or "biweekly").lower().strip()
     if cad not in _ALLOWED_CADENCE:
@@ -62,6 +69,8 @@ def create_payroll_package(
     label = (series_label or base).strip()[:128]
     package_id = uuid4().hex
     note = f"package_id={package_id}"
+    net_series = new_series_id()
+    tax_series = new_series_id()
 
     net_row = ScheduledItem(
         profile_id=profile_id,
@@ -73,7 +82,9 @@ def create_payroll_package(
         cadence=cad,
         certainty="fixed",
         kind="expense",
-        series_label=label,
+        series_id=net_series,
+        series_label=f"{label} · net"[:128],
+        opex_class="fixed",
         notes=note,
         active=True,
     )
@@ -87,7 +98,9 @@ def create_payroll_package(
         cadence=cad,
         certainty="fixed",
         kind="expense",
-        series_label=label,
+        series_id=tax_series,
+        series_label=f"{label} · employer tax"[:128],
+        opex_class="fixed",
         notes=note,
         active=True,
     )
@@ -99,4 +112,6 @@ def create_payroll_package(
         "package_id": package_id,
         "net_id": int(net_row.id),
         "tax_id": int(tax_row.id),
+        "net_series_id": net_series,
+        "tax_series_id": tax_series,
     }

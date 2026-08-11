@@ -11,7 +11,7 @@ See also: [SIMPLE_MODE.md](./SIMPLE_MODE.md) (Coming up / cash-side), [STATEMENT
 | Recurring rent with amount steps | **Versioned series** on scheduled bills (`series_id` + start/end windows) |
 | Account column (Chase / Amex) | **Pay from** = `account_id` (cash **or** credit) + optional **vendor** |
 | Owner column ≠ expenses | Schedule **`kind=owner_draw`** (outflow, never a payday) |
-| Payroll + employer tax same day | **Payroll package** → two linked expense schedules |
+| Payroll + employer tax same day | **Payroll package** → two linked expense schedules (Full books **Bills → Payroll day**) |
 | Fixed vs variable opex | `opex_class` = `fixed` \| `variable` (business) |
 | Income by source | `income_source` on income schedules |
 | EOY multi-year totals | **Entity year P&L** from the ledger |
@@ -89,15 +89,17 @@ Not a payroll engine. One action creates **two** expense schedules on the **same
 1. `{name} · net` — net pay out  
 2. `{name} · employer tax` — employer tax out  
 
-Both notes include `package_id=<uuid>`. Coming up shows both on payday → Safe drops by **net + tax**.
+Both notes include `package_id=<uuid>`. Each leg has its **own `series_id`** so **Change amount on date…** works per leg. Coming up shows both on payday → Safe drops by **net + tax**.
 
-Cadence: `biweekly` · `semimonthly` · `monthly` · `weekly`.
+Cadence: `biweekly` · `semimonthly` · `monthly` · `weekly`.  
+Funding must be **cash-like** (checking/savings/cash) — not a credit card.
 
-### API
+### API / UI
 
 - `POST /api/payroll-packages`  
   Body: `profile_id`, `name`, `pay_date`, `cadence`, `net_payroll`, `employer_tax`, `cash_account_id`, optional `series_label`  
-  Returns: `{package_id, net_id, tax_id}`
+  Returns: `{package_id, net_id, tax_id, net_series_id, tax_series_id}`
+- Full books → **Bills → Payroll day** form
 
 No employee roster, commissions matrix, or Paychex import in v1.
 
@@ -133,7 +135,7 @@ Transfers and system intermix codes are skipped. No invented carrier product lin
 ### API / UI
 
 - `GET /api/reports/entity-pnl?profile_id=&year=` (year defaults to current)
-- Full books → **Reports** → Entity year P&L (selected entity)
+- Full books → **Reports** → Entity year P&L (selected entity + **year picker**)
 
 ---
 

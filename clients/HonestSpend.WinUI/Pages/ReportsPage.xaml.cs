@@ -20,6 +20,8 @@ public sealed partial class ReportsPage : Page
     {
         InitializeComponent();
         DaysBox.SelectionChanged += async (_, _) => await LoadAsync();
+        if (PnlYearBox is not null)
+            PnlYearBox.Value = DateTime.Today.Year;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -99,42 +101,72 @@ public sealed partial class ReportsPage : Page
                 DebtList.ItemsSource = new List<string>();
             }
 
-            try
-            {
-                if (AppState.SelectedProfileId is int pnlPid)
-                {
-                    var year = DateTime.Today.Year;
-                    var pnl = await api.GetEntityPnlAsync(pnlPid, year);
-                    PnlTitle.Text = JsonUi.Str(pnl, "title");
-                    PnlTotals.Text =
-                        $"In {Money(pnl, "income")} · Payroll {Money(pnl, "payroll")} · Tax {Money(pnl, "taxes")} · " +
-                        $"Draws {Money(pnl, "owner_draws")} · Exp {Money(pnl, "expenses")} · Net {Money(pnl, "net")}";
-                    var pLines = new List<string>();
-                    if (pnl.TryGetProperty("by_category", out var bc) && bc.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var row in bc.EnumerateArray())
-                            pLines.Add($"{JsonUi.Str(row, "category")} · {Money(row, "amount")}");
-                    }
-                    PnlCats.ItemsSource = pLines.Count > 0 ? pLines : new List<string> { "No ledger activity this year." };
-                }
-                else
-                {
-                    PnlTitle.Text = "Select an entity (shell) for year P&L.";
-                    PnlTotals.Text = "";
-                    PnlCats.ItemsSource = new List<string>();
-                }
-            }
-            catch
-            {
-                PnlTitle.Text = "Entity P&L unavailable.";
-                PnlTotals.Text = "";
-                PnlCats.ItemsSource = new List<string>();
-            }
+            await LoadEntityPnlAsync(api);
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void PnlYear_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await LoadEntityPnlAsync(api);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async Task LoadEntityPnlAsync(LedgerApiClient api)
+    {
+        try
+        {
+            if (AppState.SelectedProfileId is int pnlPid)
+            {
+                var year = DateTime.Today.Year;
+                if (PnlYearBox is not null && !double.IsNaN(PnlYearBox.Value))
+                    year = (int)PnlYearBox.Value;
+                if (PnlYearBox is not null && (double.IsNaN(PnlYearBox.Value) || PnlYearBox.Value < 2000))
+                    PnlYearBox.Value = year;
+
+                var pnl = await api.GetEntityPnlAsync(pnlPid, year);
+                PnlTitle.Text = JsonUi.Str(pnl, "title");
+                if (string.IsNullOrEmpty(PnlTitle.Text) || PnlTitle.Text == "—")
+                    PnlTitle.Text = $"Entity P&L · {year}";
+                PnlTotals.Text =
+                    $"In {Money(pnl, "income")} · Payroll {Money(pnl, "payroll")} · Tax {Money(pnl, "taxes")} · " +
+                    $"Draws {Money(pnl, "owner_draws")} · Exp {Money(pnl, "expenses")} · Net {Money(pnl, "net")}";
+                var pLines = new List<string>();
+                if (pnl.TryGetProperty("by_category", out var bc) && bc.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var row in bc.EnumerateArray())
+                        pLines.Add($"{JsonUi.Str(row, "category")} · {Money(row, "amount")}");
+                }
+                PnlCats.ItemsSource = pLines.Count > 0
+                    ? pLines
+                    : new List<string> { $"No ledger activity in {year}." };
+            }
+            else
+            {
+                PnlTitle.Text = "Select an entity (shell) for year P&L.";
+                PnlTotals.Text = "";
+                PnlCats.ItemsSource = new List<string>();
+            }
+        }
+        catch
+        {
+            PnlTitle.Text = "Entity P&L unavailable.";
+            PnlTotals.Text = "";
+            PnlCats.ItemsSource = new List<string>();
         }
     }
 

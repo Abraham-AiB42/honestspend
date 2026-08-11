@@ -523,9 +523,6 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> CreatePayrollPackageAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/payroll-packages", body, ct);
 
-    public Task<JsonElement> GetEntityPnlAsync(int profileId, int year, CancellationToken ct = default)
-        => GetJsonAsync($"api/reports/entity-pnl?profile_id={profileId}&year={year}", ct);
-
     public Task<JsonElement> GetDebtPlanAsync(string strategy = "avalanche", decimal extra = 0, CancellationToken ct = default)
         => PostJsonAsync("api/debt/plan", new
         {

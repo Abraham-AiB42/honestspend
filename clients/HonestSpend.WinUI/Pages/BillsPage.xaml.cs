@@ -19,6 +19,7 @@ public sealed partial class BillsPage : Page
         InitializeComponent();
         NextDateBox.Date = DateTimeOffset.Now;
         StartDateBox.Date = DateTimeOffset.Now;
+        PayrollDateBox.Date = DateTimeOffset.Now;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -35,6 +36,7 @@ public sealed partial class BillsPage : Page
     private void Profile_Changed(object sender, SelectionChangedEventArgs e)
     {
         FillAccounts();
+        FillPayrollCash();
         UpdateConditionalFields();
     }
 
@@ -96,6 +98,7 @@ public sealed partial class BillsPage : Page
 
             _accounts = await api.GetAccountsAsync();
             FillAccounts();
+            FillPayrollCash();
             UpdateConditionalFields();
 
             var sched = await api.GetScheduledAsync();
@@ -182,6 +185,79 @@ public sealed partial class BillsPage : Page
             AccountBox.Items.Add(new ComboBoxItem { Content = label, Tag = id });
         }
         if (AccountBox.Items.Count > 0) AccountBox.SelectedIndex = 0;
+    }
+
+    private void FillPayrollCash()
+    {
+        if (PayrollCashBox is null) return;
+        PayrollCashBox.Items.Clear();
+        if (ProfileBox.SelectedItem is not ComboBoxItem pi || pi.Tag is not int profileId)
+            return;
+        if (_accounts.ValueKind != JsonValueKind.Array)
+            return;
+        foreach (var a in _accounts.EnumerateArray())
+        {
+            if (a.GetProperty("profile_id").GetInt32() != profileId) continue;
+            var kind = JsonUi.Str(a, "kind", "").ToLowerInvariant();
+            var isCash = a.TryGetProperty("is_cash_for_ifpp", out var ic) && ic.ValueKind == JsonValueKind.True;
+            if (kind is not ("checking" or "savings" or "cash") && !isCash)
+                continue;
+            var id = a.GetProperty("id").GetInt32();
+            PayrollCashBox.Items.Add(new ComboBoxItem
+            {
+                Content = JsonUi.Str(a, "nickname"),
+                Tag = id,
+            });
+        }
+        if (PayrollCashBox.Items.Count > 0) PayrollCashBox.SelectedIndex = 0;
+    }
+
+    private async void PayrollPackage_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        PayrollMsgText.Text = "";
+        try
+        {
+            if (ProfileBox.SelectedItem is not ComboBoxItem pitem || pitem.Tag is not int profileId)
+                throw new InvalidOperationException("Pick entity (Who).");
+            if (PayrollCashBox.SelectedItem is not ComboBoxItem cashItem || cashItem.Tag is not int cashId)
+                throw new InvalidOperationException("Pick a cash account to pay from.");
+            var net = double.IsNaN(PayrollNetBox.Value) ? 0m : (decimal)PayrollNetBox.Value;
+            var tax = double.IsNaN(PayrollTaxBox.Value) ? 0m : (decimal)PayrollTaxBox.Value;
+            if (net <= 0 && tax <= 0)
+                throw new InvalidOperationException("Enter net payroll and/or employer tax.");
+            var cadence = "biweekly";
+            if (PayrollCadenceBox.SelectedItem is ComboBoxItem ci && ci.Tag is string cs)
+                cadence = cs;
+            var payDate = PayrollDateBox.Date?.Date ?? DateTime.Today;
+            var name = string.IsNullOrWhiteSpace(PayrollNameBox.Text)
+                ? "Biweekly payroll"
+                : PayrollNameBox.Text.Trim();
+
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.CreatePayrollPackageAsync(new Dictionary<string, object?>
+            {
+                ["profile_id"] = profileId,
+                ["name"] = name,
+                ["pay_date"] = payDate.ToString("yyyy-MM-dd"),
+                ["cadence"] = cadence,
+                ["net_payroll"] = net,
+                ["employer_tax"] = tax,
+                ["cash_account_id"] = cashId,
+                ["series_label"] = name,
+            });
+            var pkg = JsonUi.Str(res, "package_id", "");
+            PayrollMsgText.Text =
+                $"Payroll day created · net #{JsonUi.Int(res, "net_id")} · tax #{JsonUi.Int(res, "tax_id")}" +
+                (string.IsNullOrEmpty(pkg) || pkg == "—" ? "" : $" · package {pkg[..Math.Min(8, pkg.Length)]}…");
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private async void Save_Click(object sender, RoutedEventArgs e)

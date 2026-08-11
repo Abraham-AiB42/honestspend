@@ -118,6 +118,43 @@
             </Grid>
             <Button Content="Save recurring" Click="Save_Click" Style="{StaticResource AccentButtonStyle}" />
             <TextBlock x:Name="MsgText" Opacity="0.8" />
+
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Payroll day (business)"
+                       Margin="0,16,0,0" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Creates two cash bills on the same pay date: net payroll and employer tax. Both hit Safe to spend / Coming up. Use checking as pay from." />
+            <Grid ColumnSpacing="12" RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBox x:Name="PayrollNameBox" Header="Name" PlaceholderText="Biweekly payroll"
+                         Text="Biweekly payroll" Grid.Row="0" Grid.Column="0" />
+                <ComboBox x:Name="PayrollCadenceBox" Header="How often" SelectedIndex="1" Grid.Row="0" Grid.Column="1">
+                    <ComboBoxItem Content="Weekly" Tag="weekly" />
+                    <ComboBoxItem Content="Every 2 weeks" Tag="biweekly" IsSelected="True" />
+                    <ComboBoxItem Content="Twice a month" Tag="semimonthly" />
+                    <ComboBoxItem Content="Monthly" Tag="monthly" />
+                </ComboBox>
+                <CalendarDatePicker x:Name="PayrollDateBox" Header="Next pay date" Grid.Row="1" Grid.Column="0" />
+                <ComboBox x:Name="PayrollCashBox" Header="Pay from (cash)" Grid.Row="1" Grid.Column="1"
+                          HorizontalAlignment="Stretch" />
+                <NumberBox x:Name="PayrollNetBox" Header="Net payroll ($)" Minimum="0" Value="0"
+                           Grid.Row="2" Grid.Column="0" />
+                <NumberBox x:Name="PayrollTaxBox" Header="Employer tax ($)" Minimum="0" Value="0"
+                           Grid.Row="2" Grid.Column="1" />
+                <Button Content="Create payroll day" Click="PayrollPackage_Click"
+                        Style="{StaticResource AccentButtonStyle}"
+                        Grid.Row="3" Grid.Column="0" HorizontalAlignment="Left" />
+            </Grid>
+            <TextBlock x:Name="PayrollMsgText" Opacity="0.8" TextWrapping="Wrap" />
+
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

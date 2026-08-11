@@ -512,6 +512,8 @@ class PayrollPackageOut(BaseModel):
     package_id: str
     net_id: int
     tax_id: int
+    net_series_id: str | None = None
+    tax_series_id: str | None = None
 
 
 class SettingsIn(BaseModel):
