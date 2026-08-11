@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.44 — Setup budgets, dual buffers, smarter Can I buy (PR6)
+
+- **Schema v16**: `accounts.safety_buffer` (per-account)
+- **IFPP**: effective buffer = max(total floor, sum of per-account buffers)
+- **Setup budgets**: seed-from-history review + edit amounts before continue
+- **Setup buffers**: total cash floor + per-account reserves
+- **Can I buy?**: per-cash-account options after buffers; recommend best cash account or rewards-matched card
+- APIs: `/api/setup/budgets`, `/budgets/apply`, `/buffers`
+
 ## 1.0.43 — Setup recurring finalize + categorize confirm (PR5)
 
 - **`GET/POST /api/setup/recurring`** — remaining bill patterns; accept selected

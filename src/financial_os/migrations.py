@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -295,6 +295,14 @@ def _mig_15_payment_option(conn) -> None:
         pass
 
 
+def _mig_16_account_safety_buffer(conn) -> None:
+    """Per-account cash safety buffer (plus AppSettings.safety_buffer as total)."""
+    _exec_ignore(
+        conn,
+        "ALTER TABLE accounts ADD COLUMN safety_buffer NUMERIC(14,2)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -312,6 +320,7 @@ MIGRATIONS: dict[int, Callable] = {
     13: _mig_13_budgets,
     14: _mig_14_setup_wizard,
     15: _mig_15_payment_option,
+    16: _mig_16_account_safety_buffer,
 }
 
 

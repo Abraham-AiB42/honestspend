@@ -92,6 +92,7 @@ def run_ifpp(
             balance=Decimal(a.current_balance or 0),
             is_cash_for_ifpp=bool(a.is_cash_for_ifpp),
             kind=a.kind or "checking",
+            safety_buffer=Decimal(a.safety_buffer or 0) if getattr(a, "safety_buffer", None) is not None else Decimal("0"),
         )
         for a in accounts
         if a.kind in ("checking", "savings", "cash") or a.is_cash_for_ifpp
@@ -111,7 +112,7 @@ def run_ifpp(
             promo_end_date=a.promo_end_date,
             promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
             min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
-            rewards_score=0,
+            rewards_score=1 if a.rewards_program else 0,
         )
         for a in accounts
         if a.kind == "credit"

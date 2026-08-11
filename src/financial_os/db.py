@@ -144,6 +144,8 @@ class Account(Base):
     payment_option: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # When payment_option=fixed, planned payment amount
     payment_fixed_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
+    # Per-account rainy-day floor (cash accounts); total floor remains AppSettings.safety_buffer
+    safety_buffer: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 2), nullable=True)
 
     profile: Mapped[Profile] = relationship(back_populates="accounts")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="account")

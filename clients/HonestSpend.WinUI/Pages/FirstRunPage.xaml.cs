@@ -46,6 +46,9 @@ public sealed partial class FirstRunPage : Page
     private string _pendingPayeeLabel = "";
     private readonly HashSet<string> _skippedPayees = new(StringComparer.OrdinalIgnoreCase);
     private bool _categorizeAutoRan;
+    private readonly Dictionary<int, NumberBox> _budgetAmountBoxes = new();
+    private NumberBox? _totalBufferBox;
+    private readonly Dictionary<int, NumberBox> _acctBufferBoxes = new();
 
     private TextBox? _cashName;
     private TextBox? _inst;
@@ -254,29 +257,20 @@ public sealed partial class FirstRunPage : Page
             _ = RenderCategorizeAsync();
             return;
         }
-
-        // Later PR placeholders
-        var (title, hint, nextLabel) = _phase switch
+        if (_phase == "budgets")
         {
-            "budgets" => (
-                "Budgets",
-                "Seed from history and review amounts. Coming soon.",
-                "Continue"),
-            "buffers" => (
-                "Safety buffers",
-                "Per-account buffer + total cash floor. Coming soon.",
-                "Finish setup"),
-            _ => (
-                _phase.Replace('_', ' '),
-                "Continue setup or skip for now.",
-                "Next"),
-        };
-        QuestionText.Text = title;
-        HintText.Text = hint;
-        NextBtn.Content = nextLabel;
-        InfoBar.Title = "Coming soon";
-        InfoBar.Message = "This phase ships next. Next advances the wizard; Skip finishes setup.";
-        InfoBar.IsOpen = true;
+            _ = RenderBudgetsAsync();
+            return;
+        }
+        if (_phase == "buffers")
+        {
+            _ = RenderBuffersAsync();
+            return;
+        }
+
+        QuestionText.Text = _phase.Replace('_', ' ');
+        HintText.Text = "Continue setup or skip for now.";
+        NextBtn.Content = "Next";
     }
 
     private void RenderPlaidKeys()
@@ -1012,7 +1006,6 @@ public sealed partial class FirstRunPage : Page
 
             if (_phase == "categorize")
             {
-                // Next = done with confirm queue → advance
                 using var api = new LedgerApiClient();
                 await api.EnsureBackendAsync();
                 var st = await api.SetupAdvanceAsync("next");
@@ -1021,7 +1014,19 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
-            // plaid_link + later placeholders: advance server state
+            if (_phase == "budgets")
+            {
+                await SaveBudgetsAndAdvanceAsync();
+                return;
+            }
+
+            if (_phase == "buffers")
+            {
+                await SaveBuffersAndFinishAsync();
+                return;
+            }
+
+            // plaid_link + other: advance server state
             using (var api = new LedgerApiClient())
             {
                 await api.EnsureBackendAsync();
@@ -1624,6 +1629,171 @@ public sealed partial class FirstRunPage : Page
         InfoBar.IsOpen = true;
         _pendingPayeeKey = null;
         _pendingTxnIds = null;
+        Render();
+    }
+
+    private async Task RenderBudgetsAsync()
+    {
+        QuestionText.Text = "Budgets from your history";
+        HintText.Text =
+            "Plans seeded from categorized spend (food→daily, gas→weekly, etc.). " +
+            "Edit amounts or leave as-is. Remaining budget reserves out of Safe to spend.";
+        NextBtn.Content = "Save budgets & continue";
+        _budgetAmountBoxes.Clear();
+
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var rev = await api.GetSetupBudgetsAsync(seedIfEmpty: true);
+            Fields.Children.Add(new TextBlock
+            {
+                Text = JsonUi.Str(rev, "message"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+            if (rev.TryGetProperty("seed", out var seed) && seed.ValueKind == JsonValueKind.Object)
+            {
+                var msg = JsonUi.Str(seed, "message");
+                if (!string.IsNullOrEmpty(msg) && msg != "—")
+                    Fields.Children.Add(new TextBlock { Text = msg, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+            }
+
+            if (!rev.TryGetProperty("rules", out var rules) || rules.ValueKind != JsonValueKind.Array
+                || rules.GetArrayLength() == 0)
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = "No budget rules yet — continue and seed later from Budgets.",
+                    TextWrapping = TextWrapping.Wrap,
+                });
+                return;
+            }
+
+            foreach (var r in rules.EnumerateArray())
+            {
+                var id = JsonUi.Int(r, "id", 0);
+                var nb = new NumberBox
+                {
+                    Header = $"{JsonUi.Str(r, "name")} · {JsonUi.Str(r, "period")}",
+                    Value = double.TryParse(JsonUi.Str(r, "amount", "0"), out var v) ? v : 0,
+                    Minimum = 0,
+                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                };
+                if (id > 0) _budgetAmountBoxes[id] = nb;
+                Fields.Children.Add(nb);
+            }
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private async Task SaveBudgetsAndAdvanceAsync()
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var updates = new List<object>();
+        foreach (var kv in _budgetAmountBoxes)
+        {
+            var val = kv.Value.Value;
+            if (double.IsNaN(val)) continue;
+            updates.Add(new { id = kv.Key, amount = (decimal)val });
+        }
+        if (updates.Count > 0)
+            await api.ApplySetupBudgetsAsync(new { updates });
+        var st = await api.SetupAdvanceAsync("next");
+        ApplyState(st);
+        Render();
+    }
+
+    private async Task RenderBuffersAsync()
+    {
+        QuestionText.Text = "Safety buffers";
+        HintText.Text =
+            "Total cash floor never spent. Per-account buffers reserve money inside each checking/savings. " +
+            "IFPP uses the larger of total floor vs sum of per-account reserves.";
+        NextBtn.Content = "Save & finish setup";
+        _acctBufferBoxes.Clear();
+
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var buf = await api.GetSetupBuffersAsync();
+            Fields.Children.Add(new TextBlock
+            {
+                Text = JsonUi.Str(buf, "message"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 8),
+            });
+
+            var totalVal = 1000.0;
+            double.TryParse(JsonUi.Str(buf, "total_buffer", "1000"), out totalVal);
+            _totalBufferBox = new NumberBox
+            {
+                Header = "Total cash buffer ($)",
+                Value = totalVal,
+                Minimum = 0,
+            };
+            Fields.Children.Add(_totalBufferBox);
+
+            if (buf.TryGetProperty("accounts", out var accs) && accs.ValueKind == JsonValueKind.Array)
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = "Per-account buffers",
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    Margin = new Thickness(0, 12, 0, 4),
+                });
+                foreach (var a in accs.EnumerateArray())
+                {
+                    var id = JsonUi.Int(a, "id", 0);
+                    var cur = 0.0;
+                    var sb = JsonUi.Str(a, "safety_buffer", "0");
+                    if (sb != "—" && sb != "")
+                        double.TryParse(sb, out cur);
+                    var nb = new NumberBox
+                    {
+                        Header = $"{JsonUi.Str(a, "nickname")} (bal ${JsonUi.Str(a, "balance")})",
+                        Value = cur,
+                        Minimum = 0,
+                    };
+                    if (id > 0) _acctBufferBoxes[id] = nb;
+                    Fields.Children.Add(nb);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private async Task SaveBuffersAndFinishAsync()
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        decimal? total = null;
+        if (_totalBufferBox is not null && !double.IsNaN(_totalBufferBox.Value))
+            total = (decimal)_totalBufferBox.Value;
+        var acctBufs = new List<object>();
+        foreach (var kv in _acctBufferBoxes)
+        {
+            if (double.IsNaN(kv.Value.Value)) continue;
+            acctBufs.Add(new { id = kv.Key, safety_buffer = (decimal)kv.Value.Value });
+        }
+        await api.SaveSetupBuffersAsync(new
+        {
+            total_buffer = total,
+            account_buffers = acctBufs,
+        });
+        // Mark setup complete
+        var st = await api.SetupAdvanceAsync("complete");
+        ApplyState(st);
+        AppState.ShowSetupNav = false;
+        MsgText.Text = "Setup complete — Home is ready with Safe to spend, bills, and budgets.";
         Render();
     }
 

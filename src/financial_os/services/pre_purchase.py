@@ -115,39 +115,94 @@ def check_purchase(
     cash_raw = _d(ifpp.cash_spendable)
     safe_to_spend = max(ZERO, cash_raw - reserve)
 
-    # Cash path (never-neg + budget reserve)
-    cash_ok = safe_to_spend >= amount
-    if cash_ok:
-        cash_reason = f"Safe to spend ${safe_to_spend} covers this purchase."
-        if reserve > 0:
-            cash_reason += f" (${cash_raw} cash − ${reserve} budget reserve)."
-    else:
-        cash_reason = (
-            f"Safe to spend ${safe_to_spend} is short — would risk never-neg "
-            f"or raid reserved budgets (${cash_raw} cash, ${reserve} reserved)."
+    # Per-account cash options (balance − account buffer)
+    sc = (ifpp.details or {}).get("ifpp_scope") or scope or "entity"
+    pid = (ifpp.details or {}).get("profile_id") or profile_id
+    cq_cash = session.query(Account).filter(
+        Account.archived_at.is_(None),
+        Account.kind.in_(("checking", "savings", "cash")),
+    )
+    if sc == "entity" and pid is not None:
+        cq_cash = cq_cash.filter(Account.profile_id == pid)
+    cash_accounts = cq_cash.order_by(Account.id).all()
+    best_cash: PurchaseOption | None = None
+    for a in cash_accounts:
+        bal = _d(a.current_balance)
+        abuf = _d(getattr(a, "safety_buffer", None) or 0)
+        avail = max(ZERO, bal - abuf)
+        # Also respect global safe_to_spend ceiling
+        avail_eff = min(avail, safe_to_spend) if a.is_cash_for_ifpp else avail
+        ok = avail_eff >= amount and (not a.is_cash_for_ifpp or safe_to_spend >= amount)
+        reason = (
+            f"{a.nickname}: ${avail_eff} available after ${abuf} account buffer."
+            if ok
+            else f"{a.nickname}: only ${avail_eff} after buffers (need ${amount})."
         )
-    options.append(
+        opt = PurchaseOption(
+            method="cash",
+            account_id=a.id,
+            account_name=a.nickname,
+            safe=ok,
+            reason=reason,
+            remaining_spendable=(avail_eff - amount) if ok else avail_eff,
+        )
+        options.append(opt)
+        if ok and (best_cash is None or _d(opt.remaining_spendable) > _d(best_cash.remaining_spendable or 0)):
+            best_cash = opt
+
+    # Aggregate cash path (for prefer=cash without picking account)
+    cash_ok = safe_to_spend >= amount
+    cash_reason = (
+        f"Safe to spend ${safe_to_spend} covers this purchase."
+        if cash_ok
+        else (
+            f"Safe to spend ${safe_to_spend} is short — would risk never-neg "
+            f"or raid reserved budgets (${cash_raw} after buffers, ${reserve} budget reserve)."
+        )
+    )
+    options.insert(
+        0,
         PurchaseOption(
             method="cash",
             account_id=None,
-            account_name="Checking / Safe to spend",
+            account_name="Any cash / Safe to spend",
             safe=cash_ok,
             reason=cash_reason,
             remaining_spendable=(safe_to_spend - amount) if cash_ok else safe_to_spend,
-        )
+        ),
     )
+
+    # Category label for rewards matching
+    cat_hint = ""
+    if category_id:
+        from financial_os.db import Category
+
+        cat = session.get(Category, category_id)
+        if cat:
+            cat_hint = f"{cat.display_name or ''} {cat.budget_group or ''}".lower()
 
     # Card paths (entity-scoped when IFPP is entity)
     cq = session.query(Account).filter(Account.kind == "credit", Account.archived_at.is_(None))
-    sc = (ifpp.details or {}).get("ifpp_scope") or scope or "entity"
-    pid = (ifpp.details or {}).get("profile_id")
     if sc == "entity" and pid is not None:
         cq = cq.filter(Account.profile_id == pid)
     accounts = cq.all()
     card_views: list[CardView] = []
+    rewards_by_id: dict[int, int] = {}
     for a in accounts:
         if account_id and a.id != account_id:
             continue
+        score = 1 if a.rewards_program else 0
+        prog = (a.rewards_program or "").lower()
+        if cat_hint and prog:
+            # Boost when rewards program text overlaps category
+            for token in cat_hint.split():
+                if len(token) > 3 and token in prog:
+                    score += 3
+                    break
+            if any(k in prog for k in ("grocery", "gas", "travel", "dining", "food", "restaurant")):
+                if any(k in cat_hint for k in ("food", "gas", "transport", "travel", "dining", "restaurant")):
+                    score += 2
+        rewards_by_id[a.id] = score
         cv = CardView(
             id=a.id,
             name=a.nickname,
@@ -161,7 +216,7 @@ def check_purchase(
             promo_end_date=a.promo_end_date,
             promo_balance=Decimal(a.promo_balance) if a.promo_balance is not None else None,
             min_payment=Decimal(a.min_payment) if a.min_payment is not None else None,
-            rewards_score=1 if a.rewards_program else 0,
+            rewards_score=score,
         )
         card_views.append(cv)
 
@@ -177,6 +232,8 @@ def check_purchase(
             if plan
             else "No IFPP plan for card."
         )
+        if cv.rewards_score > 1:
+            reason += f" Rewards match score {cv.rewards_score}."
         if not safe:
             reason = (
                 f"Not safe: only ${safe_amt} interest-free capacity. "
@@ -197,23 +254,25 @@ def check_purchase(
     # Recommendation
     rec = None
     if prefer == "cash":
-        rec = next((o for o in options if o.method == "cash"), None)
+        rec = best_cash if best_cash and best_cash.safe else next(
+            (o for o in options if o.method == "cash" and o.account_id is None), None
+        )
     elif prefer == "card" and account_id:
         rec = next((o for o in options if o.account_id == account_id), None)
     elif prefer == "card":
         safe_cards = [o for o in options if o.method == "card" and o.safe]
+        safe_cards.sort(key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True)
         rec = safe_cards[0] if safe_cards else next((o for o in options if o.method == "card"), None)
     else:
-        # auto: prefer interest-free card if safe (float strategy), else cash if safe
+        # auto: best rewards among safe cards, else best cash account
         safe_cards = [o for o in options if o.method == "card" and o.safe]
-        cash = next(o for o in options if o.method == "cash")
+        safe_cards.sort(key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True)
         if safe_cards:
-            # fiscal: 0% float OK when path exists — prefer card to preserve cash yield
             rec = safe_cards[0]
-        elif cash.safe:
-            rec = cash
+        elif best_cash and best_cash.safe:
+            rec = best_cash
         else:
-            rec = cash  # unsafe but show it
+            rec = next((o for o in options if o.method == "cash" and o.account_id is None), None)
 
     verdict = "do_not_buy"
     if rec and rec.safe:

@@ -251,6 +251,7 @@ class AccountIn(BaseModel):
     apy: Decimal | None = None  # cash/savings yield e.g. 0.06
     payment_option: str | None = None  # minimum | fixed | statement | interest_saving
     payment_fixed_amount: Decimal | None = None
+    safety_buffer: Decimal | None = None
 
 
 class AccountPatch(BaseModel):
@@ -277,6 +278,7 @@ class AccountPatch(BaseModel):
     institution_balance: Decimal | None = None
     payment_option: str | None = None
     payment_fixed_amount: Decimal | None = None
+    safety_buffer: Decimal | None = None
 
 
 class AccountOut(AccountIn):
@@ -1060,6 +1062,53 @@ def setup_categorize_confirm(body: SetupCategorizeConfirmIn, db: Session = Depen
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+
+
+@app.get("/api/setup/budgets")
+def setup_budgets_review(
+    profile_id: int | None = None,
+    seed_if_empty: bool = True,
+    db: Session = Depends(get_db),
+):
+    from financial_os.services.setup_budgets import budgets_review
+
+    return budgets_review(db, profile_id=profile_id, seed_if_empty=seed_if_empty)
+
+
+class SetupBudgetEditsIn(BaseModel):
+    updates: list[dict] = []
+
+
+@app.post("/api/setup/budgets/apply")
+def setup_budgets_apply(body: SetupBudgetEditsIn, db: Session = Depends(get_db)):
+    from financial_os.services.setup_budgets import apply_budget_edits, budgets_review
+
+    res = apply_budget_edits(db, updates=body.updates or [])
+    res["review"] = budgets_review(db, seed_if_empty=False)
+    return res
+
+
+@app.get("/api/setup/buffers")
+def setup_buffers_get(profile_id: int | None = None, db: Session = Depends(get_db)):
+    from financial_os.services.setup_budgets import buffers_status
+
+    return buffers_status(db, profile_id=profile_id)
+
+
+class SetupBuffersIn(BaseModel):
+    total_buffer: Decimal | None = None
+    account_buffers: list[dict] | None = None
+
+
+@app.post("/api/setup/buffers")
+def setup_buffers_save(body: SetupBuffersIn, db: Session = Depends(get_db)):
+    from financial_os.services.setup_budgets import save_buffers
+
+    return save_buffers(
+        db,
+        total_buffer=body.total_buffer,
+        account_buffers=body.account_buffers,
+    )
 
 
 @app.post("/api/onboarding/complete")

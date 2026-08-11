@@ -20,6 +20,7 @@ class CashAccountView:
     balance: Decimal
     is_cash_for_ifpp: bool = True
     kind: str = "checking"  # checking | savings | cash | other
+    safety_buffer: Decimal = ZERO  # per-account rainy-day floor
 
 
 @dataclass(frozen=True)
@@ -178,7 +179,20 @@ def compute_cash_spendable(
             warnings.append(
                 f"CHECKING NEGATIVE: {a.name} is ${_d(a.balance):.2f} — resolve before anything else."
             )
-    cash -= _d(safety_buffer)
+    # Per-account buffers (capped at each balance) + total floor from settings
+    per_acct = sum(
+        (min(max(ZERO, _d(getattr(a, "safety_buffer", ZERO) or ZERO)), max(ZERO, _d(a.balance))) for a in pool),
+        ZERO,
+    )
+    total_floor = max(ZERO, _d(safety_buffer))
+    effective_buffer = max(total_floor, per_acct)
+    cash -= effective_buffer
+    if per_acct > ZERO and per_acct >= total_floor:
+        warnings.append(
+            f"Per-account buffers ${per_acct:.2f} reserved (total floor ${total_floor:.2f})."
+        )
+    elif total_floor > ZERO:
+        warnings.append(f"Total cash buffer ${total_floor:.2f} reserved.")
     vault = max(ZERO, _d(tax_vault))
     if vault > ZERO:
         cash -= vault
@@ -406,6 +420,35 @@ def compute_ifpp(
             "is_red_now": is_red_now,
         },
     )
+
+
+def effective_safety_buffer(
+    cash_accounts: list[CashAccountView],
+    *,
+    total_buffer: Decimal,
+    never_negative_scope: str = "checking",
+) -> dict[str, Decimal]:
+    """Compute per-account reserved + effective total used by IFPP."""
+    scope = (never_negative_scope or "checking").lower()
+    if scope == "checking":
+        pool = [a for a in cash_accounts if a.is_cash_for_ifpp and a.kind == "checking"]
+        if not pool:
+            pool = [a for a in cash_accounts if a.is_cash_for_ifpp]
+    else:
+        pool = [a for a in cash_accounts if a.is_cash_for_ifpp]
+    per = sum(
+        (
+            min(max(ZERO, _d(getattr(a, "safety_buffer", ZERO) or ZERO)), max(ZERO, _d(a.balance)))
+            for a in pool
+        ),
+        ZERO,
+    )
+    total = max(ZERO, _d(total_buffer))
+    return {
+        "per_account_sum": per,
+        "total_floor": total,
+        "effective": max(total, per),
+    }
 
 
 def recommend_card_for_purchase(
