@@ -1,10 +1,10 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace HonestSpend_WinUI.Services;
 
 /// <summary>
 /// Named mutex + event so a second launch activates the first window.
+/// Handles abandoned mutexes (previous crash) so the user is not stuck with "instant close".
 /// </summary>
 public static class SingleInstance
 {
@@ -15,45 +15,71 @@ public static class SingleInstance
     private static EventWaitHandle? _showEvent;
     private static CancellationTokenSource? _cts;
 
+    private static void Log(string msg)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".financial-os");
+            Directory.CreateDirectory(dir);
+            File.AppendAllText(
+                Path.Combine(dir, "winui-lifecycle.log"),
+                $"[{DateTime.Now:O}] [pid={Environment.ProcessId}] {msg}\n");
+        }
+        catch
+        {
+            /* ignore */
+        }
+    }
+
     /// <summary>Returns false if another instance owns the mutex (this process should exit).</summary>
     public static bool TryAcquire()
     {
         try
         {
-            // Deep-link / page args are written to winui.navigate before we signal show
-            // so the running instance can navigate after Activate.
             try
             {
                 AppConfig.ApplyCommandLine(Environment.GetCommandLineArgs());
             }
             catch { /* ignore */ }
 
-            _mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
-            if (!createdNew)
+            // initiallyOwned: false — then WaitOne so AbandonedMutexException is handled
+            _mutex = new Mutex(initiallyOwned: false, MutexName, out _);
+            try
             {
-                // Ensure navigate request is on disk if second launch had --page
-                if (!string.IsNullOrWhiteSpace(AppConfig.OpenPage))
-                    WinUiPaths.WriteNavigateRequest(AppConfig.OpenPage!);
-                try
+                if (!_mutex.WaitOne(0))
                 {
-                    using var ev = EventWaitHandle.OpenExisting(EventName);
-                    ev.Set();
+                    Log("Second instance — signaling existing window, exiting this process");
+                    if (!string.IsNullOrWhiteSpace(AppConfig.OpenPage))
+                        WinUiPaths.WriteNavigateRequest(AppConfig.OpenPage!);
+                    try
+                    {
+                        using var ev = EventWaitHandle.OpenExisting(EventName);
+                        ev.Set();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log("Could not signal show event: " + ex.Message);
+                    }
+                    try { _mutex.Dispose(); } catch { /* ignore */ }
+                    _mutex = null;
+                    return false;
                 }
-                catch
-                {
-                    /* first instance may not have registered yet */
-                }
-                try { _mutex.Dispose(); } catch { /* ignore */ }
-                _mutex = null;
-                return false;
+            }
+            catch (AbandonedMutexException)
+            {
+                // Previous process crashed without releasing — we own it now.
+                Log("Acquired abandoned mutex (previous crash) — continuing as primary");
             }
 
             _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, EventName);
+            Log("Primary instance acquired");
             return true;
         }
-        catch
+        catch (Exception ex)
         {
-            // If mutex fails, allow run (better than blocking the user)
+            Log("Mutex failed, allowing run: " + ex.Message);
             return true;
         }
     }
@@ -71,6 +97,7 @@ public static class SingleInstance
                 {
                     if (_showEvent.WaitOne(500))
                     {
+                        Log("Show event received");
                         try { onShow(); } catch { /* ignore */ }
                     }
                 }
@@ -97,5 +124,6 @@ public static class SingleInstance
         }
         _mutex = null;
         _showEvent = null;
+        Log("Released single-instance lock");
     }
 }

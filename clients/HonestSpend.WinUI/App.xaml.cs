@@ -80,9 +80,17 @@ public partial class App : Application
         if (!SingleInstance.TryAcquire())
         {
             // Another instance was signaled to show; exit this process.
+            // (Instant close if you double-open — the first window should pop forward.)
             Environment.Exit(0);
             return;
         }
+
+        // Release mutex if process dies cleanly so the next launch is not blocked.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try { SingleInstance.Release(); } catch { /* ignore */ }
+            try { Backend?.Dispose(); } catch { /* ignore */ }
+        };
 
         _dispatcher = DispatcherQueue.GetForCurrentThread();
         SingleInstance.StartShowListener(() =>
@@ -92,6 +100,22 @@ public partial class App : Application
 
         _window = new MainWindow();
         MainWindowInstance = _window;
+        _window.Closed += (_, _) =>
+        {
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".financial-os");
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(
+                    Path.Combine(dir, "winui-lifecycle.log"),
+                    $"[{DateTime.Now:O}] [pid={Environment.ProcessId}] MainWindow.Closed\n");
+            }
+            catch { /* ignore */ }
+            try { SingleInstance.Release(); } catch { /* ignore */ }
+            try { Backend?.Dispose(); } catch { /* ignore */ }
+        };
 
         if (AppConfig.TrayOnly || AppConfig.StartMinimized)
         {

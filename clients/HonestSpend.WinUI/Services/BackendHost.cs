@@ -40,8 +40,22 @@ public sealed class BackendHost : IDisposable
             AppendLog("--- engine bootstrap error: " + ex.Message + " ---");
         }
 
+        // Another client (or prior launch) may already be binding :7420.
+        using (var recheck = new LedgerApiClient())
+        {
+            if (await recheck.HealthAsync(ct))
+                return true;
+        }
+
         if (!TryStart())
+        {
+            // Race: peer won the port — accept if healthy.
+            await Task.Delay(800, ct);
+            using var peer = new LedgerApiClient();
+            if (await peer.HealthAsync(ct))
+                return true;
             return false;
+        }
 
         for (var i = 0; i < 40; i++)
         {
