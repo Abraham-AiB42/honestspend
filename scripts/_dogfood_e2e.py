@@ -174,7 +174,35 @@ bak = must("backup", c.post("/api/backup/create", json={"as_zip": True, "note": 
 if bak.get("name"):
     ok("backup name", bak["name"])
 
-print("\n8. Budgets + Can I buy + scenario")
+print("\n8. Setup wizard surfaces + budgets + Can I buy")
+setup = must("setup state", c.get("/api/setup/state"))
+if setup.get("phase") is not None:
+    ok("setup phase", str(setup.get("phase")))
+scash = must("setup cash", c.get("/api/setup/cash"))
+if "accounts" in scash or "types" in scash:
+    ok("setup cash types", str(len(scash.get("types") or [])))
+sdisc = must("setup discover", c.get("/api/setup/discover"))
+if "proposals" in sdisc or "count" in sdisc:
+    ok("setup discover", f"count={sdisc.get('count', 0)}")
+srec = must("setup recurring", c.get("/api/setup/recurring"))
+if "suggestions" in srec:
+    ok("setup recurring")
+scat = must("setup categorize", c.get("/api/setup/categorize"))
+if "uncategorized_count" in scat or "confirm_queue" in scat:
+    ok("setup categorize", f"uncat={scat.get('uncategorized_count')}")
+sbud = must("setup budgets", c.get("/api/setup/budgets?seed_if_empty=true"))
+if "rules" in sbud or "count" in sbud:
+    ok("setup budgets", f"rules={sbud.get('count', 0)}")
+sbuf = must("setup buffers", c.get("/api/setup/buffers"))
+if "total_buffer" in sbuf or "effective_buffer" in sbuf:
+    ok("setup buffers", f"eff={sbuf.get('effective_buffer')}")
+pcred = must("plaid credentials status", c.get("/api/plaid/credentials"))
+if "item_limit" in pcred or "configured" in pcred:
+    ok("plaid creds surface", f"limit={pcred.get('item_limit', 10)}")
+aic = must("ai credentials", c.get("/api/ai/credentials"))
+if "providers" in aic:
+    ok("ai providers", str(len(aic.get("providers") or [])))
+
 bst = must("budget status", c.get("/api/budgets/status"))
 if "items" in bst or "reserve_total" in bst:
     ok("budget status", f"reserve={bst.get('reserve_total', '?')}")
@@ -191,6 +219,15 @@ if "safe_to_spend" in snap or "cash_spendable" in snap:
     ok("buy safe_to_spend snapshot", str(snap.get("safe_to_spend", snap.get("cash_spendable"))))
 else:
     bad("buy ifpp_snapshot", str(snap)[:80])
+# Prefer at least one cash option with account_id when accounts exist
+cash_named = [
+    o for o in (buy.get("options") or [])
+    if o.get("method") == "cash" and o.get("account_id")
+]
+if cash_named or not cash:
+    ok("buy cash account options", str(len(cash_named)))
+else:
+    bad("buy cash account options", "none")
 sc = must(
     "scenario quick",
     c.post("/api/scenarios/quick", json={"name": "Dogfood TV", "amount": 400}),

@@ -61,10 +61,11 @@ Locked decisions from product discovery (2026). This is the source of truth for 
 
 ### Money-in (freeware)
 
-1. First-run: pick **how often** to remind (off / daily / weekly / monthly) and **what** (transactions / statements / both).  
-2. User downloads files from their bank site (we never store bank passwords).  
-3. Import → clock resets · Home/digest nags only when due.  
-4. Optional: user brings **their** Plaid keys for live link; optional **their** xAI key for AI categorize.
+1. **Smart setup wizard** (see [SETUP_WIZARD.md](./SETUP_WIZARD.md)): Plaid BYOK **or** CSV cash loop **or** quick manual; then discover liabilities, bills, categorize, budgets, dual buffers.  
+2. Reminders: pick **how often** (off / daily / weekly / monthly) and **what** (transactions / statements / both).  
+3. User downloads files from their bank site (we never store bank passwords).  
+4. Import → clock resets · Home/digest nags only when due.  
+5. Optional: **their** Plaid keys (local secrets store; trial ≈ 10 Items) and **their** LLM keys (Grok or other).
 
 ---
 

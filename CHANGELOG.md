@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.45 — Setup wizard polish (PR7)
+
+- **docs/SETUP_WIZARD.md** — full phase map, APIs, buffers, secrets
+- **Dogfood** covers setup state/cash/discover/recurring/categorize/budgets/buffers + BYOK status
+- **Settings**: BYOK Plaid keys + Link + AI keys; per-account buffer editors + total floor
+- PRODUCT money-in points at smart wizard
+
 ## 1.0.44 — Setup budgets, dual buffers, smarter Can I buy (PR6)
 
 - **Schema v16**: `accounts.safety_buffer` (per-account)

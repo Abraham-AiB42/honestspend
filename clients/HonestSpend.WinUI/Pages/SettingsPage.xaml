@@ -100,16 +100,43 @@
                 <Button Content="Mark refreshed now" Click="AckImport_Click" />
             </StackPanel>
 
+            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="BYOK connections (local only)" />
+            <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                Text="Your keys never leave this PC. Plaid free trial ≈ 10 institutions. AI keys optional for smarter categorize." />
+            <TextBlock x:Name="PlaidStatusText" Opacity="0.8" FontSize="12" TextWrapping="Wrap" />
+            <HyperlinkButton Content="Plaid signup" NavigateUri="https://dashboard.plaid.com/signup" />
+            <TextBox x:Name="PlaidClientIdBox" Header="Plaid client_id" />
+            <PasswordBox x:Name="PlaidSecretBox" PlaceholderText="Plaid secret" />
+            <ComboBox x:Name="PlaidEnvBox" Header="Plaid environment" SelectedIndex="0" HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Sandbox" Tag="sandbox" IsSelected="True" />
+                <ComboBoxItem Content="Development" Tag="development" />
+                <ComboBoxItem Content="Production" Tag="production" />
+            </ComboBox>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Save Plaid keys" Click="SavePlaidKeys_Click" Style="{StaticResource AccentButtonStyle}" />
+                <Button Content="Open Plaid Link" Click="OpenPlaidLink_Click" />
+            </StackPanel>
+            <ComboBox x:Name="AiProviderBox" Header="AI provider" SelectedIndex="0" HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Grok (xAI)" Tag="xai" IsSelected="True" />
+                <ComboBoxItem Content="OpenAI" Tag="openai" />
+                <ComboBoxItem Content="Anthropic" Tag="anthropic" />
+                <ComboBoxItem Content="Other / custom" Tag="custom" />
+            </ComboBox>
+            <TextBox x:Name="AiKeyBox" Header="AI API key" PlaceholderText="Optional BYOK" />
+            <Button Content="Save AI key" Click="SaveAiKey_Click" HorizontalAlignment="Left" />
+            <TextBlock x:Name="ByokStatusText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Everyday safety" />
             <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                Text="Rainy-day floor stays out of Safe to spend. Protect checking on big outflows." />
-            <NumberBox x:Name="BufferBox" Header="Rainy-day floor ($)" Minimum="0" Value="1000" />
+                Text="Total rainy-day floor stays out of Safe to spend. Per-account buffers reserve cash inside each account. IFPP uses the larger of total vs sum of per-account." />
+            <NumberBox x:Name="BufferBox" Header="Total cash buffer ($)" Minimum="0" Value="1000" />
+            <StackPanel x:Name="AccountBuffersPanel" Spacing="8" />
             <ComboBox x:Name="NeverNegEnforceBox" Header="Protect checking when posting expenses" SelectedIndex="1">
                 <ComboBoxItem Content="Off (just warn later)" Tag="off" />
                 <ComboBoxItem Content="Ask me first (recommended)" Tag="warn" IsSelected="True" />
                 <ComboBoxItem Content="Always block" Tag="hard" />
             </ComboBox>
-            <Button Content="Save safety settings" Click="SaveFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
+            <Button Content="Save safety &amp; buffers" Click="SaveBuffersAndFiscal_Click" Style="{StaticResource AccentButtonStyle}" />
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Budgets (workweek &amp; reserve)" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"

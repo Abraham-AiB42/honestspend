@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
 using HonestSpend_WinUI.Helpers;
@@ -11,6 +12,9 @@ namespace HonestSpend_WinUI.Pages;
 
 public sealed partial class SettingsPage : Page
 {
+    private readonly Dictionary<int, NumberBox> _acctBufferBoxes = new();
+    private string _plaidLinkUrl = "http://127.0.0.1:7420/static/plaid-link.html";
+
     public SettingsPage()
     {
         InitializeComponent();
@@ -43,6 +47,168 @@ public sealed partial class SettingsPage : Page
         await LoadPathsAsync();
         await LoadFiscalAsync();
         await LoadImportReminderAsync();
+        await LoadByokAsync();
+        await LoadAccountBuffersAsync();
+    }
+
+    private async Task LoadByokAsync()
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var st = await api.GetPlaidStatusAsync();
+            var enabled = st.TryGetProperty("enabled", out var en) && en.GetBoolean();
+            var n = JsonUi.Int(st, "item_count", 0);
+            var limit = JsonUi.Int(st, "item_limit", 10);
+            _plaidLinkUrl = JsonUi.Str(st, "link_url", _plaidLinkUrl);
+            PlaidStatusText.Text = enabled
+                ? $"Plaid ON · env {JsonUi.Str(st, "env")} · institutions {n}/{limit}"
+                : "Plaid OFF — paste client_id + secret below (stored locally).";
+            if (st.TryGetProperty("credentials", out var cred) && cred.ValueKind == JsonValueKind.Object)
+            {
+                var masked = JsonUi.Str(cred, "client_id_masked");
+                if (!string.IsNullOrEmpty(masked) && masked != "—")
+                    PlaidClientIdBox.PlaceholderText = masked;
+                SelectTag(PlaidEnvBox, JsonUi.Str(cred, "env", "sandbox"));
+            }
+            var ai = await api.GetAiCredentialsAsync();
+            var lines = new List<string>();
+            if (ai.TryGetProperty("providers", out var prov) && prov.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var p in prov.EnumerateArray())
+                {
+                    if (p.TryGetProperty("configured", out var cf) && cf.GetBoolean())
+                        lines.Add($"{JsonUi.Str(p, "label")}: set");
+                }
+            }
+            ByokStatusText.Text = lines.Count > 0
+                ? "AI: " + string.Join(" · ", lines)
+                : "AI: none configured (optional).";
+        }
+        catch (Exception ex)
+        {
+            PlaidStatusText.Text = "BYOK: start engine to load. " + ex.Message;
+        }
+    }
+
+    private async Task LoadAccountBuffersAsync()
+    {
+        AccountBuffersPanel.Children.Clear();
+        _acctBufferBoxes.Clear();
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var buf = await api.GetSetupBuffersAsync();
+            if (!buf.TryGetProperty("accounts", out var accs) || accs.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var a in accs.EnumerateArray())
+            {
+                var id = JsonUi.Int(a, "id", 0);
+                var cur = 0.0;
+                var sb = JsonUi.Str(a, "safety_buffer", "0");
+                if (sb is not ("—" or ""))
+                    double.TryParse(sb, out cur);
+                var nb = new NumberBox
+                {
+                    Header = $"{JsonUi.Str(a, "nickname")} buffer ($)",
+                    Value = cur,
+                    Minimum = 0,
+                };
+                if (id > 0) _acctBufferBoxes[id] = nb;
+                AccountBuffersPanel.Children.Add(nb);
+            }
+        }
+        catch
+        {
+            /* optional */
+        }
+    }
+
+    private async void SavePlaidKeys_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var id = PlaidClientIdBox.Text?.Trim() ?? "";
+            var secret = PlaidSecretBox.Password?.Trim() ?? "";
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(secret))
+                throw new InvalidOperationException("Enter client_id and secret.");
+            var env = TagOf(PlaidEnvBox) ?? "sandbox";
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.SavePlaidCredentialsAsync(id, secret, env);
+            ByokStatusText.Text = "Plaid keys saved (local).";
+            await LoadByokAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void OpenPlaidLink_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(_plaidLinkUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void SaveAiKey_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            var key = AiKeyBox.Text?.Trim() ?? "";
+            if (string.IsNullOrEmpty(key))
+                throw new InvalidOperationException("Enter an API key.");
+            var provider = TagOf(AiProviderBox) ?? "xai";
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            await api.SaveAiCredentialsAsync(provider, key);
+            AiKeyBox.Text = "";
+            ByokStatusText.Text = $"Saved {provider} key locally.";
+            await LoadByokAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void SaveBuffersAndFiscal_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var total = double.IsNaN(BufferBox.Value) ? 1000m : (decimal)BufferBox.Value;
+            var acct = new List<object>();
+            foreach (var kv in _acctBufferBoxes)
+            {
+                if (double.IsNaN(kv.Value.Value)) continue;
+                acct.Add(new { id = kv.Key, safety_buffer = (decimal)kv.Value.Value });
+            }
+            await api.SaveSetupBuffersAsync(new { total_buffer = total, account_buffers = acct });
+            SaveFiscal_Click(sender, e);
+            StatusText.Text = "Safety buffers saved.";
+            await LoadAccountBuffersAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private async Task LoadImportReminderAsync()
