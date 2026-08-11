@@ -38,24 +38,19 @@ def _q(v: Decimal) -> Decimal:
     return _d(v).quantize(CENT)
 
 
-def build_cash_runway(
+def runway_starting_cash(
     session: Session,
     *,
-    as_of: date | None = None,
-    days: int | None = None,
     profile_id: int | None = None,
     scope: str | None = None,
-    mode: str | None = None,
-) -> dict[str, Any]:
-    """Return day strip: starting cash, per-day events, ending balance, first red day."""
-    as_of = as_of or date.today()
-    settings = session.get(AppSettings, 1) or AppSettings(id=1)
-    mode = mode or settings.ifpp_mode or "expected"
-    horizon = int(days if days is not None else (settings.horizon_days or 45))
-    horizon = max(7, min(horizon, 90))
-    horizon_end = as_of + timedelta(days=horizon)
+) -> tuple[Decimal, str | None, str, dict[str, Any]]:
+    """Cash after buffer + tax vault — same start as build_cash_runway.
 
-    sc, resolved_pid, scope_note = _resolve_scope_and_profile(
+    Returns (start, resolved_pid, scope, details) where details has raw_cash,
+    buffer_reserved, tax_vault_reserved.
+    """
+    settings = session.get(AppSettings, 1) or AppSettings(id=1)
+    sc, resolved_pid, _scope_note = _resolve_scope_and_profile(
         session, profile_id=profile_id, scope=scope
     )
     accounts = _active_accounts(session, resolved_pid, sc)
@@ -102,6 +97,116 @@ def build_cash_runway(
                 tax_vault = ZERO
 
     start = _q(raw_cash - effective_buffer - tax_vault)
+    details = {
+        "raw_cash": _q(raw_cash),
+        "buffer_reserved": _q(effective_buffer),
+        "tax_vault_reserved": _q(tax_vault),
+        "accounts": accounts,
+        "scope_note": _scope_note,
+    }
+    return start, resolved_pid, sc, details
+
+
+def _label_window_end(d: date) -> str:
+    """Plain English short date: 'Fri Mar 6'."""
+    return f"{d.strftime('%a')} {d.strftime('%b')} {d.day}"
+
+
+def build_safe_until_window(
+    session: Session,
+    *,
+    as_of: date | None = None,
+    profile_id: int | None = None,
+    scope: str | None = None,
+    coming_up: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Soft cash left after window outflows (does not replace safe_to_spend).
+
+    Uses the same starting cash as cash_runway and the Coming up window
+    (auto/paydays/calendar) + cash-side outflow total.
+    """
+    as_of = as_of or date.today()
+    if coming_up is None:
+        from financial_os.services.coming_up import build_coming_up
+
+        coming_up = build_coming_up(
+            session,
+            as_of=as_of,
+            profile_id=profile_id,
+            scope=scope,
+        )
+
+    window = coming_up.get("window") or {}
+    window_end_s = window.get("window_end") or as_of.isoformat()
+    try:
+        window_end = date.fromisoformat(str(window_end_s)[:10])
+    except ValueError:
+        window_end = as_of
+
+    outflows = _q(_d(coming_up.get("outflow_total")))
+    start, _pid, _sc, _det = runway_starting_cash(
+        session, profile_id=profile_id, scope=scope
+    )
+    amount = _q(max(ZERO, start - outflows))
+
+    end_label = _label_window_end(window_end)
+    mode_eff = (window.get("mode_effective") or "calendar").lower()
+    if mode_eff == "paydays":
+        if window.get("window_capped"):
+            reason = "horizon cap"
+            if window.get("paydays") and len(window.get("paydays") or []) == 1:
+                reason = "next payday · window capped"
+            label = f"Safe until {end_label} ({reason})"
+        else:
+            pd = int(window.get("payday_count") or 1)
+            reason = "next payday" if pd <= 1 else "2nd payday"
+            label = f"Safe until {end_label} ({reason})"
+    else:
+        cal = window.get("calendar_days")
+        if cal is None:
+            try:
+                cal = max(0, (window_end - as_of).days)
+            except Exception:
+                cal = 14
+        if window.get("window_fallback") == "no_income":
+            label = f"Safe until {end_label} (next {cal} days · no paycheck scheduled)"
+        else:
+            label = f"Safe until {end_label} (next {cal} days)"
+
+    return {
+        "amount": str(amount),
+        "window_end": window_end.isoformat(),
+        "label": label,
+        "starting_cash": str(start),
+        "outflows": str(outflows),
+    }
+
+
+def build_cash_runway(
+    session: Session,
+    *,
+    as_of: date | None = None,
+    days: int | None = None,
+    profile_id: int | None = None,
+    scope: str | None = None,
+    mode: str | None = None,
+) -> dict[str, Any]:
+    """Return day strip: starting cash, per-day events, ending balance, first red day."""
+    as_of = as_of or date.today()
+    settings = session.get(AppSettings, 1) or AppSettings(id=1)
+    mode = mode or settings.ifpp_mode or "expected"
+    horizon = int(days if days is not None else (settings.horizon_days or 45))
+    horizon = max(7, min(horizon, 90))
+    horizon_end = as_of + timedelta(days=horizon)
+
+    start, resolved_pid, sc, det = runway_starting_cash(
+        session, profile_id=profile_id, scope=scope
+    )
+    scope_note = det.get("scope_note")
+    accounts = det["accounts"]
+    raw_cash = det["raw_cash"]
+    effective_buffer = det["buffer_reserved"]
+    tax_vault = det["tax_vault_reserved"]
 
     credit_ids = {int(a.id) for a in accounts if a.kind == "credit"}
     sched_q = session.query(ScheduledItem).filter(ScheduledItem.active.is_(True))

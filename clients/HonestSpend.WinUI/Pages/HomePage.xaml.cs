@@ -79,6 +79,7 @@ public sealed partial class HomePage : Page
             _home = await api.GetHomeSimpleAsync();
 
             SafeText.Text = Money(_home, "safe_to_spend");
+            ApplySafeUntilWindow(_home);
             ApplyFloatWhisper(_home);
             await ApplyCardPayWhisperAsync(api);
             ApplyWhyThisNumber(_home);
@@ -684,6 +685,43 @@ public sealed partial class HomePage : Page
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+    }
+
+    /// <summary>
+    /// Soft cash after Coming up window outflows (not a replacement for Safe to spend).
+    /// e.g. "Until payday: $1,160.00" when the window is payday-driven.
+    /// </summary>
+    private void ApplySafeUntilWindow(JsonElement home)
+    {
+        try
+        {
+            if (!home.TryGetProperty("safe_until_window", out var su) || su.ValueKind != JsonValueKind.Object)
+            {
+                SafeUntilLine.Text = "";
+                SafeUntilLine.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var amt = JsonUi.Money(su, "amount");
+            if (string.IsNullOrEmpty(amt) || amt == "—")
+            {
+                SafeUntilLine.Visibility = Visibility.Collapsed;
+                return;
+            }
+            var label = JsonUi.Str(su, "label", "");
+            // Prefer short UI copy: payday vs end of window
+            string prefix;
+            if (label.Contains("payday", StringComparison.OrdinalIgnoreCase))
+                prefix = "Until payday";
+            else
+                prefix = "Until end of window";
+            SafeUntilLine.Text = $"{prefix}: {amt}";
+            SafeUntilLine.Visibility = Visibility.Visible;
+        }
+        catch
+        {
+            SafeUntilLine.Text = "";
+            SafeUntilLine.Visibility = Visibility.Collapsed;
         }
     }
 

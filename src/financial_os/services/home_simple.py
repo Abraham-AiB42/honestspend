@@ -252,6 +252,7 @@ def build_home_simple(
     ritual = _enrich_ritual(ritual, books=books, fees=fees)
 
     from financial_os.services.coming_up import build_coming_up
+    from financial_os.services.cash_runway import build_safe_until_window
 
     # Same profile/scope resolution as Home (entity default via ifpp)
     coming_up = build_coming_up(
@@ -259,6 +260,14 @@ def build_home_simple(
         as_of=as_of,
         profile_id=pid,
         scope=sc,
+    )
+    # Soft line: runway start − Coming up window outflows (not a replacement for STS)
+    safe_until_window = build_safe_until_window(
+        session,
+        as_of=as_of,
+        profile_id=pid,
+        scope=sc,
+        coming_up=coming_up,
     )
 
     return {
@@ -289,6 +298,7 @@ def build_home_simple(
             else "No red cash day in the runway horizon"
         ),
         "coming_up": coming_up,
+        "safe_until_window": safe_until_window,
         "pending_warning": ifpp_d.get("pending_warning"),
         "pending_count": ifpp_d.get("pending_count") or 0,
         "pending_outflows_abs": ifpp_d.get("pending_outflows_abs") or "0",

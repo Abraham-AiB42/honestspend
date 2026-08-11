@@ -75,6 +75,8 @@
                         <TextBlock Opacity="0.7" FontSize="13" Text="Safe to spend" />
                         <TextBlock x:Name="SafeText" FontSize="48" FontWeight="SemiBold"
                                    Margin="0,4,0,0" Text="—" />
+                        <TextBlock x:Name="SafeUntilLine" Opacity="0.75" FontSize="14" TextWrapping="Wrap"
+                                   Visibility="Collapsed" Margin="0,2,0,0" />
                         <TextBlock x:Name="FloatWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
                                    Visibility="Collapsed" />
                         <TextBlock x:Name="CardPayWhisper" Opacity="0.7" FontSize="14" TextWrapping="Wrap"
