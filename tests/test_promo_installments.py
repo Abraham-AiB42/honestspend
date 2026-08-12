@@ -459,6 +459,46 @@ def test_api_promo_line_patch(client: TestClient):
         assert card.statement_balance_cached == Decimal("4600.00")
 
 
+def test_api_promo_line_patch_end_date_sets_source_user(client: TestClient):
+    """PATCH remaining/end_date on a statement line becomes source=user."""
+    import honestspend.api.app as app_mod
+    from honestspend.services.promo_upsert import upsert_promo_term
+
+    card_id = _seed_credit(app_mod)
+    with app_mod.SessionLocal() as s:
+        upsert_promo_term(
+            s,
+            account_id=card_id,
+            kind="purchase_plan",
+            name="Amazon Mixmaster",
+            principal_remaining=Decimal("348.12"),
+            monthly_payment=Decimal("29.01"),
+            start_date=date(2026, 8, 1),
+            end_date=None,
+            source="statement",
+        )
+        s.commit()
+        line_id = (
+            s.query(PromoInstallmentLine)
+            .filter(PromoInstallmentLine.account_id == card_id)
+            .one()
+            .id
+        )
+
+    r = client.patch(
+        f"/api/accounts/{card_id}/promo-lines/{line_id}",
+        json={
+            "principal_remaining": "400.00",
+            "end_date": "2027-01-15",
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["source"] == "user"
+    assert body["end_date"] == "2027-01-15"
+    assert Decimal(body["principal_remaining"]) == Decimal("400.00")
+
+
 def test_api_promo_create_and_roll_recomputes_cache(client: TestClient):
     """POST create/roll should refresh next_payment_amount_cached via recompute."""
     import honestspend.api.app as app_mod

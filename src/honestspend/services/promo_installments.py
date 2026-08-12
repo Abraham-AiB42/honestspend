@@ -245,11 +245,26 @@ def create_promo_line(
     kind_s = (kind or "purchase_plan").strip() or "purchase_plan"
     if status is None:
         status = "pending" if kind_s == "offer" else "open"
+    name_s = (name or "").strip() or (
+        "Intro 0%" if kind_s == "card_intro" else "Promo plan"
+    )
+    rem = _q(_d(principal_remaining))
+    monthly = _q(_d(monthly_payment))
+    if not fingerprint and kind_s != "offer":
+        from honestspend.services.promo_upsert import promo_fingerprint
+
+        fingerprint = promo_fingerprint(
+            account_id=account_id,
+            kind=kind_s,
+            name=name_s,
+            monthly=monthly,
+            end_date=end_date,
+        )
     row = PromoInstallmentLine(
         account_id=account_id,
-        name=(name or "").strip() or "Promo plan",
-        principal_remaining=_q(_d(principal_remaining)),
-        monthly_payment=_q(_d(monthly_payment)),
+        name=name_s,
+        principal_remaining=rem,
+        monthly_payment=monthly,
         start_date=start_date,
         end_date=end_date,
         active=bool(active),
@@ -268,6 +283,9 @@ def create_promo_line(
     return row
 
 
+_UNSET: Any = object()
+
+
 def update_promo_line(
     session: Session,
     line_id: int,
@@ -276,8 +294,9 @@ def update_promo_line(
     monthly_payment: Decimal | None = None,
     name: str | None = None,
     active: bool | None = None,
+    end_date: date | None | Any = _UNSET,
 ) -> PromoInstallmentLine:
-    """Patch remaining principal and/or monthly payment (and optional name/active).
+    """Patch remaining / monthly / end_date. Editor save always sets source=user.
 
     Raises ValueError if the line is not found.
     principal_remaining <= 0 deactivates the line.
@@ -300,10 +319,12 @@ def update_promo_line(
         if pay < ZERO:
             raise ValueError("monthly_payment must be >= 0")
         line.monthly_payment = pay
-    if active is not None:
-        line.active = bool(active)
+    if end_date is not _UNSET:
+        line.end_date = end_date
+    line.source = "user"
     session.flush()
-    sync_account_promo_balance_from_lines(session, int(line.account_id))
+    if line.account_id is not None:
+        sync_account_promo_balance_from_lines(session, int(line.account_id))
     return line
 
 

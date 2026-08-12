@@ -158,6 +158,42 @@ def test_bt_fee_less_than_interest_and_safe_is_take(tmp_path: Path, monkeypatch)
     s.close()
 
 
+def test_offer_verdict_ranker_exception_is_skip(tmp_path: Path, monkeypatch):
+    """rank_charge raising in offer_verdict fails closed to skip, not take."""
+    from honestspend.services.offers import create_offer, offer_verdict
+
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = _checking(s, p, balance=Decimal("5000"))
+    src = _card(
+        s, p, nickname="High APR", due_day=26, balance=Decimal("2000"), apr=Decimal("0.24")
+    )
+    dest = _card(s, p, nickname="0% dest", due_day=26, funding_id=cash.id)
+    s.commit()
+
+    offer = create_offer(
+        s,
+        offer_type="balance_transfer",
+        name="Cheap BT",
+        from_account_id=src.id,
+        destination_account_id=dest.id,
+        amount=Decimal("1000"),
+        fee_pct=Decimal("3"),
+        months=6,
+        start_date=AS_OF,
+    )
+    s.commit()
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("ranker exploded")
+
+    monkeypatch.setattr("honestspend.services.offers.rank_charge", _boom)
+    v = offer_verdict(s, offer)
+    assert v["verdict"] == "skip"
+    assert v["verdict"] != "take"
+    s.close()
+
+
 def test_new_card_accept_creates_account(tmp_path: Path, monkeypatch):
     from honestspend.services.offers import create_offer, decide_offer
 

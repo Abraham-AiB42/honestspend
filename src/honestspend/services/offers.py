@@ -363,7 +363,7 @@ def _ranker_safe(
             promo=promo,
         )
     except Exception:
-        return True, {}
+        return False, {}
     proposed = ranked.get("proposed") or {}
     return bool(proposed.get("safe")), ranked
 

@@ -2029,12 +2029,13 @@ class PromoLineIn(BaseModel):
 
 
 class PromoLinePatch(BaseModel):
-    """Partial update for promo installment remaining / monthly payment."""
+    """Partial update for promo installment remaining / monthly payment / end date."""
 
     principal_remaining: Decimal | None = None
     monthly_payment: Decimal | None = None
     name: str | None = None
     active: bool | None = None
+    end_date: date | None = None
 
 
 @app.get("/api/accounts/{account_id}/promo-lines")
@@ -2138,14 +2139,15 @@ def patch_account_promo_line(
             raise HTTPException(400, "monthly_payment must be >= 0")
 
     try:
-        line = update_promo_line(
-            db,
-            line_id,
-            principal_remaining=data.get("principal_remaining"),
-            monthly_payment=data.get("monthly_payment"),
-            name=data.get("name"),
-            active=data.get("active"),
-        )
+        patch_kw: dict = {
+            "principal_remaining": data.get("principal_remaining"),
+            "monthly_payment": data.get("monthly_payment"),
+            "name": data.get("name"),
+            "active": data.get("active"),
+        }
+        if "end_date" in data:
+            patch_kw["end_date"] = data["end_date"]
+        line = update_promo_line(db, line_id, **patch_kw)
     except ValueError as e:
         msg = str(e)
         if "not found" in msg.lower():

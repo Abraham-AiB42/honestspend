@@ -113,6 +113,28 @@ def test_home_do_this_next_sort_when_uncat_only(client: TestClient, tmp_path, mo
     assert next_a.get("action") == "review"
 
 
+def test_do_this_next_keeps_promo_conflict_action():
+    """Home must not rewrite promo_conflict to promo_sink."""
+    from types import SimpleNamespace
+
+    from honestspend.services.home_simple import _do_this_next
+
+    ifpp = SimpleNamespace(is_red_now=False, next_red_day=None)
+    desk = {"headline": {"action": "hold", "priority": "optional"}}
+    promo = {
+        "needs_attention": True,
+        "primary_action": "promo_conflict",
+        "title": "Review promo statement conflicts",
+        "reason": "1 unreviewed promo conflict — keep yours or take the statement.",
+        "button_label": "Review promo conflicts",
+        "account_id": None,
+    }
+    out = _do_this_next(ifpp, desk, [], [], Decimal("8000"), promo=promo)
+    assert out["action"] == "promo_conflict"
+    assert out["action"] != "promo_sink"
+    assert out["button_label"] == "Review promo conflicts"
+
+
 def test_wealth_tips_when_safe_surplus(client: TestClient):
     client.post("/api/onboarding/quick-setup", json={"cash_balance": 10000})
     # add child for 529 tip

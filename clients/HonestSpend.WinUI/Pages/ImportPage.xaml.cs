@@ -33,6 +33,8 @@ public sealed partial class ImportPage : Page
     private readonly List<(int AccountId, string Label)> _enterEndingQueue = new();
     private readonly List<(int AccountId, string Label)> _setBooksQueue = new();
     private readonly Dictionary<int, string> _accountKinds = new();
+    /// <summary>Account id from the last targeted import, used to scope promo conflicts.</summary>
+    private int? _lastImportAccountId;
 
     public ImportPage()
     {
@@ -1874,7 +1876,10 @@ public sealed partial class ImportPage : Page
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            var conflicts = await api.GetPromoConflictsAsync();
+            int? accountId = _lastImportAccountId;
+            if (accountId is null && AccountBox.SelectedItem is ComboBoxItem { Tag: int selected })
+                accountId = selected;
+            var conflicts = await api.GetPromoConflictsAsync(accountId);
             await PromptPromoConflictsAsync(api, conflicts);
         }
         catch (Exception ex)
@@ -1896,6 +1901,7 @@ public sealed partial class ImportPage : Page
 
         if (accountId is int aid && aid > 0)
         {
+            _lastImportAccountId = aid;
             try
             {
                 var lines = await api.GetPromoLinesAsync(aid);
@@ -1927,7 +1933,7 @@ public sealed partial class ImportPage : Page
         var conflictItems = 0;
         try
         {
-            conflicts = await api.GetPromoConflictsAsync();
+            conflicts = await api.GetPromoConflictsAsync(accountId);
             if (conflicts.TryGetProperty("items", out var cArr) && cArr.ValueKind == JsonValueKind.Array)
                 conflictItems = cArr.GetArrayLength();
             else
@@ -2079,17 +2085,27 @@ public sealed partial class ImportPage : Page
             });
         }
 
-        var dlg = new ContentDialog
+        ContentDialog? dlg = null;
+        var editClicked = false;
+        var editBtn = new Button { Content = "Edit" };
+        editBtn.Click += (_, _) =>
+        {
+            editClicked = true;
+            dlg?.Hide();
+        };
+        body.Children.Add(editBtn);
+
+        dlg = new ContentDialog
         {
             Title = "Promo conflict",
             Content = body,
             PrimaryButtonText = "Keep mine",
             SecondaryButtonText = takeLabel,
-            CloseButtonText = "Edit",
+            CloseButtonText = "Close",
             DefaultButton = ContentDialogButton.Primary,
             XamlRoot = XamlRoot,
         };
-        var choice = await dlg.ShowAsync();
+        var choice = await dlg!.ShowAsync();
         if (choice == ContentDialogResult.Primary)
         {
             await api.ResolvePromoConflictAsync(id, new { action = "keep_user" });
@@ -2100,6 +2116,8 @@ public sealed partial class ImportPage : Page
             await api.ResolvePromoConflictAsync(id, new { action = "take_incoming" });
             return;
         }
+        if (!editClicked)
+            return;
 
         var remBox = new NumberBox
         {

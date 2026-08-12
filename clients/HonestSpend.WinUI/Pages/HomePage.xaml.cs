@@ -2012,6 +2012,9 @@ public sealed partial class HomePage : Page
             case "set_books_from_bank":
                 await TrustBooksFromBankAsync();
                 break;
+            case "promo_conflict":
+                NavigateApp("offers");
+                break;
             case "promo_sink":
             case "promo_balloon":
                 if (_promoAccountId is int promoId)

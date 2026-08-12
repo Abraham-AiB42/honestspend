@@ -661,6 +661,9 @@ public sealed partial class CreditOffersPage : Page
             var name = EditorNameBox.Text?.Trim();
             if (!string.IsNullOrEmpty(name))
                 body["name"] = name;
+            var end = EditorEndBox.Text?.Trim();
+            if (!string.IsNullOrEmpty(end) && end is not ("—" or "?"))
+                body["end_date"] = end;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var res = await api.PatchPromoLineAsync(cardId, pick.Id, body);

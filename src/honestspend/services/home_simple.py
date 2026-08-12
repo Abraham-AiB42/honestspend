@@ -735,16 +735,21 @@ def _do_this_next(
             "priority": "fiscal",
         }
 
-    # Promo brief (before Sort)
+    # Promo brief (before Sort) — keep promo_conflict (do not rewrite to promo_sink)
     if promo and promo.get("needs_attention"):
+        action = promo.get("primary_action") or "promo_sink"
         return {
             "title": promo.get("title") or "0% promo needs a set-aside",
             "reason": promo.get("reason")
             or "Pay off before promo ends so you never pay APR by accident.",
-            "action": "promo_sink",
+            "action": action,
             "button_label": promo.get("button_label") or "Create monthly set-aside",
             "params": {"account_id": promo.get("account_id")},
-            "alternatives": ["Open Credit & debts for full plan"],
+            "alternatives": (
+                ["Open Offers to keep yours or take the statement"]
+                if action == "promo_conflict"
+                else ["Open Credit & debts for full plan"]
+            ),
             "priority": "fiscal",
         }
 
@@ -779,6 +784,7 @@ def _do_this_next(
         "attack_apr",
         "promo_balloon",
         "promo_sink",
+        "promo_conflict",
         "stop_fees",
         "top_up_buffer",
         "protect_checking",

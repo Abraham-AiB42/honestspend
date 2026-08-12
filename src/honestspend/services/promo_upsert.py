@@ -33,10 +33,10 @@ def _q(v: Decimal | Any) -> Decimal:
 
 def _norm_name(kind: str, name: str) -> str:
     n = " ".join((name or "").strip().lower().split())
+    if kind == "card_intro" and n in ("", "intro 0%", "__intro__"):
+        return "__intro__"
     if n:
         return n
-    if kind == "card_intro":
-        return "__intro__"
     return "__isb__"
 
 
@@ -50,12 +50,14 @@ def promo_fingerprint(
 ) -> str:
     """account_id|kind|norm_name|monthly_or_end.
 
-    purchase_plan uses monthly; card_intro uses end_date; name fallback __intro__ / __isb__.
+    purchase_plan uses monthly; named card_intro uses end_date.
+    Unnamed / "Intro 0%" intros share identity __intro__ with empty tail so a
+    dated statement and Plaid (end_date=None) collide.
     """
     kind_s = (kind or "purchase_plan").strip() or "purchase_plan"
     norm = _norm_name(kind_s, name)
     if kind_s == "card_intro":
-        tail = end_date.isoformat() if end_date else ""
+        tail = "" if norm == "__intro__" else (end_date.isoformat() if end_date else "")
     else:
         tail = str(_q(monthly)) if monthly is not None else ""
     acct = "" if account_id is None else str(int(account_id))
@@ -108,11 +110,12 @@ def _fields_differ(
         diffs.append("principal_remaining")
     if _q(line.monthly_payment) != _q(monthly_payment):
         diffs.append("monthly_payment")
-    if line.end_date != end_date:
+    # Incoming None end/APR means "unknown" — do not treat as a clear/diff.
+    if end_date is not None and line.end_date != end_date:
         diffs.append("end_date")
     line_apr = getattr(line, "apr", None)
     line_apr_d = _d(line_apr) if line_apr is not None else None
-    if not _apr_equal(line_apr_d, apr):
+    if apr is not None and not _apr_equal(line_apr_d, apr):
         diffs.append("apr")
     return diffs
 
@@ -134,6 +137,29 @@ def _find_by_fingerprint(
         .order_by(PromoInstallmentLine.id)
         .first()
     )
+
+
+def _find_unsourced_by_identity(
+    session: Session,
+    *,
+    account_id: int | None,
+    kind: str,
+    name: str,
+) -> PromoInstallmentLine | None:
+    """Match already-saved rows with null fingerprint on account + kind + norm name."""
+    q = session.query(PromoInstallmentLine).filter(
+        PromoInstallmentLine.fingerprint.is_(None),
+        PromoInstallmentLine.kind == kind,
+    )
+    if account_id is None:
+        q = q.filter(PromoInstallmentLine.account_id.is_(None))
+    else:
+        q = q.filter(PromoInstallmentLine.account_id == account_id)
+    norm = _norm_name(kind, name)
+    for line in q.order_by(PromoInstallmentLine.id).all():
+        if _norm_name(kind, line.name or "") == norm:
+            return line
+    return None
 
 
 def _apply_values(
@@ -190,9 +216,26 @@ def _insert_conflict(
     incoming_values: dict[str, Any],
     user_values: dict[str, Any],
 ) -> dict[str, Any]:
+    src = (incoming_source or "").strip() or "statement"
+    row = (
+        session.query(PromoConflict)
+        .filter(
+            PromoConflict.line_id == int(line.id),
+            PromoConflict.incoming_source == src,
+            PromoConflict.resolved_at.is_(None),
+        )
+        .order_by(PromoConflict.id)
+        .first()
+    )
+    if row is not None:
+        row.field_diffs_json = json.dumps(diffs)
+        row.incoming_values_json = json.dumps(incoming_values)
+        row.user_values_json = json.dumps(user_values)
+        session.flush()
+        return _conflict_to_dict(row)
     row = PromoConflict(
         line_id=int(line.id),
-        incoming_source=(incoming_source or "").strip() or "statement",
+        incoming_source=src,
         field_diffs_json=json.dumps(diffs),
         incoming_values_json=json.dumps(incoming_values),
         user_values_json=json.dumps(user_values),
@@ -250,6 +293,12 @@ def upsert_promo_term(
     )
 
     existing = _find_by_fingerprint(session, fp)
+    if existing is None:
+        existing = _find_unsourced_by_identity(
+            session, account_id=account_id, kind=kind_s, name=name_s
+        )
+        if existing is not None:
+            existing.fingerprint = fp
     if existing is None:
         line = create_promo_line(
             session,
@@ -318,13 +367,18 @@ def upsert_promo_term(
     else:
         new_source = _silent_update_source(existing_source, source_s)
 
+    apply_end = end_date if end_date is not None else existing.end_date
+    existing_apr = getattr(existing, "apr", None)
+    apply_apr = apr_d if apr_d is not None else (
+        _d(existing_apr) if existing_apr is not None else None
+    )
     _apply_values(
         existing,
         principal_remaining=prin,
         monthly_payment=monthly,
         start_date=start_date,
-        end_date=end_date,
-        apr=apr_d,
+        end_date=apply_end,
+        apr=apply_apr,
         source=new_source,
         name=name_s,
         offer_type=offer_type,
