@@ -153,8 +153,15 @@ def project_card_payment(
     account_id: int,
     *,
     as_of: date | None = None,
+    extra_balance: Decimal | None = None,
+    extra_monthly: Decimal | None = None,
 ) -> dict[str, Any]:
     """Project open-cycle statement and next payment for a credit account.
+
+    extra_balance / extra_monthly simulate a charge (and optional new purchase-plan
+    monthly) without writing books. A positive extra_monthly treats extra_balance
+    as new plan principal (statement carve-out); otherwise extra_balance is
+    revolving/statement books.
 
     Returns statement_balance, next_payment, next_due (effective pay date),
     last_close, next_close, funding_account_id, policy, payment_timing,
@@ -189,8 +196,13 @@ def project_card_payment(
     from honestspend.services.autopay import ensure_autopay_policy_from_payment_option
 
     policy = ensure_autopay_policy_from_payment_option(acct)
-    bal = _d(acct.current_balance)
+    extra_bal = _d(extra_balance)
+    extra_mo = _d(extra_monthly)
+    bal = _d(acct.current_balance) + extra_bal
     promo_remaining, promo_due = open_promo_totals(session, account_id, as_of=as_of)
+    if extra_mo > ZERO:
+        promo_remaining = promo_remaining + extra_bal
+        promo_due = promo_due + extra_mo
 
     statement_balance = _q(max(ZERO, bal - promo_remaining))
     next_payment = compute_next_payment(
