@@ -2182,6 +2182,144 @@ def roll_account_promo_line(
     return line_to_dict(rolled)
 
 
+class OfferIn(BaseModel):
+    """Create a pending offer (new card, balance transfer, or purchase plan)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    offer_type: str
+    name: str | None = None
+    account_id: int | None = None
+    from_account_id: int | None = None
+    destination_account_id: int | None = None
+    dest_account_id: int | None = None
+    amount: Decimal | None = None
+    monthly: Decimal | None = None
+    monthly_payment: Decimal | None = None
+    months: int | None = None
+    fee: Decimal | None = None
+    fee_pct: Decimal | None = None
+    apr: Decimal | None = None
+    intro_apr: Decimal | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    credit_limit: Decimal | None = None
+    close_day: int | None = None
+    due_day: int | None = None
+    annual_fee: Decimal | None = None
+    rewards_program: str | None = None
+    nickname: str | None = None
+    profile_id: int | None = None
+    autopay_policy: str | None = None
+
+
+class OfferDecideIn(BaseModel):
+    decision: str
+    confirm_skip: bool = False
+
+
+class PromoConflictResolveIn(BaseModel):
+    action: str
+    edits: dict | None = None
+    principal_remaining: Decimal | None = None
+    monthly_payment: Decimal | None = None
+    end_date: date | None = None
+    apr: Decimal | None = None
+    name: str | None = None
+
+
+@app.get("/api/offers")
+def list_offers_api(status: str | None = "pending", db: Session = Depends(get_db)):
+    """Pending (or filtered) offer-desk mailers."""
+    from honestspend.services.offers import list_offers
+
+    items = list_offers(db, status=status)
+    return {"count": len(items), "items": items}
+
+
+@app.post("/api/offers")
+def create_offer_api(body: OfferIn, db: Session = Depends(get_db)):
+    """Create a pending offer. new_card may omit account_id."""
+    from honestspend.services.offers import create_offer, offer_to_dict, offer_verdict
+
+    data = body.model_dump(exclude_unset=True)
+    offer_type = data.pop("offer_type")
+    try:
+        offer = create_offer(db, offer_type=offer_type, **data)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    out = offer_to_dict(offer)
+    out["verdict"] = offer_verdict(db, offer)
+    return out
+
+
+@app.post("/api/offers/{offer_id}/decide")
+def decide_offer_api(offer_id: int, body: OfferDecideIn, db: Session = Depends(get_db)):
+    """take | take_with_plan | skip a pending offer."""
+    from honestspend.services.offers import decide_offer
+
+    try:
+        return decide_offer(
+            db,
+            offer_id,
+            decision=body.decision,
+            confirm_skip=bool(body.confirm_skip),
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
+
+
+@app.get("/api/promos/conflicts")
+def list_promo_conflicts_api(
+    account_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Unresolved user-vs-statement/Plaid promo conflicts."""
+    from honestspend.services.promo_upsert import list_open_conflicts
+
+    items = list_open_conflicts(db, account_id=account_id)
+    return {"count": len(items), "items": items}
+
+
+@app.post("/api/promos/conflicts/{conflict_id}/resolve")
+def resolve_promo_conflict_api(
+    conflict_id: int,
+    body: PromoConflictResolveIn,
+    db: Session = Depends(get_db),
+):
+    """keep_user | take_incoming | edit."""
+    from honestspend.services.autopay import recompute_card_payment_schedule
+    from honestspend.services.promo_installments import line_to_dict
+    from honestspend.services.promo_upsert import resolve_promo_conflict
+
+    edits = dict(body.edits or {})
+    if body.principal_remaining is not None:
+        edits["principal_remaining"] = body.principal_remaining
+    if body.monthly_payment is not None:
+        edits["monthly_payment"] = body.monthly_payment
+    if body.end_date is not None:
+        edits["end_date"] = body.end_date.isoformat()
+    if body.apr is not None:
+        edits["apr"] = body.apr
+    if body.name is not None:
+        edits["name"] = body.name
+    try:
+        line = resolve_promo_conflict(
+            db, conflict_id, action=body.action, edits=edits or None
+        )
+    except ValueError as e:
+        msg = str(e)
+        if "not found" in msg.lower():
+            raise HTTPException(404, msg) from e
+        raise HTTPException(400, msg) from e
+    if line.account_id is not None:
+        recompute_card_payment_schedule(db, int(line.account_id))
+    return {"line": line_to_dict(line)}
+
+
 @app.get("/api/transactions", response_model=list[TransactionOut])
 def list_transactions(
     profile_id: Optional[int] = None,
