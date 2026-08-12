@@ -59,7 +59,7 @@
                 <StackPanel Spacing="12">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Import bank files" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="Dump everything you grabbed — 24 months of history, statements, multi-account OFX, CSVs. We map personal vs business, create accounts, and skip duplicates when files overlap." />
+                        Text="Dump everything — 24 months of history, statements, multi-account OFX, CSVs. We map personal vs business, set balances, pull APR/promo/limits when the file has them, detect recurring bills and cards, skip duplicates, and categorize what we can." />
 
                     <!-- Drag-and-drop for any supported type -->
                     <Border x:Name="DropZone"
