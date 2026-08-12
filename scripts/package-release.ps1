@@ -45,7 +45,7 @@ if (-not $SkipEngine) {
 
 # 4) Install notes
 $notes = @"
-HonestSpend — Windows package (1.0.x)
+HonestSpend — Windows package (1.0.55)
 =====================================
 
 ONE-CLICK USE
@@ -73,8 +73,8 @@ Built: $(Get-Date -Format o)
 "@
 Set-Content -Path (Join-Path $Stage "README-INSTALL.txt") -Value $notes -Encoding UTF8
 
-# Copy key docs if present
-foreach ($doc in @("docs\INSTALL.md", "docs\SIMPLE_MODE.md", "docs\RELEASE_0.7.0.md", "docs\AUTOMATION.md", "LICENSE", "CHANGELOG.md")) {
+# Copy key docs if present (current product docs — not historical RELEASE_0.x notes)
+foreach ($doc in @("docs\INSTALL.md", "docs\SIMPLE_MODE.md", "docs\PRIVACY.md", "docs\AUTOMATION.md", "LICENSE", "CHANGELOG.md")) {
     $src = Join-Path $Root $doc
     if (Test-Path $src) {
         $destName = Split-Path $doc -Leaf

@@ -1,10 +1,10 @@
 # Passoff — HonestSpend / financial-os
 
 **Date:** 2026-08-11  
-**Active work branch:** `feature/statement-cycles` (trust bar + solid-A grades + statement cycles)  
+**Active work branch:** `main` (1.0.55 merged from `feature/statement-cycles`)  
 **Version aligned in tree:** **1.0.55** (`financial_os`, `pyproject.toml`, WinUI package)  
 **Remote:** https://github.com/Abraham-AiB42/honestspend.git  
-**`main` tip (last known):** `865f104` — do not assume feature work is on main until merged  
+**`main` tip:** `0c0baca` — soft-until formula docs; full 1.0.55 line on main  
 
 Use this file to resume on another PC without re-deriving session context.
 
@@ -45,7 +45,7 @@ Agent SDD scratch lives under `.superpowers/` and is **gitignored**.
 ```powershell
 git clone https://github.com/Abraham-AiB42/honestspend.git
 cd honestspend
-git checkout feature/statement-cycles
+git checkout main
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
@@ -76,18 +76,18 @@ python -m pytest tests/test_schedule_mark_paid.py tests/test_void_card_payment_s
 
 ---
 
-## 3. Branch state (feature/statement-cycles)
+## 3. Branch state (`main` @ 1.0.55)
 
-**Themes on this branch (Unreleased CHANGELOG + solid-A plan):**
+**Shipped on main (CHANGELOG 1.0.55 + solid-A plan):**
 
 - Statement cycles, Coming up, mark-paid honesty, import schedule advance
 - Soft until single-count formula, autopay_policy sole authority
 - WinUI: progressive Credit, Bills mark-paid, Settings plain labels, Store tiles 1.0.55
 - Solid-A plan: `docs/superpowers/plans/2026-08-11-solid-a-grades.md`
 
-**Hygiene (done):** working tree product changes committed; `.superpowers/` SDD scratch ignored.
+**Hygiene (done):** `feature/statement-cycles` fast-forwarded into `main` and pushed (`0c0baca`).
 
-**Still open ops (not code):** push remote, merge to main, Store package cert, multi-day dogfood.
+**Still open ops (not code):** Store package cert, multi-day dogfood, optional delete remote feature branch.
 
 ---
 
@@ -107,7 +107,7 @@ python -m pytest tests/test_schedule_mark_paid.py tests/test_void_card_payment_s
 
 | Ver | Theme |
 |-----|--------|
-| **1.0.55** | Trust bar + statement cycles wave (this branch; push when ready) |
+| **1.0.55** | Trust bar + statement cycles wave (on `main`) |
 | **1.0.54** | Envelope raid UI, float whisper, DEK protect-only |
 | **1.0.53** | One Safe number (tray/glance), cash-first buy |
 

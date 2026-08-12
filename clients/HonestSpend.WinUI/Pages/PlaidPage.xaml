@@ -73,6 +73,8 @@
             </ListView>
 
             <TextBlock x:Name="MsgText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <InfoBar x:Name="SuccessBar" IsClosable="True" IsOpen="False" Severity="Success" />
+            <InfoBar x:Name="WarningBar" IsClosable="True" IsOpen="False" Severity="Warning" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>
