@@ -361,6 +361,14 @@ def import_statement_pdf(
 
     session.flush()
 
+    # APR / limit / promo / min payment from statement text
+    try:
+        from honestspend.services.import_bootstrap import enrich_account_from_text
+
+        enrich_account_from_text(session, account_id, text, only_if_empty=True)
+    except Exception:
+        pass
+
     # New Balance / Ending Balance → institution_balance (CSV/OFX parity)
     drift: Decimal | None = None
     ending, bal_src = parse_statement_ending_balance(text)

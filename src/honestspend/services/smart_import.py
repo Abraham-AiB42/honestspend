@@ -771,24 +771,36 @@ def commit_smart_plan(
                 if isinstance(a, dict):
                     total_skipped += int(a.get("skipped_existing") or 0)
 
+    from honestspend.services.import_bootstrap import bootstrap_books_after_import
     from honestspend.services.import_dedupe import human_dup_summary
+
+    bootstrap = bootstrap_books_after_import(
+        session,
+        profile_ids=list({int(v) for v in key_to_profile.values()}),
+        lookback_days=730,
+        auto_accept_recurring=True,
+        auto_accept_discover=True,
+        auto_categorize=True,
+    )
 
     plain = human_dup_summary(
         created=total_created, skipped=total_skipped, files=len(files)
     )
+    boot_msg = (bootstrap or {}).get("customer_message") or ""
+    customer = (plain + " " + boot_msg).strip()
     return {
         "ok": True,
         "transactions_created": total_created,
         "duplicates_skipped": total_skipped,
         "results": results,
         "entities_resolved": key_to_profile,
-        "summary": (
-            f"{plain} "
-            f"Processed {len(files)} file(s) · personal/business mapping applied."
-        ),
+        "bootstrap": bootstrap,
+        "summary": f"{customer} Processed {len(files)} file(s).",
         "hint": (
-            "Overlapping history, statements, and re-downloads are fine — we skip duplicates. "
-            "Open Home for Safe to spend · Sort charges for anything left uncategorized."
+            "We pulled balances, APR/promo/limits when statements include them, "
+            "set up recurring bills and cards we could prove from history, "
+            "categorized what we could, and skipped duplicates. "
+            "Home for Safe to spend; Sort charges for anything left."
         ),
-        "customer_message": plain,
+        "customer_message": customer,
     }

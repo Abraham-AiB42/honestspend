@@ -489,6 +489,14 @@ def import_ofx(
 
     session.flush()
 
+    # Statement / OFX enrichment: APR, limit, min payment, promo, due day when present
+    try:
+        from honestspend.services.import_bootstrap import enrich_account_from_text
+
+        enrich_account_from_text(session, account_id, text, only_if_empty=True)
+    except Exception:
+        pass
+
     # LEDGERBAL → institution_balance (does not overwrite books current_balance)
     drift: Decimal | None = None
     if apply_ledger_balance and ledger.get("balance") is not None:
