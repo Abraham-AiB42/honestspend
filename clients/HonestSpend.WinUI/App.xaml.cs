@@ -73,13 +73,15 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Seal books while engine is still alive, then kill the process.</summary>
+    /// <summary>
+    /// Seal books if encrypted, stop tray, kill engine (including orphans on :7420).
+    /// Engine is not a always-on service — it only runs while the desktop app is open.
+    /// </summary>
     private static void SealThenStopEngine()
     {
         try
         {
             // Never GetResult on the UI thread — that deadlocks WinUI sync context.
-            // Run seal on a thread-pool thread and wait briefly.
             Task.Run(async () =>
             {
                 try { await AppLockService.SealDatabaseAsync().ConfigureAwait(false); }
@@ -87,7 +89,9 @@ public partial class App : Application
             }).Wait(TimeSpan.FromSeconds(4));
         }
         catch { /* ignore */ }
-        try { Backend?.Dispose(); } catch { /* ignore */ }
+        try { TrayHost.Stop(); } catch { /* ignore */ }
+        try { Backend?.Stop(killPortListeners: true); } catch { /* ignore */ }
+        try { BackendHost.KillListenersOnPort(7420); } catch { /* ignore */ }
         Backend = null;
     }
 

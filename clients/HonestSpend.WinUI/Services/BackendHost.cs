@@ -300,10 +300,10 @@ public sealed class BackendHost : IDisposable
     }
 
     /// <summary>
-    /// Kill the engine process. Does NOT seal — await SealDatabaseAsync first if needed.
-    /// Sync seal via GetResult here deadlocks WinUI when Restart runs under a UI sync context.
+    /// Kill the engine we started. Optionally also clear anything still listening on :7420
+    /// (orphan / peer engines adopted at startup). Does NOT seal — await SealDatabaseAsync first.
     /// </summary>
-    public void Stop()
+    public void Stop(bool killPortListeners = true)
     {
         try
         {
@@ -324,6 +324,59 @@ public sealed class BackendHost : IDisposable
             try { _logWriter?.Dispose(); } catch { /* ignore */ }
             _logWriter = null;
         }
+
+        // Desktop product: engine only runs while the app is open. Kill orphans on :7420
+        // that we attached to (EnsureRunning returned true without starting a child).
+        if (killPortListeners)
+            KillListenersOnPort(7420);
+    }
+
+    /// <summary>Stop every local process still bound to the engine port.</summary>
+    public static void KillListenersOnPort(int port = 7420)
+    {
+        try
+        {
+            // netstat is always available; avoid PowerShell startup cost on close
+            var psi = new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c netstat -ano | findstr \":{port}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+            };
+            using var p = Process.Start(psi);
+            if (p is null) return;
+            var output = p.StandardOutput.ReadToEnd();
+            p.WaitForExit(2000);
+            var killed = new HashSet<int>();
+            foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                // Only LISTENING rows for this port (not outbound TIME_WAIT etc.)
+                if (line.IndexOf("LISTENING", StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 5) continue;
+                if (!int.TryParse(parts[^1], out var pid) || pid <= 4)
+                    continue;
+                if (!killed.Add(pid)) continue;
+                try
+                {
+                    using var victim = Process.GetProcessById(pid);
+                    // Don't kill ourselves
+                    if (pid == Environment.ProcessId) continue;
+                    victim.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    /* already gone / access */
+                }
+            }
+        }
+        catch
+        {
+            /* ignore */
+        }
     }
 
     public async Task<bool> RestartAsync(CancellationToken ct = default)
@@ -331,10 +384,11 @@ public sealed class BackendHost : IDisposable
         // Seal while engine is still alive (encrypted vaults) — async only
         try { await AppLockService.SealDatabaseAsync(ct).ConfigureAwait(false); }
         catch { /* best-effort */ }
-        Stop();
+        // Restart: kill our child + anything on the port so we can rebind cleanly
+        Stop(killPortListeners: true);
         await Task.Delay(400, ct).ConfigureAwait(false);
         return await EnsureRunningAsync(ct).ConfigureAwait(false);
     }
 
-    public void Dispose() => Stop();
+    public void Dispose() => Stop(killPortListeners: true);
 }
