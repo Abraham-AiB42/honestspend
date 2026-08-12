@@ -21,6 +21,10 @@ public sealed partial class ImportPage : Page
     private StorageFile? _xlsxFile;
     /// <summary>Queued files from multi-select or drag-drop (any supported type).</summary>
     private readonly List<StorageFile> _pendingFiles = new();
+    /// <summary>Last smart-import plan JSON (user can tweak combos then commit).</summary>
+    private string? _smartPlanJson;
+    private readonly List<(string EntityKey, ComboBox TypeBox, TextBox NameBox)> _smartEntityRows = new();
+    private readonly List<(int FileIndex, string SourceKey, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox)> _smartAccountRows = new();
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private int? _freezeAccountId;
@@ -403,7 +407,7 @@ public sealed partial class ImportPage : Page
                 throw new InvalidOperationException("Drop files (not folders).");
             QueueFiles(files);
             if (_pendingFiles.Count > 0)
-                PreviewCsv_Click(sender, e);
+                await RunSmartPlanAsync();
         }
         catch (Exception ex)
         {
@@ -424,6 +428,335 @@ public sealed partial class ImportPage : Page
         if (files.Count == 0) return;
         _pendingFiles.Clear();
         QueueFiles(files);
+        await RunSmartPlanAsync();
+    }
+
+    private async void SmartImportPlan_Click(object sender, RoutedEventArgs e)
+        => await RunSmartPlanAsync();
+
+    private async Task RunSmartPlanAsync()
+    {
+        ErrorBar.IsOpen = false;
+        if (_pendingFiles.Count == 0)
+        {
+            ErrorBar.Message = "Drop or pick bank file(s) first.";
+            ErrorBar.IsOpen = true;
+            return;
+        }
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var streams = new List<(Stream Stream, string FileName)>();
+            var opened = new List<IDisposable>();
+            try
+            {
+                foreach (var f in _pendingFiles)
+                {
+                    var s = await f.OpenStreamForReadAsync();
+                    opened.Add(s);
+                    streams.Add((s, f.Name));
+                }
+                var plan = await api.SmartImportPlanAsync(streams);
+                _smartPlanJson = plan.GetRawText();
+                RenderSmartPlan(plan);
+                SmartPlanPanel.Visibility = Visibility.Visible;
+                PreviewText.Text = JsonUi.Str(plan, "summary") + "\n" + JsonUi.Str(plan, "hint");
+            }
+            finally
+            {
+                foreach (var d in opened)
+                    try { d.Dispose(); } catch { /* ignore */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private void RenderSmartPlan(JsonElement plan)
+    {
+        SmartPlanSummary.Text = JsonUi.Str(plan, "summary");
+        SmartPlanHint.Text = JsonUi.Str(plan, "hint");
+        SmartEntitiesPanel.Children.Clear();
+        SmartAccountsPanel.Children.Clear();
+        _smartEntityRows.Clear();
+        _smartAccountRows.Clear();
+
+        if (plan.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var e in ents.EnumerateArray())
+            {
+                var key = JsonUi.Str(e, "key", "personal");
+                var et = JsonUi.Str(e, "entity_type", "personal");
+                var name = JsonUi.Str(e, "display_name", et == "business" ? "Business" : "Personal");
+                var conf = JsonUi.Str(e, "confidence", "");
+
+                var row = new Border
+                {
+                    Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                    BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(10),
+                };
+                var typeBox = new ComboBox { Header = "Entity type", MinWidth = 140 };
+                typeBox.Items.Add(new ComboBoxItem { Content = "Personal", Tag = "personal", IsSelected = et is "personal" or "individual" });
+                typeBox.Items.Add(new ComboBoxItem { Content = "Business", Tag = "business", IsSelected = et == "business" });
+                if (typeBox.SelectedIndex < 0) typeBox.SelectedIndex = 0;
+                var nameBox = new TextBox
+                {
+                    Header = "Name on the books",
+                    Text = name,
+                    PlaceholderText = et == "business" ? "e.g. AP Agency LLC" : "Personal",
+                };
+                var stack = new StackPanel { Spacing = 6 };
+                stack.Children.Add(new TextBlock
+                {
+                    Text = $"Who · confidence {conf}",
+                    FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                });
+                stack.Children.Add(typeBox);
+                stack.Children.Add(nameBox);
+                row.Child = stack;
+                SmartEntitiesPanel.Children.Add(row);
+                _smartEntityRows.Add((key, typeBox, nameBox));
+            }
+        }
+
+        if (plan.TryGetProperty("sources", out var sources) && sources.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var src in sources.EnumerateArray())
+            {
+                var fi = JsonUi.Int(src, "file_index", 0);
+                var fname = JsonUi.Str(src, "filename");
+                if (!src.TryGetProperty("accounts", out var accs) || accs.ValueKind != JsonValueKind.Array)
+                    continue;
+                foreach (var a in accs.EnumerateArray())
+                {
+                    var sk = JsonUi.Str(a, "source_key");
+                    var ekey = JsonUi.Str(a, "entity_key", "personal");
+                    var action = JsonUi.Str(a, "action", "create");
+                    var nick = JsonUi.Str(a, "suggested_nickname", fname);
+                    var kind = JsonUi.Str(a, "kind", "checking");
+                    var reasons = "";
+                    if (a.TryGetProperty("reasons", out var rs) && rs.ValueKind == JsonValueKind.Array)
+                        reasons = string.Join(" · ", rs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(3));
+
+                    var row = new Border
+                    {
+                        Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                        BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                        BorderThickness = new Thickness(1),
+                        CornerRadius = new CornerRadius(8),
+                        Padding = new Thickness(10),
+                    };
+                    var entityBox = new ComboBox { Header = "Belongs to", MinWidth = 160, HorizontalAlignment = HorizontalAlignment.Stretch };
+                    foreach (var (ek, _, nameBox) in _smartEntityRows)
+                    {
+                        var label = string.IsNullOrWhiteSpace(nameBox.Text) ? ek : nameBox.Text;
+                        entityBox.Items.Add(new ComboBoxItem
+                        {
+                            Content = label,
+                            Tag = ek,
+                            IsSelected = ek == ekey,
+                        });
+                    }
+                    if (entityBox.Items.Count > 0 && entityBox.SelectedIndex < 0)
+                        entityBox.SelectedIndex = 0;
+
+                    var actionBox = new ComboBox { Header = "Account", MinWidth = 160 };
+                    actionBox.Items.Add(new ComboBoxItem { Content = "Create new account", Tag = "create", IsSelected = action != "match" });
+                    var matchLabel = "Match existing";
+                    if (!string.IsNullOrEmpty(JsonUi.Str(a, "matched_nickname")))
+                        matchLabel = "Match: " + JsonUi.Str(a, "matched_nickname");
+                    actionBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = matchLabel,
+                        Tag = "match",
+                        IsSelected = action == "match",
+                        IsEnabled = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number,
+                    });
+                    if (actionBox.SelectedIndex < 0) actionBox.SelectedIndex = 0;
+
+                    var nickBox = new TextBox { Header = "Account nickname", Text = nick };
+                    var stack = new StackPanel { Spacing = 6 };
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = $"{fname} · {kind} · {JsonUi.Str(a, "transactions_found")} txns" +
+                               (string.IsNullOrEmpty(JsonUi.Str(a, "ledger_balance")) ? "" : $" · bal ${JsonUi.Str(a, "ledger_balance")}"),
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        TextWrapping = TextWrapping.Wrap,
+                    });
+                    if (!string.IsNullOrEmpty(reasons))
+                        stack.Children.Add(new TextBlock { Text = reasons, Opacity = 0.65, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+                    stack.Children.Add(entityBox);
+                    stack.Children.Add(actionBox);
+                    stack.Children.Add(nickBox);
+                    row.Child = stack;
+                    SmartAccountsPanel.Children.Add(row);
+                    _smartAccountRows.Add((fi, sk, entityBox, actionBox, nickBox));
+                }
+            }
+        }
+    }
+
+    private string BuildPlanJsonFromUi()
+    {
+        if (string.IsNullOrEmpty(_smartPlanJson))
+            throw new InvalidOperationException("Run Analyze & map first.");
+        using var doc = JsonDocument.Parse(_smartPlanJson);
+        var root = doc.RootElement.Clone();
+        // Rebuild plan with UI overrides via Dictionary serialization
+        var plan = new Dictionary<string, object?>();
+        foreach (var p in root.EnumerateObject())
+        {
+            if (p.Name is "entities" or "sources") continue;
+            plan[p.Name] = JsonSerializer.Deserialize<object>(p.Value.GetRawText());
+        }
+
+        var entities = new List<Dictionary<string, object?>>();
+        foreach (var (key, typeBox, nameBox) in _smartEntityRows)
+        {
+            var et = "personal";
+            if (typeBox.SelectedItem is ComboBoxItem ti && ti.Tag is string t)
+                et = t;
+            int? profileId = null;
+            if (root.TryGetProperty("entities", out var ents))
+            {
+                foreach (var e in ents.EnumerateArray())
+                {
+                    if (JsonUi.Str(e, "key") == key && e.TryGetProperty("profile_id", out var pid) && pid.ValueKind == JsonValueKind.Number)
+                        profileId = pid.GetInt32();
+                }
+            }
+            // Creating when name/type changed from existing
+            var action = profileId is null ? "create" : "use_existing";
+            // If user changed type to business and profile was personal, force create
+            if (root.TryGetProperty("entities", out var ents2))
+            {
+                foreach (var e in ents2.EnumerateArray())
+                {
+                    if (JsonUi.Str(e, "key") != key) continue;
+                    var oldEt = JsonUi.Str(e, "entity_type");
+                    if (!string.Equals(oldEt, et, StringComparison.OrdinalIgnoreCase))
+                    {
+                        action = "create";
+                        profileId = null;
+                    }
+                    else
+                        action = JsonUi.Str(e, "action", action);
+                }
+            }
+            entities.Add(new Dictionary<string, object?>
+            {
+                ["key"] = key,
+                ["entity_type"] = et,
+                ["display_name"] = nameBox.Text?.Trim() is { Length: > 0 } n ? n : (et == "business" ? "Business" : "Personal"),
+                ["action"] = action,
+                ["profile_id"] = profileId,
+            });
+        }
+        plan["entities"] = entities;
+
+        var sources = new List<Dictionary<string, object?>>();
+        if (root.TryGetProperty("sources", out var srcArr))
+        {
+            foreach (var src in srcArr.EnumerateArray())
+            {
+                var fi = JsonUi.Int(src, "file_index", 0);
+                var accounts = new List<Dictionary<string, object?>>();
+                foreach (var a in src.GetProperty("accounts").EnumerateArray())
+                {
+                    var sk = JsonUi.Str(a, "source_key");
+                    var row = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, object?>>(a.GetRawText())
+                               ?? new Dictionary<string, object?>();
+                    if (row.EntityBox is not null)
+                    {
+                        if (row.EntityBox.SelectedItem is ComboBoxItem ei && ei.Tag is string ek)
+                            dict["entity_key"] = ek;
+                        if (row.ActionBox.SelectedItem is ComboBoxItem ai && ai.Tag is string act)
+                            dict["action"] = act;
+                        if (!string.IsNullOrWhiteSpace(row.NickBox.Text))
+                            dict["suggested_nickname"] = row.NickBox.Text.Trim();
+                    }
+                    accounts.Add(dict);
+                }
+                sources.Add(new Dictionary<string, object?>
+                {
+                    ["file_index"] = fi,
+                    ["filename"] = JsonUi.Str(src, "filename"),
+                    ["accounts"] = accounts,
+                });
+            }
+        }
+        plan["sources"] = sources;
+        return JsonSerializer.Serialize(plan);
+    }
+
+    private async void SmartImportCommit_Click(object sender, RoutedEventArgs e)
+    {
+        ErrorBar.IsOpen = false;
+        SuccessBar.IsOpen = false;
+        ResultText.Text = "";
+        try
+        {
+            if (_pendingFiles.Count == 0)
+                throw new InvalidOperationException("No files queued.");
+            var planJson = BuildPlanJsonFromUi();
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var streams = new List<(Stream Stream, string FileName)>();
+            var opened = new List<IDisposable>();
+            try
+            {
+                foreach (var f in _pendingFiles)
+                {
+                    var s = await f.OpenStreamForReadAsync();
+                    opened.Add(s);
+                    streams.Add((s, f.Name));
+                }
+                var sign = "bank";
+                if (SignBox.SelectedItem is ComboBoxItem si && si.Tag is string st)
+                    sign = st;
+                var res = await api.SmartImportCommitAsync(
+                    planJson,
+                    streams,
+                    sign,
+                    AutoCatBox.IsChecked == true);
+                ResultText.Text =
+                    JsonUi.Str(res, "summary") + "\n" +
+                    JsonUi.Str(res, "hint") + "\n" +
+                    $"New transactions: {JsonUi.Str(res, "transactions_created")}";
+                if (res.TryGetProperty("results", out var rr) && rr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var r in rr.EnumerateArray().Take(20))
+                    {
+                        ResultText.Text += $"\n· {JsonUi.Str(r, "filename")} · " +
+                            $"{JsonUi.Str(r, "format")} · +{JsonUi.Str(r, "transactions_created", "0")}";
+                        if (!string.IsNullOrEmpty(JsonUi.Str(r, "error")) && JsonUi.Str(r, "error") is not ("?" or "—"))
+                            ResultText.Text += $" · err {JsonUi.Str(r, "error")}";
+                    }
+                }
+                SuccessBar.Title = "Books updated";
+                SuccessBar.Message = "Smart import finished. Open Home for Safe to spend.";
+                SuccessBar.IsOpen = true;
+                await LoadAsync();
+            }
+            finally
+            {
+                foreach (var d in opened)
+                    try { d.Dispose(); } catch { /* ignore */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
     }
 
     private async void PickCsv_Click(object sender, RoutedEventArgs e)

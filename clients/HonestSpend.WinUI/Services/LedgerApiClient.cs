@@ -1155,6 +1155,44 @@ public sealed class LedgerApiClient : IDisposable
         return await ReadJsonAsync(r, "api/import/ofx/preview", ct);
     }
 
+    /// <summary>Analyze a batch of bank downloads → personal/business + account map plan.</summary>
+    public async Task<JsonElement> SmartImportPlanAsync(
+        IReadOnlyList<(Stream Stream, string FileName)> files,
+        CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        foreach (var (stream, fileName) in files)
+        {
+            var sc = new StreamContent(stream);
+            sc.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(sc, "files", fileName);
+        }
+        var r = await _http.PostAsync("api/import/smart/plan", content, ct);
+        return await ReadJsonAsync(r, "api/import/smart/plan", ct);
+    }
+
+    /// <summary>Commit reviewed smart import plan with the same file batch.</summary>
+    public async Task<JsonElement> SmartImportCommitAsync(
+        string planJson,
+        IReadOnlyList<(Stream Stream, string FileName)> files,
+        string amountSign = "bank",
+        bool autoCategorize = true,
+        CancellationToken ct = default)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(planJson), "plan_json");
+        content.Add(new StringContent(amountSign), "amount_sign");
+        content.Add(new StringContent(autoCategorize.ToString().ToLowerInvariant()), "auto_categorize");
+        foreach (var (stream, fileName) in files)
+        {
+            var sc = new StreamContent(stream);
+            sc.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+            content.Add(sc, "files", fileName);
+        }
+        var r = await _http.PostAsync("api/import/smart/commit", content, ct);
+        return await ReadJsonAsync(r, "api/import/smart/commit", ct);
+    }
+
     public async Task<JsonElement> ImportOfxAsync(
         Stream fileStream,
         string fileName,

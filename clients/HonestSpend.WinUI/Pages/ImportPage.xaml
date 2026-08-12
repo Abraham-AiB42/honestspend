@@ -97,12 +97,37 @@
                     </StackPanel>
                     <TextBlock x:Name="CsvPathText" Opacity="0.85" TextWrapping="Wrap" Text="No file selected" />
                     <ListView x:Name="PendingFilesList" MaxHeight="140" SelectionMode="None" />
-                    <Button Content="Preview" Click="PreviewCsv_Click" />
-                    <TextBlock x:Name="PreviewText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+
+                    <!-- Smart mapping: personal vs business + accounts -->
+                    <Border x:Name="SmartPlanPanel" Visibility="Collapsed"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="10" Padding="14">
+                        <StackPanel Spacing="10">
+                            <TextBlock FontWeight="SemiBold" Text="Smart setup — map your books" />
+                            <TextBlock x:Name="SmartPlanSummary" Opacity="0.85" TextWrapping="Wrap" />
+                            <TextBlock x:Name="SmartPlanHint" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                            <TextBlock FontWeight="SemiBold" Text="Who owns this money?" Margin="0,4,0,0" />
+                            <StackPanel x:Name="SmartEntitiesPanel" Spacing="8" />
+                            <TextBlock FontWeight="SemiBold" Text="Accounts found in your downloads" Margin="0,8,0,0" />
+                            <StackPanel x:Name="SmartAccountsPanel" Spacing="8" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                <Button Content="Looks good — import everything"
+                                        Click="SmartImportCommit_Click"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                <Button Content="Re-analyze" Click="SmartImportPlan_Click" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Import" Click="ImportCsv_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Analyze &amp; map (recommended)" Click="SmartImportPlan_Click"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Preview only" Click="PreviewCsv_Click" />
+                        <Button Content="Import without mapping" Click="ImportCsv_Click" />
                         <Button Content="Import PDF statement" Click="ImportPdf_Click" />
                     </StackPanel>
+                    <TextBlock x:Name="PreviewText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <TextBlock x:Name="ResultText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <StackPanel x:Name="NextStepsPanel" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
                         <Button x:Name="SetBooksFromBankBtn" Content="Set Safe to spend from bank"

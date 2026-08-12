@@ -4150,6 +4150,71 @@ def import_inbox_process(body: InboxProcessIn, db: Session = Depends(get_db)):
     )
 
 
+@app.post("/api/import/smart/plan")
+async def import_smart_plan(
+    files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+):
+    """Analyze a batch of bank downloads → personal/business + account mapping plan."""
+    from honestspend.services.paths_safe import enforce_upload_size, safe_filename
+    from honestspend.services.smart_import import build_smart_plan
+
+    if not files:
+        raise HTTPException(400, "Upload one or more bank files")
+    batch: list[tuple[str, bytes]] = []
+    for f in files:
+        content = await f.read()
+        try:
+            enforce_upload_size(content)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        batch.append((safe_filename(f.filename, default="download.bin"), content))
+    try:
+        return build_smart_plan(db, batch)
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/import/smart/commit")
+async def import_smart_commit(
+    plan_json: str = Form(...),
+    files: list[UploadFile] = File(...),
+    auto_categorize: bool = Form(True),
+    amount_sign: str = Form("bank"),
+    db: Session = Depends(get_db),
+):
+    """Commit user-reviewed smart import plan with the same file batch."""
+    import json
+
+    from honestspend.services.paths_safe import enforce_upload_size, safe_filename
+    from honestspend.services.smart_import import commit_smart_plan
+
+    try:
+        plan = json.loads(plan_json)
+    except json.JSONDecodeError as e:
+        raise HTTPException(400, f"Invalid plan_json: {e}") from e
+    batch: list[tuple[str, bytes]] = []
+    for f in files:
+        content = await f.read()
+        try:
+            enforce_upload_size(content)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from e
+        batch.append((safe_filename(f.filename, default="download.bin"), content))
+    if len(batch) == 0:
+        raise HTTPException(400, "Upload the same bank files with the plan")
+    try:
+        return commit_smart_plan(
+            db,
+            plan=plan,
+            files=batch,
+            auto_categorize=auto_categorize,
+            amount_sign=amount_sign,
+        )
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.post("/api/import/ofx/preview")
 async def import_ofx_preview(file: UploadFile = File(...)):
     """Preview OFX/QFX transactions without writing."""
