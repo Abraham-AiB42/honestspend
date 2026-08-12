@@ -5,6 +5,7 @@ using HonestSpend_WinUI.Helpers;
 using HonestSpend_WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -37,6 +38,8 @@ public sealed partial class FirstRunPage : Page
     private string _storagePath = "";
     private readonly List<(string Kind, string Label, string Path)> _storageCandidates = new();
     private TextBox? _customStorageBox;
+    private TextBlock? _storageSelectedBanner;
+    private int _storageRenderGen;
 
     // Security phase
     private string _securityMode = "none";
@@ -191,11 +194,83 @@ public sealed partial class FirstRunPage : Page
                 _powerModules.Add((id, JsonUi.Str(m, "title", id), JsonUi.Str(m, "blurb")));
             }
         }
+        // Keep books folder choice visible across steps / after Back
+        if (st.TryGetProperty("payload", out var pl) && pl.ValueKind == JsonValueKind.Object)
+        {
+            var sp = JsonUi.Str(pl, "storage_path");
+            if (!string.IsNullOrWhiteSpace(sp) && sp is not "—" and not "?")
+                _storagePath = sp.Trim();
+            var sk = JsonUi.Str(pl, "storage_kind");
+            if (!string.IsNullOrWhiteSpace(sk) && sk is not "—" and not "?")
+                _storageKind = sk.Trim();
+        }
+        if (string.IsNullOrWhiteSpace(_storagePath) && !string.IsNullOrWhiteSpace(AppConfig.DataDir))
+            _storagePath = AppConfig.DataDir!.Trim();
         if (_phase == "done")
         {
             AppState.ShowSetupNav = false;
             NotifyShellChrome();
         }
+    }
+
+    private string ResolvedBooksPath()
+    {
+        if (!string.IsNullOrWhiteSpace(_storagePath))
+            return _storagePath.Trim();
+        if (!string.IsNullOrWhiteSpace(AppConfig.DataDir))
+            return AppConfig.DataDir!.Trim();
+        return StorageLocationService.DefaultLocalPath();
+    }
+
+    private void SetWizardBusy(bool busy, string? status = null)
+    {
+        _loading = busy;
+        try
+        {
+            var allowBack = !busy && _phase is not ("welcome" or "done");
+            BackBtn.IsEnabled = allowBack;
+            NextBtn.IsEnabled = !busy;
+            if (SkipBtn is not null)
+                SkipBtn.IsEnabled = !busy;
+        }
+        catch { /* ignore */ }
+        if (status is not null)
+            MsgText.Text = status;
+    }
+
+    /// <summary>Books location card shown after storage is chosen (security + later).</summary>
+    private void AddBooksLocationBanner(string? leading = null)
+    {
+        var path = ResolvedBooksPath();
+        Fields.Children.Add(new Border
+        {
+            Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 4),
+            Child = new StackPanel
+            {
+                Spacing = 2,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = leading ?? "Books folder",
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    },
+                    new TextBlock
+                    {
+                        Text = path,
+                        Opacity = 0.85,
+                        FontSize = 13,
+                        TextWrapping = TextWrapping.Wrap,
+                        IsTextSelectionEnabled = true,
+                    },
+                },
+            },
+        });
     }
 
     private static void NotifyShellChrome()
@@ -1040,21 +1115,36 @@ public sealed partial class FirstRunPage : Page
 
     private async Task RenderStorageAsync()
     {
+        var gen = ++_storageRenderGen;
         QuestionText.Text = "Where should your books live?";
         HintText.Text =
+            "Pick a suggested place, browse to any folder, or type a path. " +
             "Local is simplest. A cloud folder lets another PC of yours open the same books — " +
             "open one writer at a time. We never store bank passwords.";
         NextBtn.Content = "Use this location";
         Fields.Children.Clear();
+        _storageSelectedBanner = null;
+        _customStorageBox = null;
+
+        // Always show the live selection first (even while candidates load)
+        if (string.IsNullOrWhiteSpace(_storagePath))
+        {
+            _storageKind = "local";
+            _storagePath = StorageLocationService.DefaultLocalPath();
+        }
+        BuildStorageSelectedChrome();
 
         try
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
+            if (gen != _storageRenderGen) return;
             var info = await api.GetSetupStorageAsync();
+            if (gen != _storageRenderGen) return;
+
             _storageCandidates.Clear();
             var warn = JsonUi.Str(info, "warning");
-            if (!string.IsNullOrEmpty(warn) && warn != "—")
+            if (!string.IsNullOrEmpty(warn) && warn is not "—" and not "?")
             {
                 Fields.Children.Add(new TextBlock
                 {
@@ -1072,7 +1162,7 @@ public sealed partial class FirstRunPage : Page
                     var kind = JsonUi.Str(c, "kind", "local");
                     var label = JsonUi.Str(c, "label");
                     var path = JsonUi.Str(c, "path");
-                    if (string.IsNullOrEmpty(path) || path == "—") continue;
+                    if (string.IsNullOrEmpty(path) || path is "—" or "?") continue;
                     _storageCandidates.Add((kind, label, path));
                 }
             }
@@ -1082,11 +1172,22 @@ public sealed partial class FirstRunPage : Page
                 _storageCandidates.Add(("local", "This PC only (default)", def));
             }
 
-            if (string.IsNullOrEmpty(_storagePath))
+            // Prefer matching an existing selection to a candidate kind
+            foreach (var cand in _storageCandidates)
             {
-                _storageKind = _storageCandidates[0].Kind;
-                _storagePath = _storageCandidates[0].Path;
+                if (string.Equals(cand.Path, _storagePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _storageKind = cand.Kind;
+                    break;
+                }
             }
+
+            Fields.Children.Add(new TextBlock
+            {
+                Text = "Suggested places",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Margin = new Thickness(0, 4, 0, 0),
+            });
 
             foreach (var cand in _storageCandidates)
             {
@@ -1106,6 +1207,7 @@ public sealed partial class FirstRunPage : Page
                                 Opacity = 0.7,
                                 FontSize = 12,
                                 TextWrapping = TextWrapping.Wrap,
+                                IsTextSelectionEnabled = true,
                             },
                         },
                     },
@@ -1117,64 +1219,210 @@ public sealed partial class FirstRunPage : Page
                 };
                 if (string.Equals(_storagePath, path, StringComparison.OrdinalIgnoreCase))
                     btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-                btn.Click += (_, _) =>
-                {
-                    _storageKind = kind;
-                    _storagePath = path;
-                    _ = RenderStorageAsync();
-                };
+                // Do NOT full re-render (that raced with Back and felt frozen). Update selection in place.
+                btn.Click += (_, _) => SelectStoragePath(kind, path, refreshChrome: true);
                 Fields.Children.Add(btn);
             }
 
             Fields.Children.Add(new TextBlock
             {
-                Text = "Or custom folder path:",
+                Text = "Or choose any folder",
                 Margin = new Thickness(0, 8, 0, 0),
-                Opacity = 0.8,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
             });
+
+            var browseRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var browseBtn = new Button
+            {
+                Content = "Browse for folder…",
+                Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+            };
+            browseBtn.Click += async (_, _) => await BrowseStorageFolderAsync();
+            browseRow.Children.Add(browseBtn);
+            Fields.Children.Add(browseRow);
+
             _customStorageBox = new TextBox
             {
-                Header = "Custom path",
-                Text = _storageKind == "custom" ? _storagePath : "",
-                PlaceholderText = @"D:\Finance\HonestSpend",
+                Header = "Folder path (selected)",
+                Text = _storagePath,
+                PlaceholderText = @"C:\Users\you\OneDrive\HonestSpend\data",
+                Margin = new Thickness(0, 4, 0, 0),
             };
-            Fields.Children.Add(_customStorageBox);
-            var useCustom = new Button { Content = "Use custom path", Margin = new Thickness(0, 4, 0, 0) };
-            useCustom.Click += (_, _) =>
+            _customStorageBox.TextChanged += (_, _) =>
             {
                 var p = _customStorageBox?.Text?.Trim() ?? "";
                 if (string.IsNullOrEmpty(p)) return;
-                _storageKind = "custom";
-                _storagePath = p;
-                MsgText.Text = "Custom path selected.";
+                // Typing a path counts as custom unless it exactly matches a candidate
+                var match = _storageCandidates.FirstOrDefault(c =>
+                    string.Equals(c.Path, p, StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(match.Path))
+                {
+                    _storageKind = match.Kind;
+                    _storagePath = match.Path;
+                }
+                else
+                {
+                    _storageKind = "custom";
+                    _storagePath = p;
+                }
+                UpdateStorageSelectedBanner();
             };
-            Fields.Children.Add(useCustom);
+            Fields.Children.Add(_customStorageBox);
+            UpdateStorageSelectedBanner();
+            MsgText.Text = "Selected: " + _storagePath;
         }
         catch (Exception ex)
         {
-            // Offline fallback
-            _storageKind = "local";
-            _storagePath = StorageLocationService.DefaultLocalPath();
+            if (gen != _storageRenderGen) return;
+            if (string.IsNullOrWhiteSpace(_storagePath))
+            {
+                _storageKind = "local";
+                _storagePath = StorageLocationService.DefaultLocalPath();
+            }
             Fields.Children.Add(new TextBlock
             {
-                Text = $"Using default local folder (engine offline): {_storagePath}\n{ex.Message}",
+                Text =
+                    $"Engine offline — you can still pick a folder. Default: {_storagePath}\n{ex.Message}",
                 TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.85,
             });
+            if (_customStorageBox is null)
+            {
+                _customStorageBox = new TextBox
+                {
+                    Header = "Folder path",
+                    Text = _storagePath,
+                };
+                Fields.Children.Add(_customStorageBox);
+                var browseBtn = new Button { Content = "Browse for folder…", Margin = new Thickness(0, 4, 0, 0) };
+                browseBtn.Click += async (_, _) => await BrowseStorageFolderAsync();
+                Fields.Children.Add(browseBtn);
+            }
+            UpdateStorageSelectedBanner();
+        }
+    }
+
+    private void BuildStorageSelectedChrome()
+    {
+        _storageSelectedBanner = new TextBlock
+        {
+            Text = "Selected: " + ResolvedBooksPath(),
+            TextWrapping = TextWrapping.Wrap,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            IsTextSelectionEnabled = true,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        Fields.Children.Add(_storageSelectedBanner);
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "This path is what the next step will use for your books.",
+            Opacity = 0.7,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 8),
+        });
+    }
+
+    private void UpdateStorageSelectedBanner()
+    {
+        var path = ResolvedBooksPath();
+        if (_storageSelectedBanner is not null)
+            _storageSelectedBanner.Text = "Selected: " + path;
+        MsgText.Text = "Selected: " + path;
+    }
+
+    private void SelectStoragePath(string kind, string path, bool refreshChrome)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        _storageKind = kind;
+        _storagePath = path.Trim();
+        if (_customStorageBox is not null)
+            _customStorageBox.Text = _storagePath;
+        if (refreshChrome)
+            UpdateStorageSelectedBanner();
+        // Restyle candidate buttons without tearing down the page (avoids Back races)
+        foreach (var child in Fields.Children)
+        {
+            if (child is not Button btn || btn.Tag is not (string, string tagPath))
+                continue;
+            var selected = string.Equals(tagPath, _storagePath, StringComparison.OrdinalIgnoreCase);
+            if (selected)
+                btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            else
+                btn.ClearValue(FrameworkElement.StyleProperty);
+        }
+    }
+
+    private async Task BrowseStorageFolderAsync()
+    {
+        try
+        {
+            var picker = new FolderPicker();
+            picker.FileTypeFilter.Add("*");
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            var window = App.MainWindowInstance
+                ?? throw new InvalidOperationException("Main window not ready.");
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+            SelectStoragePath("custom", folder.Path, refreshChrome: true);
+            MsgText.Text = "Selected folder: " + folder.Path;
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = "Could not open folder picker: " + ex.Message;
+            ErrorBar.IsOpen = true;
         }
     }
 
     private async Task SaveStorageAndAdvanceAsync()
     {
-        if (_customStorageBox is not null &&
-            !string.IsNullOrWhiteSpace(_customStorageBox.Text) &&
-            _storageKind == "custom")
-            _storagePath = _customStorageBox.Text.Trim();
+        // Prefer live text box so typed path is never lost
+        if (_customStorageBox is not null && !string.IsNullOrWhiteSpace(_customStorageBox.Text))
+        {
+            var typed = _customStorageBox.Text.Trim();
+            var match = _storageCandidates.FirstOrDefault(c =>
+                string.Equals(c.Path, typed, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrEmpty(match.Path))
+            {
+                _storageKind = match.Kind;
+                _storagePath = match.Path;
+            }
+            else
+            {
+                _storageKind = "custom";
+                _storagePath = typed;
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(_storagePath))
             _storagePath = StorageLocationService.DefaultLocalPath();
 
-        // Apply on client first so engine restarts with FOS_DATA_DIR
-        await StorageLocationService.ApplyAndRestartEngineAsync(_storagePath, copyFromPrevious: true);
+        MsgText.Text = "Saving books folder…";
+
+        // Only restart engine when the folder actually changes (Back → re-Next was hanging here)
+        var previous = string.IsNullOrWhiteSpace(AppConfig.DataDir)
+            ? StorageLocationService.DefaultLocalPath()
+            : AppConfig.DataDir!.Trim();
+        var sameFolder = false;
+        try
+        {
+            sameFolder = string.Equals(
+                Path.GetFullPath(previous).TrimEnd('\\', '/'),
+                Path.GetFullPath(_storagePath).TrimEnd('\\', '/'),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch { /* treat as different */ }
+
+        if (sameFolder)
+        {
+            StorageLocationService.PersistDataDir(_storagePath);
+        }
+        else
+        {
+            MsgText.Text = "Moving books folder and restarting engine…";
+            await StorageLocationService.ApplyAndRestartEngineAsync(_storagePath, copyFromPrevious: true);
+        }
 
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync();
@@ -1205,12 +1453,13 @@ public sealed partial class FirstRunPage : Page
             });
             ApplyState(st);
         }
-        MsgText.Text = $"Books folder: {_storagePath}";
+        MsgText.Text = "Books folder: " + _storagePath;
         Render();
     }
 
     private async Task RenderSecurityAsync()
     {
+        _storageRenderGen++; // cancel any in-flight storage paint
         QuestionText.Text = "Protect this app on this device?";
         HintText.Text =
             "Optional. PIN / password / Windows Hello also encrypts your books at rest " +
@@ -1219,7 +1468,12 @@ public sealed partial class FirstRunPage : Page
         NextBtn.Content = "Continue";
         Fields.Children.Clear();
 
+        // Always show where books will live (the path chosen on the previous step)
+        AddBooksLocationBanner("Books will live here");
+        MsgText.Text = "Books folder: " + ResolvedBooksPath();
+
         _helloAvailable = await AppLockService.IsWindowsHelloAvailableAsync();
+        if (_phase != "security") return;
 
         void addMode(string id, string title, string detail, bool enabled = true)
         {
@@ -1487,8 +1741,12 @@ public sealed partial class FirstRunPage : Page
 
     private async void Back_Click(object sender, RoutedEventArgs e)
     {
+        ErrorBar.IsOpen = false;
+        if (_loading) return;
         try
         {
+            SetWizardBusy(true, "Going back…");
+
             if (_phase == "manual" && _manualStep > 0)
             {
                 CaptureManual();
@@ -1511,16 +1769,83 @@ public sealed partial class FirstRunPage : Page
                 return;
             }
 
-            using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
-            var st = await api.SetupAdvanceAsync("back");
-            ApplyState(st);
+            // Local step-back first so Back never freezes if the engine is restarting
+            // (storage ↔ security is the most common place users hit this).
+            if (_phase == "security")
+            {
+                try
+                {
+                    using var api = new LedgerApiClient();
+                    // Short path: if health is up, sync server; otherwise still move UI back
+                    if (await api.HealthAsync())
+                    {
+                        var st = await api.SetupAdvanceAsync("back");
+                        ApplyState(st);
+                    }
+                    else
+                    {
+                        _phase = "storage";
+                        _phaseTitle = "Where books live";
+                        _progress = Math.Max(5, _progress - 10);
+                    }
+                }
+                catch
+                {
+                    _phase = "storage";
+                    _phaseTitle = "Where books live";
+                }
+                MsgText.Text = "Selected: " + ResolvedBooksPath();
+                Render();
+                return;
+            }
+
+            if (_phase == "storage")
+            {
+                try
+                {
+                    using var api = new LedgerApiClient();
+                    if (await api.HealthAsync())
+                    {
+                        var st = await api.SetupAdvanceAsync("back");
+                        ApplyState(st);
+                    }
+                    else
+                    {
+                        _phase = "welcome";
+                        _phaseTitle = "Welcome";
+                    }
+                }
+                catch
+                {
+                    _phase = "welcome";
+                    _phaseTitle = "Welcome";
+                }
+                Render();
+                return;
+            }
+
+            using (var api = new LedgerApiClient())
+            {
+                await api.EnsureBackendAsync();
+                var st = await api.SetupAdvanceAsync("back");
+                ApplyState(st);
+            }
             Render();
         }
         catch (Exception ex)
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+            // Last resort: step UI back one known phase so the wizard never hard-sticks
+            if (_phase == "security")
+            {
+                _phase = "storage";
+                try { Render(); } catch { /* ignore */ }
+            }
+        }
+        finally
+        {
+            SetWizardBusy(false);
         }
     }
 
@@ -1530,7 +1855,7 @@ public sealed partial class FirstRunPage : Page
         if (_loading) return;
         try
         {
-            _loading = true;
+            SetWizardBusy(true);
             if (_phase == "done")
             {
                 Frame?.Navigate(typeof(HomePage));
@@ -1644,7 +1969,7 @@ public sealed partial class FirstRunPage : Page
         }
         finally
         {
-            _loading = false;
+            SetWizardBusy(false);
         }
     }
 
