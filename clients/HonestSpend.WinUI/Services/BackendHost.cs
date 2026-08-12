@@ -67,17 +67,25 @@ public sealed class BackendHost : IDisposable
         if (!TryStart())
         {
             // Race: peer won the port — accept if healthy and path matches.
-            await Task.Delay(800, ct);
+            await Task.Delay(400, ct);
             using var peer = new LedgerApiClient();
             if (await peer.HealthAsync(ct) && await DataDirMatchesAsync(peer, ct))
                 return true;
             return false;
         }
 
-        for (var i = 0; i < 40; i++)
+        // Fast poll: engine is usually up in <2s; fail by ~6s if process died
+        for (var i = 0; i < 30; i++)
         {
             ct.ThrowIfCancellationRequested();
-            await Task.Delay(500, ct);
+            if (_process is { HasExited: true })
+            {
+                LastError =
+                    "Engine process exited immediately. Reinstall package or run: " +
+                    "pip install -e \".[dev]\" in the HonestSpend repo venv.";
+                return false;
+            }
+            await Task.Delay(i < 10 ? 150 : 250, ct);
             using var c = new LedgerApiClient();
             if (await c.HealthAsync(ct) && await DataDirMatchesAsync(c, ct))
                 return true;

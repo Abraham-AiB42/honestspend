@@ -346,11 +346,11 @@ public sealed partial class FirstRunPage : Page
         {
             QuestionText.Text = "How do you want to connect money?";
             HintText.Text =
-                "Plaid uses your own free trial keys (up to 10 bank connections). " +
-                "CSV never needs bank passwords inside HonestSpend. " +
-                "Quick manual is fastest if you're in a hurry.";
+                "HonestSpend is built for real multi-account books — personal and business. " +
+                "Import bank files (CSV / OFX / QFX / PDF) including multi-account OFX downloads. " +
+                "Optional: link banks with your own Plaid keys.";
 
-            void addPath(string id, string title, string detail)
+            void addPath(string id, string title, string detail, bool accent = false)
             {
                 var btn = new Button
                 {
@@ -369,13 +369,34 @@ public sealed partial class FirstRunPage : Page
                     Tag = id,
                     Margin = new Thickness(0, 0, 0, 4),
                 };
+                if (accent)
+                    btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
                 btn.Click += async (_, _) => await ChoosePathAsync(id);
                 Fields.Children.Add(btn);
             }
 
-            addPath("plaid", "Plaid (your keys)", "Signup → paste client id + secret → Link banks. Best for ongoing sync.");
-            addPath("csv", "CSV / OFX imports", "Add cash accounts one-by-one with bank download guides. Free forever.");
-            addPath("manual", "Quick manual (2 min)", "One checking, optional card & bill. Import later.");
+            // Primary: real import path (multi-account ready)
+            addPath(
+                "csv",
+                "Import bank files (recommended)",
+                "CSV, OFX, QFX, PDF — including multi-account downloads (e.g. Canvas Credit Union all accounts). Drag-and-drop on Import. Free forever.",
+                accent: true);
+            addPath(
+                "plaid",
+                "Plaid bank link (your keys)",
+                "BYOK Plaid — ongoing sync. Signup → paste client id + secret → Link. Still free; we never bill for feeds.");
+            // Manual buried: half-setup is not the product
+            Fields.Children.Add(new TextBlock
+            {
+                Text = "Not recommended",
+                Opacity = 0.55,
+                FontSize = 12,
+                Margin = new Thickness(0, 12, 0, 4),
+            });
+            addPath(
+                "manual",
+                "Type balances only (limited)",
+                "Skips real history. Fine for a smoke test — not for running the household. Prefer Import.");
             NextBtn.IsEnabled = false;
             NextBtn.Content = "Pick a path above";
             return;

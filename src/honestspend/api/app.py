@@ -4168,28 +4168,56 @@ async def import_ofx_preview(file: UploadFile = File(...)):
 
 @app.post("/api/import/ofx")
 async def import_ofx_upload(
-    account_id: int = Form(...),
+    account_id: int | None = Form(None),
     auto_categorize: bool = Form(True),
     amount_sign: str = Form("bank"),
+    multi: bool = Form(False),
+    auto_create_accounts: bool = Form(True),
+    profile_id: int | None = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    """Import OFX/QFX. Set multi=true (or omit account_id) for multi-account bank files."""
     content = await file.read()
-    from honestspend.services.bank_ofx import import_ofx
+    from honestspend.services.bank_ofx import import_ofx, import_ofx_multi, preview_ofx
     from honestspend.services.paths_safe import enforce_upload_size, safe_filename
 
     try:
         enforce_upload_size(content)
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
-    if not db.get(Account, account_id):
-        raise HTTPException(404, "Account not found")
+
+    fname = safe_filename(file.filename, default="download.ofx")
+    # Auto multi when file has >1 account or caller asked
+    try:
+        peek = preview_ofx(content)
+    except Exception:
+        peek = {}
+    use_multi = multi or account_id is None or int(peek.get("account_count") or 1) > 1
+
+    if use_multi and (account_id is None or multi or int(peek.get("account_count") or 1) > 1):
+        try:
+            return import_ofx_multi(
+                db,
+                file_obj=content,
+                filename=fname,
+                auto_categorize=auto_categorize,
+                amount_sign=amount_sign,
+                apply_ledger_balance=True,
+                auto_create_accounts=auto_create_accounts,
+                profile_id=profile_id,
+            )
+        except Exception as e:
+            raise HTTPException(400, str(e)) from e
+
+    if not account_id or not db.get(Account, account_id):
+        raise HTTPException(404, "Account not found — pick a target account or use multi-account import")
     try:
         result = import_ofx(
             db,
             account_id=account_id,
             file_obj=content,
-            filename=safe_filename(file.filename, default="download.ofx"),
+            filename=fname,
             auto_categorize=auto_categorize,
             amount_sign=amount_sign,
             apply_ledger_balance=True,

@@ -57,24 +57,50 @@
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="12">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Bank CSV (pick file)" />
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Import bank files" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="Export from Chase, Amex, etc. Map to one HonestSpend account. Duplicates skipped." />
-                    <ComboBox x:Name="AccountBox" Header="Target account" HorizontalAlignment="Stretch" />
+                        Text="CSV, OFX, QFX, PDF, or Excel. Multi-account OFX (e.g. Canvas all accounts) creates/matches each account. Drop several files at once." />
+
+                    <!-- Drag-and-drop for any supported type -->
+                    <Border x:Name="DropZone"
+                            AllowDrop="True"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="2" CornerRadius="12" Padding="28"
+                            DragOver="DropZone_DragOver"
+                            Drop="DropZone_Drop"
+                            Tapped="DropZone_Tapped">
+                        <StackPanel Spacing="6" HorizontalAlignment="Center">
+                            <TextBlock Text="Drop bank files here" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" FontSize="16" />
+                            <TextBlock Opacity="0.75" HorizontalAlignment="Center" TextWrapping="Wrap"
+                                       Text="CSV · OFX · QFX · PDF · XLSX — one file or many" />
+                            <TextBlock x:Name="DropZoneHint" Opacity="0.55" FontSize="12"
+                                       HorizontalAlignment="Center" Text="or tap to browse" />
+                        </StackPanel>
+                    </Border>
+
+                    <ComboBox x:Name="AccountBox" Header="Target account (CSV / single-account files)"
+                              HorizontalAlignment="Stretch" />
                     <CheckBox x:Name="AutoCatBox" Content="Auto-categorize after import" IsChecked="True" />
-                    <TextBox x:Name="EndingBalanceBox" Header="Bank ending balance (optional)"
+                    <CheckBox x:Name="MultiOfxAutoCreateBox"
+                              Content="Multi-account OFX: auto-create missing accounts (match by bank ACCTID when known)"
+                              IsChecked="True" />
+                    <TextBox x:Name="EndingBalanceBox" Header="Bank ending balance (optional — CSV single-account)"
                              PlaceholderText="From CSV Balance column, or type statement balance"
                              HorizontalAlignment="Stretch" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Pick CSV…" Click="PickCsv_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Pick file(s)…" Click="PickAny_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Pick CSV…" Click="PickCsv_Click" />
                         <Button Content="Pick OFX/QFX…" Click="PickOfx_Click" />
-                        <Button Content="Pick PDF statement…" Click="PickPdf_Click" />
-                        <TextBlock x:Name="CsvPathText" VerticalAlignment="Center" Opacity="0.75" Text="No file" />
+                        <Button Content="Pick PDF…" Click="PickPdf_Click" />
                     </StackPanel>
-                    <Button Content="Preview mapping" Click="PreviewCsv_Click" />
+                    <TextBlock x:Name="CsvPathText" Opacity="0.85" TextWrapping="Wrap" Text="No file selected" />
+                    <ListView x:Name="PendingFilesList" MaxHeight="140" SelectionMode="None" />
+                    <Button Content="Preview" Click="PreviewCsv_Click" />
                     <TextBlock x:Name="PreviewText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Import file" Click="ImportCsv_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Import" Click="ImportCsv_Click" Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Import PDF statement" Click="ImportPdf_Click" />
                     </StackPanel>
                     <TextBlock x:Name="ResultText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />

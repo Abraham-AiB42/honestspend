@@ -1158,18 +1158,26 @@ public sealed class LedgerApiClient : IDisposable
     public async Task<JsonElement> ImportOfxAsync(
         Stream fileStream,
         string fileName,
-        int accountId,
+        int? accountId = null,
         string amountSign = "bank",
         bool autoCategorize = true,
+        bool multi = false,
+        bool autoCreateAccounts = true,
+        int? profileId = null,
         CancellationToken ct = default)
     {
         using var content = new MultipartFormDataContent();
         var streamContent = new StreamContent(fileStream);
         streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-ofx");
         content.Add(streamContent, "file", fileName);
-        content.Add(new StringContent(accountId.ToString()), "account_id");
+        if (accountId is int aid)
+            content.Add(new StringContent(aid.ToString()), "account_id");
         content.Add(new StringContent(amountSign), "amount_sign");
         content.Add(new StringContent(autoCategorize.ToString().ToLowerInvariant()), "auto_categorize");
+        content.Add(new StringContent(multi.ToString().ToLowerInvariant()), "multi");
+        content.Add(new StringContent(autoCreateAccounts.ToString().ToLowerInvariant()), "auto_create_accounts");
+        if (profileId is int pid)
+            content.Add(new StringContent(pid.ToString()), "profile_id");
         var r = await _http.PostAsync("api/import/ofx", content, ct);
         return await ReadJsonAsync(r, "api/import/ofx", ct);
     }

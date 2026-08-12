@@ -165,36 +165,18 @@ def parse_ofx_ledger_balance(text: str) -> dict[str, Any]:
     return out
 
 
-def parse_ofx_transactions(text: str) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Extract STMTTRN (and similar) blocks. Returns (rows, meta)."""
-    meta: dict[str, str] = {}
-    # account hints
-    for key in ("ACCTID", "BANKID", "ORG", "FID", "ACCTTYPE"):
-        m = re.search(rf"<{key}>([^<\r\n]+)", text, re.I)
-        if m:
-            meta[key.lower()] = m.group(1).strip()
-
-    ledger = parse_ofx_ledger_balance(text)
-    if ledger.get("balance") is not None:
-        meta["ledger_balance"] = str(ledger["balance"])
-        meta["ledger_source"] = str(ledger.get("source") or "ledger")
-        if ledger.get("as_of") is not None:
-            meta["ledger_as_of"] = ledger["as_of"].isoformat()
-
+def _stmttrn_rows_from_block(block: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    # Split on STMTTRN open (handles both <STMTTRN>…</STMTTRN> and SGML style)
-    parts = re.split(r"<STMTTRN>", text, flags=re.I)
+    parts = re.split(r"<STMTTRN>", block, flags=re.I)
     for part in parts[1:]:
-        # end at next closing or next major tag
-        block = re.split(r"</STMTTRN>|<STMTTRN>", part, maxsplit=1, flags=re.I)[0]
+        body = re.split(r"</STMTTRN>|<STMTTRN>", part, maxsplit=1, flags=re.I)[0]
         fields: dict[str, str] = {}
-        for m in _OPEN_VAL_RE.finditer(block):
+        for m in _OPEN_VAL_RE.finditer(body):
             tag = m.group(1).upper()
             val = m.group(2).strip()
             if val:
                 fields[tag] = val
-        # also XML-style <TAG>value</TAG>
-        for m in re.finditer(r"<([A-Za-z0-9._]+)>([^<]*)</\1>", block, re.I):
+        for m in re.finditer(r"<([A-Za-z0-9._]+)>([^<]*)</\1>", body, re.I):
             fields[m.group(1).upper()] = m.group(2).strip()
 
         amt = _parse_amount(fields.get("TRNAMT", ""))
@@ -219,42 +201,183 @@ def parse_ofx_transactions(text: str) -> tuple[list[dict[str, Any]], dict[str, s
                 "trntype": trntype,
             }
         )
-    return rows, meta
+    return rows
+
+
+def _meta_from_block(block: str) -> dict[str, str]:
+    meta: dict[str, str] = {}
+    for key in ("ACCTID", "BANKID", "ORG", "FID", "ACCTTYPE"):
+        m = re.search(rf"<{key}>([^<\r\n]+)", block, re.I)
+        if m:
+            meta[key.lower()] = m.group(1).strip()
+    ledger = parse_ofx_ledger_balance(block)
+    if ledger.get("balance") is not None:
+        meta["ledger_balance"] = str(ledger["balance"])
+        meta["ledger_source"] = str(ledger.get("source") or "ledger")
+        if ledger.get("as_of") is not None:
+            meta["ledger_as_of"] = ledger["as_of"].isoformat()
+    return meta
+
+
+def split_ofx_statement_blocks(text: str) -> list[str]:
+    """Split multi-account OFX into per-statement blocks (STMTRS / CCSTMTRS)."""
+    blocks: list[str] = []
+    for tag in ("STMTRS", "CCSTMTRS"):
+        # Prefer closed XML-style blocks
+        for m in re.finditer(rf"<{tag}\b[^>]*>(.*?)(?:</{tag}>)", text, re.I | re.S):
+            blocks.append(m.group(0))
+        if blocks:
+            continue
+        # SGML-style: open tag until next sibling or end
+        for m in re.finditer(
+            rf"<{tag}\b[^>]*>(.*?)(?=<{tag}\b|</BANKMSGSRSV1>|</CREDITCARDMSGSRSV1>|</OFX>|$)",
+            text,
+            re.I | re.S,
+        ):
+            blocks.append(m.group(0))
+    if not blocks:
+        blocks = [text]
+    # Dedupe identical slices
+    seen: set[str] = set()
+    unique: list[str] = []
+    for b in blocks:
+        key = b[:200] + str(len(b))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(b)
+    return unique
+
+
+def parse_ofx_accounts(text: str) -> list[dict[str, Any]]:
+    """Parse one OFX/QFX into zero-or-more bank accounts (Canvas-style multi-account files)."""
+    accounts: list[dict[str, Any]] = []
+    for block in split_ofx_statement_blocks(text):
+        rows = _stmttrn_rows_from_block(block)
+        meta = _meta_from_block(block)
+        ledger = parse_ofx_ledger_balance(block)
+        if not rows and ledger.get("balance") is None and not meta.get("acctid"):
+            continue
+        acct_type = (meta.get("accttype") or "").upper()
+        kind = "credit" if ("CREDIT" in acct_type or "CC" in acct_type or "CREDITCARD" in block.upper()[:80]) else "checking"
+        if "SAV" in acct_type:
+            kind = "savings"
+        if "MONEYMRKT" in acct_type or "MMA" in acct_type:
+            kind = "savings"
+        accounts.append(
+            {
+                "acctid": meta.get("acctid"),
+                "bank_id": meta.get("bankid"),
+                "org": meta.get("org"),
+                "accttype": meta.get("accttype"),
+                "kind": kind,
+                "external_key": ofx_external_account_key(meta.get("acctid")),
+                "transactions_found": len(rows),
+                "ledger_balance": str(ledger["balance"]) if ledger.get("balance") is not None else None,
+                "ledger_balance_as_of": meta.get("ledger_as_of"),
+                "rows": rows,
+                "meta": meta,
+                "ledger": ledger,
+                "block": block,
+            }
+        )
+    # Fallback: whole-file parse if splitter found nothing useful
+    if not accounts:
+        rows, meta = parse_ofx_transactions(text)
+        ledger = parse_ofx_ledger_balance(text)
+        accounts.append(
+            {
+                "acctid": meta.get("acctid"),
+                "bank_id": meta.get("bankid"),
+                "org": meta.get("org"),
+                "accttype": meta.get("accttype"),
+                "kind": "checking",
+                "external_key": ofx_external_account_key(meta.get("acctid")),
+                "transactions_found": len(rows),
+                "ledger_balance": str(ledger["balance"]) if ledger.get("balance") is not None else None,
+                "ledger_balance_as_of": meta.get("ledger_as_of"),
+                "rows": rows,
+                "meta": meta,
+                "ledger": ledger,
+                "block": text,
+            }
+        )
+    return accounts
+
+
+def parse_ofx_transactions(text: str) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Extract STMTTRN (and similar) blocks. Returns (rows, meta) for whole file / first account."""
+    accounts = parse_ofx_accounts(text)
+    if not accounts:
+        return [], {}
+    # If multi-account, flatten rows for legacy single-account callers but keep first meta
+    if len(accounts) == 1:
+        a = accounts[0]
+        return list(a["rows"]), dict(a["meta"])
+    # Multi: merge rows (import_ofx single-target still works poorly; prefer multi API)
+    all_rows: list[dict[str, Any]] = []
+    for a in accounts:
+        all_rows.extend(a["rows"])
+    meta = dict(accounts[0]["meta"])
+    meta["account_count"] = str(len(accounts))
+    return all_rows, meta
 
 
 def preview_ofx(file_obj: BinaryIO | TextIO | bytes | str | Path) -> dict[str, Any]:
     text = _read_text(file_obj)
-    rows, meta = parse_ofx_transactions(text)
-    ledger = parse_ofx_ledger_balance(text)
-    bal = ledger.get("balance")
+    accounts = parse_ofx_accounts(text)
+    total = sum(int(a.get("transactions_found") or 0) for a in accounts)
+    first = accounts[0] if accounts else {}
+    bal = first.get("ledger_balance")
+    account_summaries = [
+        {
+            "acctid": a.get("acctid"),
+            "bank_id": a.get("bank_id"),
+            "org": a.get("org"),
+            "accttype": a.get("accttype"),
+            "kind": a.get("kind"),
+            "external_key": a.get("external_key"),
+            "transactions_found": a.get("transactions_found"),
+            "ledger_balance": a.get("ledger_balance"),
+            "ledger_balance_as_of": a.get("ledger_balance_as_of"),
+            "sample": [
+                {
+                    "txn_date": r["txn_date"].isoformat(),
+                    "payee": r["payee"],
+                    "amount": str(r["amount"]),
+                    "fitid": r.get("fitid") or "",
+                }
+                for r in (a.get("rows") or [])[:6]
+            ],
+        }
+        for a in accounts
+    ]
+    multi = len(accounts) > 1
     return {
-        "ok": len(rows) > 0 or bal is not None,
-        "transactions_found": len(rows),
-        "account_hint": meta.get("acctid"),
-        "bank_id": meta.get("bankid"),
-        "org": meta.get("org"),
-        "ledger_balance": str(bal) if bal is not None else None,
-        "ledger_balance_as_of": meta.get("ledger_as_of"),
-        "ledger_source": ledger.get("source"),
-        "sample": [
-            {
-                "txn_date": r["txn_date"].isoformat(),
-                "payee": r["payee"],
-                "amount": str(r["amount"]),
-                "fitid": r.get("fitid") or "",
-            }
-            for r in rows[:12]
-        ],
+        "ok": total > 0 or any(a.get("ledger_balance") for a in accounts),
+        "transactions_found": total,
+        "account_count": len(accounts),
+        "multi_account": multi,
+        "account_hint": first.get("acctid"),
+        "bank_id": first.get("bank_id"),
+        "org": first.get("org"),
+        "ledger_balance": bal,
+        "ledger_balance_as_of": first.get("ledger_balance_as_of"),
+        "accounts": account_summaries,
+        "sample": account_summaries[0]["sample"] if account_summaries else [],
         "hint": (
-            (
+            f"Multi-account OFX: {len(accounts)} accounts, {total} transactions — import maps each ACCTID "
+            "(create/match HonestSpend accounts automatically)."
+            if multi
+            else (
                 "OFX/QFX ready — import maps TRNAMT; LEDGERBAL sets institution balance for Reconcile."
-                if bal is not None
+                if bal
                 else "OFX/QFX ready — import maps TRNAMT (bank sign: expenses usually negative)."
             )
-            if rows
+            if total
             else (
                 "Found ledger balance but no STMTTRN rows."
-                if bal is not None
+                if bal
                 else "No STMTTRN blocks found. Prefer CSV if this bank export is empty."
             )
         ),
@@ -438,3 +561,186 @@ def import_ofx(
         source="OFX/QFX",
     )
     return result
+
+
+def _map_ofx_kind(kind: str | None) -> str:
+    k = (kind or "checking").lower()
+    if k in ("credit", "credit_card", "card"):
+        return "credit"
+    if k in ("savings", "saving", "mma", "moneymarket"):
+        return "savings"
+    return "checking"
+
+
+def _find_or_create_ofx_account(
+    session: Session,
+    *,
+    stmt: dict[str, Any],
+    profile_id: int,
+    auto_create: bool,
+) -> Account | None:
+    from honestspend.db import Account as Acc
+
+    ext = stmt.get("external_key")
+    if ext:
+        existing = (
+            session.query(Acc)
+            .filter(Acc.external_id == ext)
+            .order_by(Acc.id.asc())
+            .first()
+        )
+        if existing:
+            return existing
+    # Match last-4 of ACCTID against nicknames / external
+    acctid = (stmt.get("acctid") or "").strip()
+    digits = re.sub(r"\D+", "", acctid)
+    tail = digits[-4:] if len(digits) >= 4 else ""
+    if tail:
+        for a in session.query(Acc).all():
+            nick = (a.nickname or "") + " " + (a.institution or "")
+            if tail in nick or (a.external_id and tail in str(a.external_id)):
+                if not a.external_id and ext:
+                    a.external_id = ext
+                    session.flush()
+                return a
+    if not auto_create:
+        return None
+    kind = _map_ofx_kind(stmt.get("kind"))
+    org = (stmt.get("org") or stmt.get("bank_id") or "Bank").strip()
+    label_tail = tail or (acctid[-6:] if acctid else "acct")
+    nickname = f"{org} · {kind} · …{label_tail}"[:80]
+    acct = Acc(
+        profile_id=profile_id,
+        kind=kind,
+        nickname=nickname,
+        institution=(org or None),
+        current_balance=Decimal("0"),
+        external_id=ext,
+        is_cash_for_ifpp=kind in ("checking", "savings", "cash"),
+    )
+    session.add(acct)
+    session.flush()
+    return acct
+
+
+def import_ofx_multi(
+    session: Session,
+    *,
+    file_obj: BinaryIO | TextIO | bytes | str | Path,
+    filename: str = "download.ofx",
+    auto_categorize: bool = True,
+    amount_sign: str = "bank",
+    apply_ledger_balance: bool = True,
+    auto_create_accounts: bool = True,
+    profile_id: int | None = None,
+    account_map: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    """Import multi-account OFX/QFX (e.g. Canvas CU all-accounts download).
+
+    account_map: optional {acctid or external_key -> account_id} overrides.
+    """
+    from honestspend.db import Profile
+
+    text = _read_text(file_obj)
+    statements = parse_ofx_accounts(text)
+    if not statements:
+        return {
+            "ok": False,
+            "account_count": 0,
+            "accounts": [],
+            "errors": ["No accounts or transactions found in OFX/QFX"],
+        }
+
+    if profile_id is None:
+        prof = session.query(Profile).order_by(Profile.id.asc()).first()
+        if not prof:
+            return {
+                "ok": False,
+                "account_count": 0,
+                "accounts": [],
+                "errors": ["No profile/entity — create Personal or Business first"],
+            }
+        profile_id = int(prof.id)
+
+    account_map = account_map or {}
+    per_account: list[dict[str, Any]] = []
+    total_created = 0
+    total_found = 0
+    errors: list[str] = []
+
+    for stmt in statements:
+        acctid = (stmt.get("acctid") or "").strip()
+        ext = stmt.get("external_key") or ""
+        target_id: int | None = None
+        if acctid and acctid in account_map:
+            target_id = int(account_map[acctid])
+        elif ext and ext in account_map:
+            target_id = int(account_map[ext])
+
+        if target_id:
+            acct = session.get(Account, target_id)
+        else:
+            acct = _find_or_create_ofx_account(
+                session,
+                stmt=stmt,
+                profile_id=profile_id,
+                auto_create=auto_create_accounts,
+            )
+        if not acct:
+            errors.append(f"No HonestSpend account for bank ACCTID {acctid or '?'}")
+            per_account.append(
+                {
+                    "acctid": acctid,
+                    "matched": False,
+                    "error": "no matching account",
+                    "transactions_found": stmt.get("transactions_found"),
+                }
+            )
+            continue
+
+        # Import via existing single-account path using this statement block only
+        res = import_ofx(
+            session,
+            account_id=int(acct.id),
+            file_obj=stmt.get("block") or text,
+            filename=filename,
+            auto_categorize=auto_categorize,
+            amount_sign=amount_sign,
+            apply_ledger_balance=apply_ledger_balance,
+        )
+        total_created += res.transactions_created
+        total_found += res.transactions_found
+        if res.errors:
+            errors.extend(res.errors[:3])
+        per_account.append(
+            {
+                "acctid": acctid,
+                "account_id": int(acct.id),
+                "nickname": acct.nickname,
+                "kind": acct.kind,
+                "matched": True,
+                "created_account": bool(ext and acct.external_id == ext and res.transactions_created >= 0),
+                "transactions_found": res.transactions_found,
+                "transactions_created": res.transactions_created,
+                "skipped_existing": res.skipped_existing,
+                "categorized": res.categorized,
+                "ledger_balance": res.ledger_balance,
+                "institution_balance_set": res.institution_balance_set,
+                "schedules_advanced": res.schedules_advanced,
+                "errors": res.errors[:5],
+            }
+        )
+
+    return {
+        "ok": total_created > 0 or total_found > 0 or any(a.get("matched") for a in per_account),
+        "multi_account": len(statements) > 1,
+        "account_count": len(statements),
+        "transactions_found": total_found,
+        "transactions_created": total_created,
+        "accounts": per_account,
+        "errors": errors[:12],
+        "hint": (
+            f"Imported {len(per_account)} bank account(s) from one file · "
+            f"{total_created} new transactions"
+        ),
+    }

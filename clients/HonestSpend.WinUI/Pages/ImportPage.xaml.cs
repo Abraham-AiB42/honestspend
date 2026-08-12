@@ -4,7 +4,9 @@ using HonestSpend_WinUI.Helpers;
 using HonestSpend_WinUI.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -17,6 +19,8 @@ public sealed partial class ImportPage : Page
     private StorageFile? _ofxFile;
     private StorageFile? _pdfFile;
     private StorageFile? _xlsxFile;
+    /// <summary>Queued files from multi-select or drag-drop (any supported type).</summary>
+    private readonly List<StorageFile> _pendingFiles = new();
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private int? _freezeAccountId;
@@ -312,37 +316,152 @@ public sealed partial class ImportPage : Page
         EndingBalanceBox.Text = "";
     }
 
+    private static readonly string[] AllImportExt =
+        { ".csv", ".txt", ".ofx", ".qfx", ".pdf", ".xlsx" };
+
+    private void ClearPrimaryFileSlots()
+    {
+        _csvFile = null;
+        _ofxFile = null;
+        _pdfFile = null;
+        _xlsxFile = null;
+    }
+
+    private void SetPrimaryFromFile(StorageFile file)
+    {
+        ClearPrimaryFileSlots();
+        var ext = (Path.GetExtension(file.Name) ?? "").ToLowerInvariant();
+        switch (ext)
+        {
+            case ".ofx":
+            case ".qfx":
+                _ofxFile = file;
+                break;
+            case ".pdf":
+                _pdfFile = file;
+                break;
+            case ".xlsx":
+                _xlsxFile = file;
+                break;
+            default:
+                _csvFile = file;
+                break;
+        }
+    }
+
+    private void RefreshPendingUi()
+    {
+        if (_pendingFiles.Count == 0)
+        {
+            CsvPathText.Text = "No file selected";
+            PendingFilesList.ItemsSource = null;
+            DropZoneHint.Text = "or tap to browse";
+            return;
+        }
+        CsvPathText.Text = _pendingFiles.Count == 1
+            ? _pendingFiles[0].Name
+            : $"{_pendingFiles.Count} files ready to import";
+        PendingFilesList.ItemsSource = _pendingFiles.Select(f => f.Name).ToList();
+        DropZoneHint.Text = $"{_pendingFiles.Count} file(s) · drop more or Import";
+        SetPrimaryFromFile(_pendingFiles[0]);
+    }
+
+    private void QueueFiles(IEnumerable<StorageFile> files)
+    {
+        foreach (var f in files)
+        {
+            var ext = (Path.GetExtension(f.Name) ?? "").ToLowerInvariant();
+            if (AllImportExt.Contains(ext) && _pendingFiles.All(x => x.Path != f.Path))
+                _pendingFiles.Add(f);
+        }
+        RefreshPendingUi();
+        ClearEndingBalanceBox();
+    }
+
+    private void DropZone_DragOver(object sender, DragEventArgs e)
+    {
+        e.AcceptedOperation = DataPackageOperation.Copy;
+        if (e.DragUIOverride is not null)
+        {
+            e.DragUIOverride.Caption = "Import bank file(s)";
+            e.DragUIOverride.IsCaptionVisible = true;
+        }
+        e.Handled = true;
+    }
+
+    private async void DropZone_Drop(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        ErrorBar.IsOpen = false;
+        try
+        {
+            if (!e.DataView.Contains(StandardDataFormats.StorageItems))
+                return;
+            var items = await e.DataView.GetStorageItemsAsync();
+            var files = items.OfType<StorageFile>().ToList();
+            if (files.Count == 0)
+                throw new InvalidOperationException("Drop files (not folders).");
+            QueueFiles(files);
+            if (_pendingFiles.Count > 0)
+                PreviewCsv_Click(sender, e);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void DropZone_Tapped(object sender, TappedRoutedEventArgs e)
+        => await PickAnyFilesAsync();
+
+    private async void PickAny_Click(object sender, RoutedEventArgs e)
+        => await PickAnyFilesAsync();
+
+    private async Task PickAnyFilesAsync()
+    {
+        var files = await PickFilesAsync(AllImportExt);
+        if (files.Count == 0) return;
+        _pendingFiles.Clear();
+        QueueFiles(files);
+    }
+
     private async void PickCsv_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(new[] { ".csv", ".txt" });
         if (file is null) return;
-        _csvFile = file;
-        _ofxFile = null;
-        _pdfFile = null;
-        ClearEndingBalanceBox();
-        CsvPathText.Text = file.Name;
+        _pendingFiles.Clear();
+        QueueFiles(new[] { file });
     }
 
     private async void PickOfx_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(new[] { ".ofx", ".qfx" });
         if (file is null) return;
-        _ofxFile = file;
-        _csvFile = null;
-        _pdfFile = null;
-        ClearEndingBalanceBox();
-        CsvPathText.Text = file.Name + " (OFX/QFX)";
+        _pendingFiles.Clear();
+        QueueFiles(new[] { file });
     }
 
     private async void PickPdf_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(new[] { ".pdf" });
         if (file is null) return;
-        _pdfFile = file;
-        _csvFile = null;
-        _ofxFile = null;
-        ClearEndingBalanceBox();
-        CsvPathText.Text = file.Name + " (PDF)";
+        _pendingFiles.Clear();
+        QueueFiles(new[] { file });
+    }
+
+    private async Task<IReadOnlyList<StorageFile>> PickFilesAsync(string[] extensions)
+    {
+        var picker = new FileOpenPicker();
+        foreach (var ext in extensions)
+            picker.FileTypeFilter.Add(ext);
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+        picker.ViewMode = PickerViewMode.List;
+        var window = App.MainWindowInstance
+            ?? throw new InvalidOperationException("Main window not ready.");
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+        var batch = await picker.PickMultipleFilesAsync();
+        return batch?.ToList() ?? new List<StorageFile>();
     }
 
     /// <summary>
@@ -440,6 +559,18 @@ public sealed partial class ImportPage : Page
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
+
+            // Multi-file / drag-drop queue: preview each
+            if (_pendingFiles.Count > 1)
+            {
+                var lines = new List<string> { $"{_pendingFiles.Count} files queued:" };
+                foreach (var f in _pendingFiles)
+                    lines.Add($"  · {f.Name}");
+                lines.Add("Tap Import to process all (OFX multi-account auto-maps; CSV/PDF need Target account).");
+                PreviewText.Text = string.Join("\n", lines);
+                return;
+            }
+
             if (_pdfFile is not null)
             {
                 using var stream = await _pdfFile.OpenStreamForReadAsync();
@@ -472,13 +603,25 @@ public sealed partial class ImportPage : Page
                 var ofxRes = await api.PreviewOfxAsync(ofxStream, _ofxFile.Name);
                 var ofxLines = new List<string>
                 {
-                    $"OFX/QFX · {JsonUi.Str(ofxRes, "transactions_found")} transactions" +
-                    (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "account_hint")) ? "" : $" · acct {JsonUi.Str(ofxRes, "account_hint")}") +
-                    (string.IsNullOrEmpty(JsonUi.Str(ofxRes, "ledger_balance")) ? "" : $" · ledger ${JsonUi.Str(ofxRes, "ledger_balance")}"),
+                    $"OFX/QFX · {JsonUi.Str(ofxRes, "transactions_found")} transactions · " +
+                    $"{JsonUi.Str(ofxRes, "account_count", "1")} account(s)",
                     JsonUi.Str(ofxRes, "hint"),
                 };
+                if (ofxRes.TryGetProperty("accounts", out var accs) && accs.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var a in accs.EnumerateArray())
+                    {
+                        ofxLines.Add(
+                            $"  · ACCTID {JsonUi.Str(a, "acctid")} · {JsonUi.Str(a, "kind")} · " +
+                            $"{JsonUi.Str(a, "transactions_found")} txns" +
+                            (string.IsNullOrEmpty(JsonUi.Str(a, "ledger_balance"))
+                                ? ""
+                                : $" · ledger ${JsonUi.Str(a, "ledger_balance")}"));
+                    }
+                }
                 var ofxEnd = JsonUi.Str(ofxRes, "ledger_balance");
-                if (!string.IsNullOrEmpty(ofxEnd) && ofxEnd != "—" && ofxEnd != "?")
+                if (!string.IsNullOrEmpty(ofxEnd) && ofxEnd is not ("—" or "?") &&
+                    JsonUi.Str(ofxRes, "account_count", "1") == "1")
                 {
                     ofxLines.Add($"Ending balance from file: ${ofxEnd}");
                     EndingBalanceBox.Text = ofxEnd;
@@ -922,82 +1065,150 @@ public sealed partial class ImportPage : Page
         HideNextSteps();
         try
         {
-            if (AccountBox.SelectedItem is not ComboBoxItem ai || ai.Tag is not int accountId)
-                throw new InvalidOperationException("Pick a target account.");
             var sign = "bank";
             if (SignBox.SelectedItem is ComboBoxItem si && si.Tag is string st)
                 sign = st;
 
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            if (_ofxFile is not null)
+
+            // Prefer multi-file queue (drag-drop / pick many)
+            var files = _pendingFiles.Count > 0
+                ? _pendingFiles.ToList()
+                : new List<StorageFile>();
+            if (files.Count == 0)
             {
-                using var stream = await _ofxFile.OpenStreamForReadAsync();
-                var ofxRes = await api.ImportOfxAsync(
-                    stream, _ofxFile.Name, accountId, sign, AutoCatBox.IsChecked == true);
-                var lines = new List<string>
+                if (_ofxFile is not null) files.Add(_ofxFile);
+                else if (_csvFile is not null) files.Add(_csvFile);
+                else if (_pdfFile is not null) files.Add(_pdfFile);
+                else if (_xlsxFile is not null) files.Add(_xlsxFile);
+            }
+            if (files.Count == 0)
+                throw new InvalidOperationException("Drop or pick bank file(s) first (CSV, OFX, QFX, PDF, XLSX).");
+
+            var allLines = new List<string>();
+            JsonElement? lastRes = null;
+            int? lastAccountId = null;
+
+            foreach (var file in files)
+            {
+                var ext = (Path.GetExtension(file.Name) ?? "").ToLowerInvariant();
+                allLines.Add($"—— {file.Name} ——");
+
+                if (ext is ".ofx" or ".qfx")
                 {
-                    $"OFX/QFX done · found {Prop(ofxRes, "transactions_found")} · created {Prop(ofxRes, "transactions_created")} · " +
-                    $"skipped {Prop(ofxRes, "skipped_existing")} · categorized {Prop(ofxRes, "categorized")}",
-                };
-                var ledger = Prop(ofxRes, "ledger_balance");
-                if (!string.IsNullOrEmpty(ledger))
-                {
-                    lines.Add(
-                        $"Bank ledger bal ${ledger}" +
-                        (string.IsNullOrEmpty(Prop(ofxRes, "drift")) ? "" : $" · books drift ${Prop(ofxRes, "drift")}") +
-                        (ofxRes.TryGetProperty("institution_balance_set", out var ibs) && ibs.ValueKind == JsonValueKind.True
-                            ? " · set for Reconcile"
-                            : ""));
+                    using var stream = await file.OpenStreamForReadAsync();
+                    // Multi-account OFX: omit account_id so engine maps/creates each ACCTID
+                    var ofxRes = await api.ImportOfxAsync(
+                        stream,
+                        file.Name,
+                        accountId: null,
+                        amountSign: sign,
+                        autoCategorize: AutoCatBox.IsChecked == true,
+                        multi: true,
+                        autoCreateAccounts: MultiOfxAutoCreateBox.IsChecked == true);
+                    lastRes = ofxRes;
+                    if (ofxRes.TryGetProperty("accounts", out var accts) && accts.ValueKind == JsonValueKind.Array)
+                    {
+                        allLines.Add(JsonUi.Str(ofxRes, "hint", "Multi-account OFX import done."));
+                        foreach (var a in accts.EnumerateArray())
+                        {
+                            allLines.Add(
+                                $"  · {JsonUi.Str(a, "nickname", JsonUi.Str(a, "acctid"))} · " +
+                                $"+{Prop(a, "transactions_created")} new · found {Prop(a, "transactions_found")}" +
+                                (string.IsNullOrEmpty(Prop(a, "ledger_balance")) ? "" : $" · ledger ${Prop(a, "ledger_balance")}"));
+                            if (a.TryGetProperty("account_id", out var aidEl) && aidEl.TryGetInt32(out var aid))
+                            {
+                                lastAccountId = aid;
+                                try
+                                {
+                                    await CompleteBankHonestyAfterImportAsync(api, aid, a, allLines);
+                                }
+                                catch { /* per-account trust best-effort */ }
+                            }
+                        }
+                        ApplyScheduleAdvanceFeedback(ofxRes, allLines);
+                    }
+                    else
+                    {
+                        // Single-account style response
+                        int accountId;
+                        if (AccountBox.SelectedItem is ComboBoxItem ai && ai.Tag is int id)
+                            accountId = id;
+                        else
+                            throw new InvalidOperationException("Pick a target account for single-account import.");
+                        allLines.Add(
+                            $"OFX/QFX · found {Prop(ofxRes, "transactions_found")} · created {Prop(ofxRes, "transactions_created")} · " +
+                            $"skipped {Prop(ofxRes, "skipped_existing")}");
+                        var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, ofxRes, allLines);
+                        ApplyScheduleAdvanceFeedback(ofxRes, allLines);
+                        lastAccountId = accountId;
+                        if (trusted) { /* ok */ }
+                    }
+                    continue;
                 }
-                var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, ofxRes, lines);
-                ApplyScheduleAdvanceFeedback(ofxRes, lines);
-                AppendNextStepLines(lines, ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
-                ResultText.Text = string.Join("\n", lines);
-                ShowNextSteps(ofxRes, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
-                MaybeOfferFreezeStatement(accountId, ofxRes);
-                return;
+
+                if (ext is ".pdf")
+                {
+                    if (AccountBox.SelectedItem is not ComboBoxItem pai || pai.Tag is not int pdfAccountId)
+                        throw new InvalidOperationException("Pick a target account for PDF import.");
+                    using var pdfStream = await file.OpenStreamForReadAsync();
+                    var pdfRes = await api.ImportStatementPdfAsync(
+                        pdfStream, file.Name, pdfAccountId, sign, AutoCatBox.IsChecked == true);
+                    lastRes = pdfRes;
+                    lastAccountId = pdfAccountId;
+                    allLines.Add(
+                        $"PDF · created {Prop(pdfRes, "transactions_created")} · found {Prop(pdfRes, "transactions_found")}");
+                    await CompleteBankHonestyAfterImportAsync(api, pdfAccountId, pdfRes, allLines);
+                    continue;
+                }
+
+                if (ext is ".xlsx")
+                {
+                    using var xStream = await file.OpenStreamForReadAsync();
+                    var slug = "personal";
+                    if (ProfileSlugBox.SelectedItem is ComboBoxItem psi && psi.Tag is string s)
+                        slug = s;
+                    var xRes = await api.ImportBudgetXlsxAsync(xStream, file.Name, slug);
+                    lastRes = xRes;
+                    allLines.Add($"Excel · {JsonUi.Str(xRes, "message", "imported")} · created {Prop(xRes, "transactions_created")}");
+                    continue;
+                }
+
+                // CSV / txt — needs target account
+                if (AccountBox.SelectedItem is not ComboBoxItem cai || cai.Tag is not int csvAccountId)
+                    throw new InvalidOperationException(
+                        "Pick a target account for CSV (or use multi-account OFX which auto-maps).");
+                decimal? instBal = files.Count == 1 ? ParseOptionalEndingBalanceOrThrow() : null;
+                using var streamCsv = await file.OpenStreamForReadAsync();
+                var res = await api.ImportBankCsvAsync(
+                    streamCsv,
+                    file.Name,
+                    csvAccountId,
+                    sign,
+                    AutoCatBox.IsChecked == true,
+                    institutionBalance: instBal);
+                lastRes = res;
+                lastAccountId = csvAccountId;
+                allLines.Add(
+                    $"CSV · scanned {Prop(res, "rows_scanned")} · created {Prop(res, "transactions_created")} · " +
+                    $"skipped {Prop(res, "skipped_existing")} · categorized {Prop(res, "categorized")}");
+                var trustedCsv = await CompleteBankHonestyAfterImportAsync(api, csvAccountId, res, allLines);
+                ApplyScheduleAdvanceFeedback(res, allLines);
+                if (trustedCsv) { /* ok */ }
             }
-            if (_csvFile is null) throw new InvalidOperationException("Pick a CSV or OFX/QFX first (or use Import PDF).");
-            // Typed box: parse with bank rules; fail loud if non-empty garbage (no silent drop)
-            decimal? instBal = ParseOptionalEndingBalanceOrThrow();
-            using var streamCsv = await _csvFile.OpenStreamForReadAsync();
-            var res = await api.ImportBankCsvAsync(
-                streamCsv,
-                _csvFile.Name,
-                accountId,
-                sign,
-                AutoCatBox.IsChecked == true,
-                institutionBalance: instBal);
-            var csvLines = new List<string>
+
+            await LoadAsync(); // refresh accounts after auto-create
+            ResultText.Text = string.Join("\n", allLines);
+            if (lastRes is JsonElement lr)
             {
-                $"CSV done · scanned {Prop(res, "rows_scanned")} · created {Prop(res, "transactions_created")} · " +
-                $"skipped existing {Prop(res, "skipped_existing")} · bad {Prop(res, "skipped_bad")} · " +
-                $"categorized {Prop(res, "categorized")}",
-            };
-            if (!string.IsNullOrEmpty(Prop(res, "ending_balance")) && Prop(res, "ending_balance") != "?")
-            {
-                csvLines.Add(
-                    $"Bank ending bal ${Prop(res, "ending_balance")}" +
-                    (string.IsNullOrEmpty(Prop(res, "balance_source")) ? "" : $" ({Prop(res, "balance_source")})") +
-                    (string.IsNullOrEmpty(Prop(res, "drift")) || Prop(res, "drift") == "?"
-                        ? ""
-                        : $" · books drift ${Prop(res, "drift")}"));
+                ShowNextSteps(lr, skipEnterEndingBal: true, skipSetBooksFromBank: true);
+                if (lastAccountId is int la)
+                    MaybeOfferFreezeStatement(la, lr);
             }
-            if (res.TryGetProperty("errors", out var errs) && errs.ValueKind == JsonValueKind.Array)
-            {
-                var list = errs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(8);
-                var joined = string.Join("; ", list!);
-                if (!string.IsNullOrEmpty(joined))
-                    csvLines.Add("Errors: " + joined);
-            }
-            // File bal (column/override) or typed-only → one-tap trust (same rule as OFX/PDF)
-            var csvTrusted = await CompleteBankHonestyAfterImportAsync(api, accountId, res, csvLines);
-            ApplyScheduleAdvanceFeedback(res, csvLines);
-            AppendNextStepLines(csvLines, res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
-            ResultText.Text = string.Join("\n", csvLines);
-            ShowNextSteps(res, skipEnterEndingBal: csvTrusted, skipSetBooksFromBank: csvTrusted);
-            MaybeOfferFreezeStatement(accountId, res);
+            SuccessBar.Title = "Import finished";
+            SuccessBar.Message = $"{files.Count} file(s) processed.";
+            SuccessBar.IsOpen = true;
         }
         catch (Exception ex)
         {

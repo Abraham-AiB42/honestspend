@@ -60,6 +60,9 @@ public sealed partial class HomePage : Page
         StatusText.Text = "Loading…";
         try
         {
+            LoadingRing.IsActive = true;
+            LoadingCard.Visibility = Visibility.Visible;
+            LoadingCardText.Text = "Starting local money engine…";
             EngineBar.IsOpen = false;
             if (App.Backend is not null)
             {
@@ -67,6 +70,8 @@ public sealed partial class HomePage : Page
                 if (!ok)
                 {
                     StatusText.Text = "Engine offline";
+                    LoadingCard.Visibility = Visibility.Collapsed;
+                    LoadingRing.IsActive = false;
                     EngineBar.Message = App.Backend.LastError
                         ?? "Could not start the local engine. If this is a zip install, keep the engine\\ folder next to the app.";
                     EngineBar.IsOpen = true;
@@ -74,6 +79,7 @@ public sealed partial class HomePage : Page
                 }
             }
 
+            LoadingCardText.Text = "Loading Safe to spend…";
             using var api = new LedgerApiClient();
 
             // Store packages: soft license check (does not block reading Home)
@@ -474,6 +480,15 @@ public sealed partial class HomePage : Page
             StatusText.Text = "Error";
             ErrorBar.Message = FriendlyLoadError(ex);
             ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            try
+            {
+                LoadingRing.IsActive = false;
+                LoadingCard.Visibility = Visibility.Collapsed;
+            }
+            catch { /* ignore */ }
         }
     }
 
