@@ -19,6 +19,7 @@ from honestspend.services.promo_installments import (
     apply_month_roll,
     create_promo_line,
     open_promo_totals,
+    update_promo_line,
 )
 from honestspend.services.statement_cycle import project_card_payment
 
@@ -497,6 +498,60 @@ def test_api_promo_line_patch_end_date_sets_source_user(client: TestClient):
     assert body["source"] == "user"
     assert body["end_date"] == "2027-01-15"
     assert Decimal(body["principal_remaining"]) == Decimal("400.00")
+
+
+def test_update_promo_line_active_false_without_zero_remaining(
+    tmp_path: Path, monkeypatch
+):
+    """PATCH active=false deactivates without requiring remaining=0."""
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    line = create_promo_line(
+        s,
+        card.id,
+        name="Parked plan",
+        principal_remaining=Decimal("400.00"),
+        monthly_payment=Decimal("40.00"),
+        start_date=date(2026, 8, 1),
+    )
+    s.flush()
+    assert line.active is True
+    assert line.principal_remaining == Decimal("400.00")
+
+    updated = update_promo_line(s, line.id, active=False)
+    s.commit()
+
+    assert updated.active is False
+    assert updated.principal_remaining == Decimal("400.00")
+    assert updated.source == "user"
+
+
+def test_api_promo_line_patch_active_false(client: TestClient):
+    """PromoLinePatch.active=false deactivates without zeroing remaining."""
+    import honestspend.api.app as app_mod
+
+    card_id = _seed_credit(app_mod)
+    r = client.post(
+        f"/api/accounts/{card_id}/promo-lines",
+        json={
+            "name": "Deactivate me",
+            "principal_remaining": "500.00",
+            "monthly_payment": "50.00",
+            "start_date": "2026-01-01",
+        },
+    )
+    assert r.status_code == 200, r.text
+    line_id = r.json()["id"]
+    assert r.json()["active"] is True
+
+    r = client.patch(
+        f"/api/accounts/{card_id}/promo-lines/{line_id}",
+        json={"active": False},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["active"] is False
+    assert Decimal(body["principal_remaining"]) == Decimal("500.00")
 
 
 def test_api_promo_create_and_roll_recomputes_cache(client: TestClient):

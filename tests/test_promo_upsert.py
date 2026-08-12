@@ -234,6 +234,63 @@ def test_take_incoming_updates_remaining(tmp_path: Path, monkeypatch):
     assert list_open_conflicts(s, account_id=card.id) == []
 
 
+def test_take_incoming_none_end_date_keeps_statement_end(
+    tmp_path: Path, monkeypatch
+):
+    """take_incoming: incoming end_date/apr None is unknown — do not wipe existing."""
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    # Statement line with known end/APR; user edits remaining → source=user.
+    first = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("348.12"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=date(2027, 1, 15),
+        source="statement",
+        apr=Decimal("0"),
+    )
+    s.flush()
+    update_promo_line(
+        s,
+        first["line"].id,
+        principal_remaining=Decimal("400.00"),
+    )
+    s.flush()
+    # Plaid conflict: different remaining, unknown end/APR.
+    r = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("348.12"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="plaid",
+        apr=None,
+    )
+    s.flush()
+    assert r["conflict"] is not None
+    conflict_id = r["conflict"]["id"]
+    line_before = s.get(PromoInstallmentLine, first["line"].id)
+    assert line_before is not None
+    assert line_before.end_date == date(2027, 1, 15)
+    assert line_before.apr == Decimal("0")
+
+    line = resolve_promo_conflict(s, conflict_id, action="take_incoming")
+    s.commit()
+
+    assert line.principal_remaining == Decimal("348.12")
+    assert line.monthly_payment == Decimal("29.01")
+    assert line.end_date == date(2027, 1, 15)
+    assert line.apr == Decimal("0")
+    assert line.source == "plaid"
+
+
 def test_plaid_cannot_silent_update_source_statement(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     card = _credit(s)

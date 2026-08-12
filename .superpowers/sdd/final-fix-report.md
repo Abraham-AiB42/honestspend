@@ -2,7 +2,7 @@
 
 **Status:** Complete  
 **Branch:** `main`  
-**Commit:** `02dc371` — `fix(smart-charge): D10 fingerprints, user-source edits, fail-closed ranker`
+**Commit:** `f00094a` — `fix(smart-charge): D10 fingerprints, user-source edits, fail-closed ranker`
 
 ## Must-fix
 
@@ -39,3 +39,38 @@ New tests: fingerprint `__intro__` collision; create_promo_line no-fp + statemen
 - Import Close/Esc is WinUI-only (no automated test).
 - Named card intros (not Intro 0%) still include `end_date` in the fingerprint.
 - Leftover 1.0.57 Store/Python/WinUI tree left unstaged.
+
+---
+
+## Follow-up (2026-08-12) — active patch + take_incoming None
+
+**Status:** Complete  
+**Branch:** `main`
+
+### Fixes
+
+| ID | Change | Result |
+|----|--------|--------|
+| F1 | Restore `if active is not None: line.active = bool(active)` in `update_promo_line` so `PromoLinePatch.active=false` deactivates without rem=0 | Fail→pass |
+| F2 | `resolve_promo_conflict` `take_incoming`: incoming `end_date`/`apr` None means unknown — keep existing (same rule as `_fields_differ` / silent apply); remaining/monthly still apply | Fail→pass |
+
+### Tests (TDD)
+
+First run (before impl): **3 failed**  
+- `test_update_promo_line_active_false_without_zero_remaining`  
+- `test_api_promo_line_patch_active_false`  
+- `test_take_incoming_none_end_date_keeps_statement_end`
+
+After impl:
+
+```
+pytest tests/test_promo_installments.py tests/test_promo_upsert.py \
+  tests/test_offers.py tests/test_plaid_promo_upsert.py \
+  tests/test_promo_statement_apply.py tests/test_promo_float_from_lines.py -q
+→ 51 passed, 1 warning
+```
+
+### Concerns
+
+- Explicit clear of end/APR via take_incoming is still impossible when payload sends null (by design: null = unknown).
+- 1.0.57 leftovers remain unstaged.

@@ -321,6 +321,8 @@ def update_promo_line(
         line.monthly_payment = pay
     if end_date is not _UNSET:
         line.end_date = end_date
+    if active is not None:
+        line.active = bool(active)
     line.source = "user"
     session.flush()
     if line.account_id is not None:

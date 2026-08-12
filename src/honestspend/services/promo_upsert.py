@@ -418,10 +418,18 @@ def resolve_promo_conflict(
         incoming = json.loads(row.incoming_values_json or "{}")
         prin = _q(incoming.get("principal_remaining", line.principal_remaining))
         monthly = _q(incoming.get("monthly_payment", line.monthly_payment))
+        # Incoming None end/APR means "unknown" — same as silent apply / _fields_differ.
         end_raw = incoming.get("end_date")
-        end = date.fromisoformat(end_raw) if end_raw else None
+        if end_raw:
+            end = date.fromisoformat(end_raw) if isinstance(end_raw, str) else end_raw
+        else:
+            end = line.end_date
         apr_raw = incoming.get("apr")
-        apr_d = _d(apr_raw) if apr_raw is not None else None
+        if apr_raw is not None:
+            apr_d = _d(apr_raw)
+        else:
+            line_apr = getattr(line, "apr", None)
+            apr_d = _d(line_apr) if line_apr is not None else None
         _apply_values(
             line,
             principal_remaining=prin,
