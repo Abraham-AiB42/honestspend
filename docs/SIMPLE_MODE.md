@@ -8,7 +8,7 @@
 |---------|---------|
 | **Home** | Safe to spend · soft until (when distinct) · **Next risk day** · status · Do this next · **Coming up** · wealth basics — no busy-day strip / day grid |
 | **Home · Coming up** | Cash-side bills / card payments / optional paychecks until **N calendar days (7–14)** or the **next 1–2 paydays** (auto when income known; Settings). Totals cover the **full window**; list shows top rows. Card payment on checking yes; Netflix on card no. **Owner draw** = outflow (never a payday). Payroll package legs (net + employer tax) both appear on pay day. Empty: “Nothing scheduled in this window — add a bill or paycheck in Add” |
-| **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
+| **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). Setup asks **due day + pay-from checking** only (statement in full). Close day / timing / books-balance stay on Full books |
 | **Add** | Wizards: cash, savings, card, loan, bill, income, business, child (bill: pay from · owner draw · amount steps — see [BUSINESS_ENTITY.md](./BUSINESS_ENTITY.md); payroll day lives on Full books **Bills**) |
 | **Get started** | First-run wizard (~2 min) |
 | **Can I buy?** | Pre-purchase check — **smart_charge** ranks interest-free float, then rewards (safe card can beat cash) |

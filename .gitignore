@@ -19,10 +19,11 @@ build/
 
 # Staged into WinUI project only during package-msix (do not commit)
 clients/HonestSpend.WinUI/engine-portable.zip
+clients/HonestSpend.WinUI/engine/
 packaging/msix/*.pfx
 packaging/msix/*.cer
 
 winui.path
 
-# Agent SDD scratch (briefs/reports/ledgers) — plans live under docs/superpowers/
+# Agent SDD scratch (briefs/reports/ledgers) -- plans live under docs/superpowers/
 .superpowers/

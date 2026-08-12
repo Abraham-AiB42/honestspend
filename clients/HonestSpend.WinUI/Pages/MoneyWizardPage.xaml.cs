@@ -35,7 +35,7 @@ public sealed partial class MoneyWizardPage : Page
     private CalendarDatePicker? _endDateBox;
     private CalendarDatePicker? _promoEndBox;
     private CheckBox? _promoBox;
-    private ComboBox? _autopayBox;
+
     private CheckBox? _certaintyBox;
     private TextBox? _vendorBox;
     private TextBox? _incomeSourceBox;
@@ -218,15 +218,29 @@ public sealed partial class MoneyWizardPage : Page
         }
         else
         {
-            QuestionText.Text = "Autopay & rewards";
-            HintText.Text = "Optional autopay reminder and category cash-back rates for card picking.";
-            _autopayBox = new ComboBox { Header = "Autopay" };
-            _autopayBox.Items.Add(new ComboBoxItem { Content = "None for now", Tag = "none" });
-            _autopayBox.Items.Add(new ComboBoxItem { Content = "Minimum only", Tag = "min" });
-            _autopayBox.Items.Add(new ComboBoxItem { Content = "Pay statement in full", Tag = "statement" });
-            _autopayBox.Items.Add(new ComboBoxItem { Content = "0% promo set-aside", Tag = "promo_sink" });
-            _autopayBox.SelectedIndex = 0;
-            FieldsPanel.Children.Add(_autopayBox);
+            QuestionText.Text = "Which checking pays this card?";
+            HintText.Text = "We pay the statement in full on the due day. Rewards rates are optional.";
+            _accountBox = new ComboBox
+            {
+                Header = "Which checking pays it?",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                PlaceholderText = "Checking / cash",
+            };
+            foreach (var a in _accounts)
+            {
+                var kind = JsonUi.Str(a, "kind", "").ToLowerInvariant();
+                var isCash = a.TryGetProperty("is_cash_for_ifpp", out var ic) && ic.ValueKind == JsonValueKind.True;
+                if (kind is not ("checking" or "savings" or "cash") && !isCash)
+                    continue;
+                _accountBox.Items.Add(new ComboBoxItem
+                {
+                    Content = JsonUi.Str(a, "nickname"),
+                    Tag = a.GetProperty("id").GetInt32(),
+                });
+            }
+            if (_accountBox.Items.Count > 0)
+                _accountBox.SelectedIndex = 0;
+            FieldsPanel.Children.Add(_accountBox);
             _rewardsUi = RewardsRatesUi.Build(compact: true);
             if (_rewardsRates is { Count: > 0 })
                 _rewardsUi.ApplyRates(_rewardsRates);
@@ -521,7 +535,7 @@ public sealed partial class MoneyWizardPage : Page
     private int _acctId;
     private string _tax = "1120S";
     private string _certainty = "fixed";
-    private string _autopay = "none";
+
     private bool _hasPromo;
     private DateTimeOffset? _promoEnd;
     private decimal _promoBal;
@@ -553,6 +567,11 @@ public sealed partial class MoneyWizardPage : Page
             if (_dueBox is null || double.IsNaN(_dueBox.Value))
                 throw new InvalidOperationException("We need a payment due day to keep interest off the table.");
         }
+        if (_kind == "card" && _step == 5)
+        {
+            if (_accountBox?.SelectedItem is not ComboBoxItem { Tag: int })
+                throw new InvalidOperationException("Pick which checking pays this card.");
+        }
         if (IsScheduleKind)
         {
             if (_step == 0 && string.IsNullOrWhiteSpace(_nameBox?.Text))
@@ -579,7 +598,7 @@ public sealed partial class MoneyWizardPage : Page
         if (_taxBox?.SelectedItem is ComboBoxItem { Tag: string tax }) _tax = tax;
         if (_certaintyBox is not null)
             _certainty = _certaintyBox.IsChecked == true ? "fixed" : "expected";
-        if (_autopayBox?.SelectedItem is ComboBoxItem { Tag: string ap }) _autopay = ap;
+
         if (_promoBox is not null) _hasPromo = _promoBox.IsChecked == true;
         if (_promoEndBox is not null) _promoEnd = _promoEndBox.Date;
         if (_nextDateBox is not null) _nextDate = _nextDateBox.Date;
@@ -643,13 +662,25 @@ public sealed partial class MoneyWizardPage : Page
             }
             var created = await api.CreateAccountAsync(body);
             var id = created.GetProperty("id").GetInt32();
-            if (_autopay != "none")
-                await api.SetAutopayAsync(id, _autopay);
+            if (_acctId == 0 && _accountBox?.SelectedItem is ComboBoxItem { Tag: int pay })
+                _acctId = pay;
+            await api.SetAutopayAsync(id, "statement");
+            if (_acctId > 0)
+            {
+                await api.PutAccountCycleConfigAsync(id, new Dictionary<string, object?>
+                {
+                    ["payment_due_day"] = _due,
+                    ["statement_close_day"] = 1,
+                    ["autopay_policy"] = "statement",
+                    ["payment_timing"] = "on_due",
+                    ["payment_funding_account_id"] = _acctId,
+                });
+            }
             if (_rewardsRates is { Count: > 0 })
                 await api.PutRewardsRatesAsync(id, _rewardsRates);
             else if (_rewardsUi is not null && _rewardsUi.HasRates())
                 await api.PutRewardsRatesAsync(id, _rewardsUi.CollectRates());
-            MsgText.Text = "Card added. We can prove interest-free charges when due day is set.";
+            MsgText.Text = "Card added. Statement is paid in full from the checking you picked.";
         }
         else if (_kind == "loan")
         {

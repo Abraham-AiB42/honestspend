@@ -83,11 +83,13 @@ A customer PC only needs the WinUI EXE + that zip.
 
 ### Default Store path (automatic)
 
-1. `package-msix.ps1` runs the bundle script and embeds **engine-portable.zip**.  
-2. On first `EnsureRunning`, **EngineBootstrap** extracts to  
-   **`%LocalAppData%\HonestSpend\engine\`**.  
-3. `BackendHost` starts `engine\python\python.exe -m honestspend.cli serve` (not system `python`).  
-4. Settings → **Install / repair engine** re-extracts if needed.  
+1. `package-msix.ps1` runs the bundle script, embeds **engine-portable.zip**, and
+   stages unpacked **`engine\python\`** (including **python314.dll**) into the MSIX.  
+2. `BackendHost` starts the **package-local** `engine\python\python.exe` (not system
+   `python`, not WindowsApps).  
+3. LocalAppData extract is **unpackaged zip only**. A packaged child cannot load
+   `python314.dll` from LocalAppData — Store 10.1.2.10.  
+4. Settings → **Install / repair engine** re-points at package-local `engine\python\`.  
 
 Still requires **runFullTrust** to spawn that private `python.exe` and write under LocalAppData / `.HonestSpend`.
 

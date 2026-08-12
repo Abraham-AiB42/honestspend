@@ -2250,7 +2250,7 @@ public sealed partial class FirstRunPage : Page
         QuestionText.Text = "Cards, loans & bills from your cash history";
         HintText.Text =
             "We skimmed payments from checking/savings. Confirm what to create. " +
-            "Cards need a payment plan; investments become recurring debits.";
+            "Home will ask when each card is due and which checking pays it.";
         NextBtn.Content = "Create selected & continue";
         _discoverItems.Clear();
 
@@ -2285,9 +2285,7 @@ public sealed partial class FirstRunPage : Page
                 if (string.IsNullOrEmpty(id) || id == "—")
                     id = Guid.NewGuid().ToString("N");
                 var selected = !(p.TryGetProperty("selected", out var sel) && sel.ValueKind == JsonValueKind.False);
-                var payDef = JsonUi.Str(p, "default_payment_option", "statement");
-                if (payDef == "—" || string.IsNullOrEmpty(payDef)) payDef = "statement";
-                _discoverItems[id] = (selected, payDef, p);
+                _discoverItems[id] = (selected, "statement", p);
 
                 var type = JsonUi.Str(p, "type");
                 var panel = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 10) };
@@ -2319,37 +2317,6 @@ public sealed partial class FirstRunPage : Page
                     Margin = new Thickness(28, 0, 0, 0),
                 });
 
-                if (type is "credit" or "loan")
-                {
-                    var payBox = new ComboBox
-                    {
-                        Header = "Payment plan",
-                        Tag = id,
-                        HorizontalAlignment = HorizontalAlignment.Left,
-                        MinWidth = 220,
-                        Margin = new Thickness(28, 0, 0, 0),
-                    };
-                    void addPay(string tag, string label, bool on)
-                    {
-                        var it = new ComboBoxItem { Content = label, Tag = tag };
-                        payBox.Items.Add(it);
-                        if (on) payBox.SelectedItem = it;
-                    }
-                    addPay("interest_saving", "Interest-saving (0% / float strategy)", payDef == "interest_saving");
-                    addPay("statement", "Statement balance", payDef == "statement");
-                    addPay("fixed", "Fixed payment", payDef == "fixed");
-                    addPay("minimum", "Minimum payment", payDef == "minimum");
-                    if (payBox.SelectedItem is null && payBox.Items.Count > 0)
-                        payBox.SelectedIndex = 0;
-                    payBox.SelectionChanged += (_, _) =>
-                    {
-                        if (payBox.Tag is string tid && payBox.SelectedItem is ComboBoxItem ci
-                            && ci.Tag is string opt && _discoverItems.TryGetValue(tid, out var cur))
-                            _discoverItems[tid] = (cur.Selected, opt, cur.Raw);
-                    };
-                    panel.Children.Add(payBox);
-                }
-
                 Fields.Children.Add(panel);
             }
         }
@@ -2367,7 +2334,7 @@ public sealed partial class FirstRunPage : Page
         var accepted = new List<Dictionary<string, object?>>();
         foreach (var kv in _discoverItems)
         {
-            var (sel, payOpt, raw) = kv.Value;
+            var (sel, _, raw) = kv.Value;
             if (!sel) continue;
             var type = JsonUi.Str(raw, "type");
             var row = new Dictionary<string, object?>
@@ -2380,7 +2347,7 @@ public sealed partial class FirstRunPage : Page
                 ["selected"] = true,
             };
             if (type is "credit" or "loan")
-                row["payment_option"] = payOpt ?? "statement";
+                row["payment_option"] = "statement";
             accepted.Add(row);
         }
 

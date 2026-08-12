@@ -45,7 +45,7 @@ if (-not $SkipEngine) {
 
 # 4) Install notes
 $notes = @"
-HonestSpend — Windows package (1.0.56)
+HonestSpend — Windows package (1.0.57)
 =====================================
 
 ONE-CLICK USE

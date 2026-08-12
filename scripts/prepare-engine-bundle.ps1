@@ -9,20 +9,20 @@
 #     pyproject.toml
 #     README_ENGINE.txt
 #
-# Also writes dist\engine-portable.zip for MSIX first-run extract
-#   â†’ %LocalAppData%\HonestSpend\engine\
+# Also writes dist\engine-portable.zip for unpackaged repair
+#   Store launch uses package-local engine\python\ (not LocalAppData extract).
 #
 # Usage (from repo root):
 #   .\scripts\prepare-engine-bundle.ps1
 #   .\scripts\prepare-engine-bundle.ps1 -Target "C:\path\to\publish\folder"
-#   .\scripts\prepare-engine-bundle.ps1 -PythonVersion 3.12.8
+#   .\scripts\prepare-engine-bundle.ps1 -PythonVersion 3.14.7
 #
 # Build machine still needs network once to download embeddable + wheels.
 # End-user machines need ZERO Python install.
 
 param(
     [string]$Target = "",
-    [string]$PythonVersion = "3.12.8",
+    [string]$PythonVersion = "3.14.7",
     [switch]$SkipZip,
     [switch]$ForceRedownload
 )
@@ -74,6 +74,13 @@ $pythonExe = Join-Path $PyHome "python.exe"
 if (-not (Test-Path $pythonExe)) {
     Write-Error "python.exe missing after extract: $PyHome"
 }
+$pythonDll = Get-ChildItem $PyHome -Filter "python3*.dll" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Length -gt 0 -and $_.Name -match '^python3[0-9]+\.dll$' } |
+    Select-Object -First 1
+if (-not $pythonDll) {
+    Write-Error "python3*.dll missing next to python.exe at $PyHome (Store 10.1.2.10: python3xx.dll was not found)"
+}
+Write-Host "  Embed runtime: $($pythonDll.Name) ($([math]::Round($pythonDll.Length/1MB, 1)) MB)" -ForegroundColor Green
 
 # --- 2. Enable site-packages + pip on embeddable ---
 # Default embeddable ships with import site disabled in pythonXX._pth
@@ -161,15 +168,30 @@ if (-not $SkipZip) {
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     Write-Host "  Zipping -> $zipPath ..." -ForegroundColor Cyan
     Compress-Archive -Path (Join-Path $Engine "*") -DestinationPath $zipPath -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zipCheck = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $hasDll = $false
+        $hasExe = $false
+        foreach ($e in $zipCheck.Entries) {
+            $n = $e.FullName.Replace("\", "/")
+            if ($n -match '(^|/)python/python\.exe$' -and $e.Length -gt 0) { $hasExe = $true }
+            if ($n -match '(^|/)python/python3[^/]*\.dll$' -and $e.Length -gt 0) { $hasDll = $true }
+        }
+        if (-not $hasExe -or -not $hasDll) {
+            Write-Error "engine-portable.zip missing python/python.exe + python3*.dll (Store 10.1.2.10)"
+        }
+    }
+    finally { $zipCheck.Dispose() }
     $zipNext = Join-Path $Target "engine-portable.zip"
     Copy-Item $zipPath $zipNext -Force
     $mb = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
-    Write-Host "  engine-portable.zip: $mb MB" -ForegroundColor Green
+    Write-Host "  engine-portable.zip: $mb MB (python.exe + python3*.dll verified)" -ForegroundColor Green
 }
 
 Write-Host ""
 Write-Host "Engine ready (self-contained)." -ForegroundColor Green
 Write-Host "  $pythonExe -m honestspend.cli serve"
 Write-Host "  End users: no system Python required."
-Write-Host "  Store: MSIX zip extracts to %LocalAppData%\HonestSpend\engine"
+Write-Host "  Store: package-local engine\python\  (zip is unpackaged repair only)"
 

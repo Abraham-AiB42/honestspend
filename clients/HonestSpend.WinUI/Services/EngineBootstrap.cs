@@ -4,9 +4,8 @@ using Windows.Storage;
 namespace HonestSpend_WinUI.Services;
 
 /// <summary>
-/// Ensures a runnable Python engine exists for Store/MSIX and zip installs.
-/// Prefers: Settings BackendRoot → sibling engine\ → %LocalAppData%\HonestSpend\engine
-/// (extracted from engine-portable.zip when needed).
+/// Resolves a runnable engine. Store packages use sibling engine\ only;
+/// unpackaged zips may extract engine-portable.zip to LocalAppData.
 /// </summary>
 public static class EngineBootstrap
 {
@@ -22,20 +21,19 @@ public static class EngineBootstrap
     public static string? EnsureEngineAvailable(out string message)
     {
         var existing = BackendHost.ResolveBackendRoot();
-        if (existing is not null)
+        if (existing is not null && BackendHost.IsAllowedEngineRoot(existing))
         {
             message = "Engine ready: " + existing;
             return existing;
         }
 
-        // Sibling / package-relative engine folder (unpackaged zip, fat MSIX)
         var baseDir = AppContext.BaseDirectory;
         foreach (var rel in new[] { "engine", Path.Combine("..", "engine") })
         {
             try
             {
                 var eng = Path.GetFullPath(Path.Combine(baseDir, rel));
-                if (BackendHost.LooksLikeEngine(eng))
+                if (BackendHost.IsRunnableEmbed(eng) && BackendHost.IsAllowedEngineRoot(eng))
                 {
                     PersistBackendRoot(eng);
                     message = "Engine found next to app: " + eng;
@@ -48,19 +46,25 @@ public static class EngineBootstrap
             }
         }
 
-        // Installable payload: engine-portable.zip next to EXE or under Assets
+        if (PackageInfo.IsPackaged)
+        {
+            message =
+                "This Store install is missing its private engine. Reinstall HonestSpend from the Store.";
+            return null;
+        }
+
         var zip = FindEnginePortableZip();
         if (zip is not null)
         {
             try
             {
                 message = ExtractPortableZip(zip, LocalEngineRoot);
-                if (BackendHost.LooksLikeEngine(LocalEngineRoot))
+                if (BackendHost.IsRunnableEmbed(LocalEngineRoot))
                 {
                     PersistBackendRoot(LocalEngineRoot);
                     return LocalEngineRoot;
                 }
-                message = "Extracted engine but it does not look complete: " + LocalEngineRoot;
+                message = "Extracted engine but python3xx.dll is missing: " + LocalEngineRoot;
                 return null;
             }
             catch (Exception ex)
@@ -70,7 +74,6 @@ public static class EngineBootstrap
             }
         }
 
-        // Already extracted previously
         if (BackendHost.LooksLikeEngine(LocalEngineRoot))
         {
             PersistBackendRoot(LocalEngineRoot);
@@ -79,7 +82,7 @@ public static class EngineBootstrap
         }
 
         message =
-            "No engine found. Store/zip installs need engine-portable.zip next to the app, " +
+            "No engine found. Unpackaged zips need engine\\ next to the app, " +
             "or Settings → Backend root pointing at a clone with .venv.";
         return null;
     }

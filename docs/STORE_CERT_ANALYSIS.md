@@ -78,6 +78,36 @@ Comment in tree already noted `.ico` → **E_POINTER / XAML load crash**. Same c
 
 ---
 
-## 4. What “already fixed” vs what cert actually tested
+## 4. Policy 10.1.2.10 — python312.dll not found at launch
+
+**Evidence (cert notes):** Functionality 10.1.2.10 on ASUS Expertbook / Windows 26100.7840:
+
+> The code execution cannot proceed because python312.dll was not found.
+
+This is the **Windows PE loader** dialog (not an in-app error). Testers treat it as “unusable / error at launch.”
+
+### Root cause
+
+The 1.0.56 Store package shipped **engine-portable.zip** and extracted it to `%LocalAppData%\HonestSpend\engine`, then `Process.Start`’d that `python.exe`.
+
+| Factor | Why it breaks |
+|--------|----------------|
+| Packaged child process | MSIX identity cannot load `python312.dll` from LocalAppData; loader reports **not found** even when the file exists |
+| `LooksLikeEngine` too loose | `python.exe` without the DLL, or `src/honestspend` only, counted as an engine |
+| `ResolvePython` PATH fallback | Bare `"python"` hits WindowsApps / incomplete 3.12 → same dialog |
+| Zip-only package | DLL was inside the zip, never a **package file** next to the launched exe |
+
+### Fix (repo now)
+
+- `package-msix.ps1` stages unpacked `engine\python\python314.dll` into the MSIX (package files)
+- Launch prefers package-local `engine\` over LocalAppData extract
+- `IsRunnableEmbed` requires a versioned `python3xx.dll` (not the `python3.dll` stub)
+- Working directory + `PATH` = the embeddable python folder; `PYTHONDONTWRITEBYTECODE=1`
+
+Resubmit must be a **new MSIX ≥ 1.0.57** built with `.\scripts\package-msix.ps1` (confirm log line `Packaged loose python314.dll`).
+
+---
+
+## 5. What “already fixed” vs what cert actually tested
 
 Cert tested **1.0.32.0**. Many launch/engine soft-fail improvements landed after that, but the **TitleBar ImageIconSource** and **scale-100 tiles** were still open until this analysis. Resubmit must use a **new MSIX** built after these fixes — not the same 1.0.32 binary.

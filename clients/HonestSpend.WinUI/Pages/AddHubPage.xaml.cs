@@ -18,7 +18,12 @@ public sealed partial class AddHubPage : Page
     }
 
     private void Bank_Click(object sender, RoutedEventArgs e)
-        => Frame?.Navigate(typeof(PlaidPage));
+    {
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("plaid");
+        else
+            Frame?.Navigate(typeof(PlaidPage));
+    }
 
     private void Import_Click(object sender, RoutedEventArgs e)
         => Frame?.Navigate(typeof(ImportPage));

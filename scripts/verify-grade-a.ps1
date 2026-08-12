@@ -1,4 +1,4 @@
-# Grade-A ship bar: pytest + northstar e2e + smoke + name-gate + package layout checks.
+﻿# Grade-A ship bar: pytest + northstar e2e + smoke + name-gate + package layout checks.
 # Usage (repo root):
 #   .\scripts\verify-grade-a.ps1
 #   .\scripts\verify-grade-a.ps1 -SkipPackageLayout
@@ -54,11 +54,11 @@ Step "private-name gate" {
 Step "version sync" {
     $init = Get-Content (Join-Path $Root "src\honestspend\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '1\.0\.56') { throw "__init__.py not 1.0.56" }
-    if ($pyproj -notmatch '1\.0\.56') { throw "pyproject.toml not 1.0.56" }
+    if ($init -notmatch '1\.0\.57') { throw "__init__.py not 1.0.57" }
+    if ($pyproj -notmatch '1\.0\.57') { throw "pyproject.toml not 1.0.57" }
     $iss = Get-Content (Join-Path $Root "packaging\HonestSpend.iss") -Raw
-    if ($iss -notmatch '1\.0\.56') { throw "HonestSpend.iss not 1.0.56" }
-    Write-Host "version 1.0.56 consistent"
+    if ($iss -notmatch '1\.0\.57') { throw "HonestSpend.iss not 1.0.57" }
+    Write-Host "version 1.0.57 consistent"
 }
 
 Step "north-star surface files" {
@@ -82,6 +82,20 @@ Step "north-star surface files" {
         if (-not (Test-Path $p)) { throw "missing $f" }
     }
     Write-Host "surface files present"
+}
+
+Step "store 10.1.2.10 python3xx.dll launch" {
+    $backend = Get-Content (Join-Path $Root "clients\HonestSpend.WinUI\Services\BackendHost.cs") -Raw
+    if ($backend -notmatch "IsRunnableEmbed") { throw "BackendHost missing IsRunnableEmbed" }
+    if ($backend -notmatch "python3\*\.dll") { throw "BackendHost missing python3*.dll check" }
+    if ($backend -match 'return "python";') { throw "BackendHost must not fall back to PATH python" }
+    $csproj = Get-Content (Join-Path $Root "clients\HonestSpend.WinUI\HonestSpend.WinUI.csproj") -Raw
+    if ($csproj -notmatch "python314\.dll") { throw "csproj must gate engine\\ on python314.dll" }
+    $msix = Get-Content (Join-Path $Root "scripts\package-msix.ps1") -Raw
+    if ($msix -notmatch "python314\.dll") { throw "package-msix.ps1 must require python314.dll" }
+    $prep = Get-Content (Join-Path $Root "scripts\prepare-engine-bundle.ps1") -Raw
+    if ($prep -notmatch 'PythonVersion = "3\.14\.') { throw "embeddable default must be current stable 3.14.x" }
+    Write-Host "Store launch path requires sibling python3*.dll (embed 3.14)"
 }
 
 if (-not $SkipPackageLayout) {

@@ -141,8 +141,8 @@ def build_rescue_plan(
                 "cost_estimate": "0",
                 "cost_unit": "late_fee_risk_unknown",
                 "reason": (
-                    f"Skip/delay this outflow in the IFPP horizon. "
-                    f"Only safe if vendor allows; mark notes with 'deferrable' to prefer."
+                    "Skip or delay this bill in the next few weeks. "
+                    "Only do this if the vendor allows."
                 ),
                 "side_effects": ["may incur late fees", "credit risk if it's a loan/card min"],
                 "priority": "fiscal",

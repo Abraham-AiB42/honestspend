@@ -356,9 +356,13 @@ public sealed partial class HomePage : Page
                 MonthCloseCard.Visibility = Visibility.Collapsed;
             }
 
-            // Tax year prep (H2-B) — hide when checklist complete
+            // Tax year prep is Full books / month-close — not a Simple daily card
             _taxYearAction = "hold";
-            if (_home.TryGetProperty("tax_year", out var ty) && ty.ValueKind == JsonValueKind.Object)
+            if (AppState.SimpleMode)
+            {
+                TaxYearCard.Visibility = Visibility.Collapsed;
+            }
+            else if (_home.TryGetProperty("tax_year", out var ty) && ty.ValueKind == JsonValueKind.Object)
             {
                 var tDone = ty.TryGetProperty("all_done", out var tad) && tad.ValueKind == JsonValueKind.True;
                 if (tDone)
@@ -496,14 +500,18 @@ public sealed partial class HomePage : Page
     private void ApplySimpleHomeDensity(JsonElement home, string status)
     {
         if (!AppState.SimpleMode)
+        {
+            if (PowerToolsPanel is not null)
+                PowerToolsPanel.Visibility = Visibility.Visible;
             return;
+        }
 
         var clear = status is "safe" or "ok" or "clear";
         var nextAct = _nextAction ?? "hold";
         var nextIsQuiet = nextAct is "hold" or "park_yield"
             || nextAct.StartsWith("wealth_", StringComparison.OrdinalIgnoreCase);
 
-        if (status is "danger" or "watch")
+        if (status is "danger")
         {
             PowerToolsPanel.Visibility = Visibility.Visible;
             return;
@@ -539,12 +547,11 @@ public sealed partial class HomePage : Page
                 && string.IsNullOrEmpty(PromoTitle.Text))
                 PromoCard.Visibility = Visibility.Collapsed;
 
-            // Month close / tax year: hide when already complete or not needing attention
+            // Hide month-close only after the period is marked closed
             if (home.TryGetProperty("month_close", out var mc) && mc.ValueKind == JsonValueKind.Object)
             {
                 var closed = mc.TryGetProperty("closed_this_period", out var cl) && cl.ValueKind == JsonValueKind.True;
-                var needs = mc.TryGetProperty("needs_attention", out var na) && na.ValueKind == JsonValueKind.True;
-                if (closed || !needs)
+                if (closed)
                     MonthCloseCard.Visibility = Visibility.Collapsed;
             }
 
@@ -660,9 +667,17 @@ public sealed partial class HomePage : Page
 
     private void ApplyBudgetSeedHint(JsonElement home)
     {
+        if (BudgetSeedBar is null)
+            return;
+        if (AppState.SimpleMode)
+        {
+            BudgetSeedBar.IsOpen = false;
+            return;
+        }
         if (home.TryGetProperty("budget_seed_hint", out var h)
             && h.ValueKind == JsonValueKind.Object)
         {
+            BudgetSeedBar.Visibility = Visibility.Visible;
             BudgetSeedBar.Title = JsonUi.Str(h, "title", "Budgets");
             BudgetSeedBar.Message = JsonUi.Str(h, "reason");
             BudgetSeedBar.IsOpen = true;
@@ -806,6 +821,7 @@ public sealed partial class HomePage : Page
             var today = DateTime.Today;
             foreach (var it in arr.EnumerateArray())
             {
+                if (CardNeedsPaymentSetup(it)) continue;
                 var dueStr = JsonUi.Str(it, "next_due", "");
                 if (string.IsNullOrEmpty(dueStr) || dueStr == "—") continue;
                 if (!DateTime.TryParse(dueStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var due))
@@ -828,6 +844,7 @@ public sealed partial class HomePage : Page
             decimal sum = 0;
             foreach (var it in arr.EnumerateArray())
             {
+                if (CardNeedsPaymentSetup(it)) continue;
                 var dueStr = JsonUi.Str(it, "next_due", "");
                 if (!DateTime.TryParse(dueStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var due))
                     continue;
@@ -936,6 +953,7 @@ public sealed partial class HomePage : Page
     }
 
     private bool _suppressCardFixCardChange;
+    private int _cardFixCloseDay = 1;
 
     private async Task LoadCardFixPanelAsync(LedgerApiClient api)
     {
@@ -1005,7 +1023,6 @@ public sealed partial class HomePage : Page
         _suppressCardFixCardChange = false;
 
         await ApplySelectedCardFixAsync(api);
-        CardFixPolicy_Changed(CardFixPolicyBox, null!);
     }
 
     private int? SelectedCardFixCardId()
@@ -1038,37 +1055,15 @@ public sealed partial class HomePage : Page
         try
         {
             var c = await api.GetAccountCycleAsync(id);
-            CardFixCloseDayBox.Value = ParseCardFixDay(c, "statement_close_day", 1);
+            _cardFixCloseDay = (int)ParseCardFixDay(c, "statement_close_day", 1);
             CardFixDueDayBox.Value = ParseCardFixDay(c, "payment_due_day", 15);
-            SelectCardFixTag(CardFixPolicyBox,
-                JsonUi.Str(c, "policy", JsonUi.Str(c, "autopay_policy", "statement")),
-                fallback: "statement");
-            SelectCardFixTag(CardFixTimingBox,
-                JsonUi.Str(c, "payment_timing", "on_due"),
-                fallback: "on_due");
-            var fixedAmt = ParseCardFixDouble(c, "payment_fixed_amount", 0);
-            CardFixFixedBox.Value = fixedAmt;
-
             var fundId = JsonUi.Int(c, "funding_account_id", JsonUi.Int(c, "payment_funding_account_id"));
             SelectCardFixIntTag(CardFixFundingBox, fundId);
-            CardFixPolicy_Changed(CardFixPolicyBox, null!);
         }
         catch (Exception ex)
         {
             CardFixMsg.Text = "Could not load card: " + ex.Message;
         }
-    }
-
-    private void CardFixPolicy_Changed(object sender, SelectionChangedEventArgs e)
-    {
-        // ComboBox SelectionChanged fires during InitializeComponent when SelectedIndex is set
-        // in XAML — CardFixFixedBox may not exist yet (declared after the policy box).
-        if (CardFixFixedBox is null || CardFixPolicyBox is null)
-            return;
-        var policy = "statement";
-        if (CardFixPolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
-            policy = p;
-        CardFixFixedBox.Visibility = policy == "fixed" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void CardFixSave_Click(object sender, RoutedEventArgs e)
@@ -1083,36 +1078,19 @@ public sealed partial class HomePage : Page
             if (CardFixFundingBox.SelectedItem is not ComboBoxItem { Tag: int fundId } || fundId <= 0)
                 throw new InvalidOperationException("Pick which cash account pays this card.");
 
-            var policy = "statement";
-            if (CardFixPolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
-                policy = p;
-            var timing = "on_due";
-            if (CardFixTimingBox.SelectedItem is ComboBoxItem { Tag: string t })
-                timing = t;
-
             var due = double.IsNaN(CardFixDueDayBox.Value) ? 15 : (int)CardFixDueDayBox.Value;
-            var close = double.IsNaN(CardFixCloseDayBox.Value) ? 1 : (int)CardFixCloseDayBox.Value;
             if (due is < 1 or > 31)
                 throw new InvalidOperationException("Due day must be 1–31.");
-            if (close is < 1 or > 31)
-                throw new InvalidOperationException("Close day must be 1–31.");
+            var close = _cardFixCloseDay is >= 1 and <= 31 ? _cardFixCloseDay : due;
 
             var body = new Dictionary<string, object?>
             {
                 ["statement_close_day"] = close,
                 ["payment_due_day"] = due,
-                ["autopay_policy"] = policy,
-                ["payment_timing"] = timing,
+                ["autopay_policy"] = "statement",
+                ["payment_timing"] = "on_due",
                 ["payment_funding_account_id"] = fundId,
             };
-
-            if (policy == "fixed")
-            {
-                var amt = double.IsNaN(CardFixFixedBox.Value) ? 0m : (decimal)CardFixFixedBox.Value;
-                if (amt <= 0)
-                    throw new InvalidOperationException("Enter a fixed amount greater than zero.");
-                body["payment_fixed_amount"] = amt;
-            }
 
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
@@ -1631,9 +1609,12 @@ public sealed partial class HomePage : Page
             }
         }
         BudgetSummaryList.ItemsSource = lines;
-        BudgetCard.Visibility = lines.Count > 0 || cutCount > 0
-            ? Visibility.Visible
-            : Visibility.Collapsed;
+        if (BudgetCard is not null)
+        {
+            BudgetCard.Visibility = AppState.SimpleMode
+                ? Visibility.Collapsed
+                : (lines.Count > 0 || cutCount > 0 ? Visibility.Visible : Visibility.Collapsed);
+        }
     }
 
     private async void BudgetCut_Click(object sender, RoutedEventArgs e)
@@ -1969,16 +1950,16 @@ public sealed partial class HomePage : Page
         switch (_taxYearAction)
         {
             case "review":
-                Frame?.Navigate(typeof(ReviewPage));
+                NavigateApp("review");
                 break;
             case "fund_tax_vault":
-                Frame?.Navigate(typeof(TaxVaultPage));
+                NavigateApp("taxvault");
                 break;
             case "tax_packet":
-                Frame?.Navigate(typeof(TaxPage));
+                NavigateApp("tax");
                 break;
             default:
-                Frame?.Navigate(typeof(TaxPage));
+                NavigateApp("tax");
                 break;
         }
     }

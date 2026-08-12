@@ -430,18 +430,8 @@ def apply_discoveries(
             )
             session.add(row)
             session.flush()
-            # Funding + missing cycle fields; never overwrites cycle_config_source=user
-            from honestspend.services.cycle_config import apply_credit_cycle_defaults
-
-            apply_credit_cycle_defaults(
-                session,
-                row,
-                source="import",
-                statement_close_day=close_day,
-                payment_due_day=due_day,
-                autopay_policy=row.autopay_policy,
-                payment_funding_account_id=int(cash.id) if cash else None,
-            )
+            # Leave due/funding empty unless the user sent them. Silent 15 / first
+            # checking would hide Simple Home "when is this due + which checking?"
             # Do NOT also schedule "{name} payment" — IFPP uses card balance/payoff path.
             # Double schedule would drain Safe to spend twice.
             created.append(

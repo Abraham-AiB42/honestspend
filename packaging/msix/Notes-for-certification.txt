@@ -19,9 +19,14 @@ Core path works offline after first-run engine extract.
 TEST ACCOUNT / FIRST LAUNCH
 ---------------------------
 No account required. Launch app → main window appears immediately → Get started
-(~2 min) or open Home. Engine extracts from engine-portable.zip to
-%LocalAppData%\HonestSpend\engine on first EnsureRunning (may take 30–90s on slow disks).
-UI remains interactive if the engine is still starting (Settings can retry).
+(~2 min) or open Home. The fiscal engine is a private CPython embeddable shipped
+inside the package at engine\python\ (python.exe + python314.dll). Users do not
+install Python. A zip copy is also included for unpackaged repair only.
+UI remains interactive if the engine is still starting.
+
+The package includes python.exe / python314.dll / vcruntime140.dll under engine\
+because the app is a full-trust desktop host (not a UWP-only app). Those files are
+the official CPython embeddable runtime, not a second product.
 
 ON-DEVICE TILES (policy 10.1.1.11)
 ---------------------------------

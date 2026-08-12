@@ -126,11 +126,11 @@ def build_capital_desk(
     # 1. Red day / checking safety
     if ifpp.is_red_now or ifpp.next_red_day is not None or ifpp.cash_spendable <= ZERO:
         if ifpp.is_red_now:
-            gap = "RED NOW — checking already negative or runway underwater"
+            gap = "Checking is below $0"
         elif ifpp.cash_spendable <= ZERO:
-            gap = "Spendable is $0 or less after buffer and bills"
+            gap = "Safe to spend is $0 after buffer and bills"
         else:
-            gap = f"Projected red day {ifpp.next_red_day.isoformat()}"
+            gap = f"Next risk day {ifpp.next_red_day.isoformat()}"
         steps.append(
             AllocationStep(
                 rank=rank,

@@ -42,8 +42,9 @@ from honestspend.engine.ifpp import CardView
 from honestspend.services import plaid_service
 from honestspend.services import db_runtime
 from honestspend.services.tax_packet import build_tax_packet, packet_to_csv_files, write_tax_packet_dir
+from honestspend.web_paths import resolve_web_dir
 
-WEB_DIR = Path(__file__).resolve().parents[3] / "web"
+WEB_DIR = resolve_web_dir()
 
 # Paths allowed while the ledger is sealed (unlock required for everything else)
 _CRYPTO_OPEN_PATHS = frozenset(
@@ -5238,13 +5239,15 @@ async def backup_restore_upload(file: UploadFile = File(...)):
         raise HTTPException(400, str(e)) from e
 
 
-# Static UI
-if WEB_DIR.exists():
+# Static UI (repo web/ or Store engine/web — see resolve_web_dir)
+if WEB_DIR is not None:
     app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
 @app.get("/")
 def index():
+    if WEB_DIR is None:
+        return {"message": "API up. UI missing.", "docs": "/docs", "glance": "/glance"}
     index_path = WEB_DIR / "index.html"
     if not index_path.exists():
         return {"message": "API up. UI missing.", "docs": "/docs", "glance": "/glance"}
@@ -5254,6 +5257,8 @@ def index():
 @app.get("/glance")
 def glance_page():
     """Mobile / Mac / Linux shell — polls /api/glance (no fiscal logic in browser)."""
+    if WEB_DIR is None:
+        return {"message": "glance.html missing", "api": "/api/glance"}
     path = WEB_DIR / "glance.html"
     if not path.exists():
         return {"message": "glance.html missing", "api": "/api/glance"}

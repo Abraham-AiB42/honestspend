@@ -76,7 +76,7 @@
                     </InfoBar.ActionButton>
                 </InfoBar>
 
-                <InfoBar x:Name="BudgetSeedBar" IsOpen="False" Severity="Informational"
+                <InfoBar x:Name="BudgetSeedBar" IsOpen="False" Visibility="Collapsed" Severity="Informational"
                          IsClosable="True" Title="Budgets">
                     <InfoBar.ActionButton>
                         <Button Content="Seed from history" Click="BudgetSeed_Click" />
@@ -85,7 +85,7 @@
 
                 <InfoBar x:Name="CardFixBar" IsOpen="False" Severity="Informational"
                          IsClosable="True" Title="Card payments need a quick setup"
-                         Message="Due day, pay-from cash, and what to pay — about 60 seconds.">
+                         Message="When is this card due, and which checking pays it?">
                     <InfoBar.ActionButton>
                         <Button Content="Fix card payments" Click="CardFixOpen_Click" />
                     </InfoBar.ActionButton>
@@ -98,45 +98,14 @@
                     <StackPanel Spacing="10">
                         <TextBlock FontWeight="SemiBold" FontSize="18" Text="Fix card payments" />
                         <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                            Text="Tell us when the bill is due, which cash pays it, and what to pay. Safe to spend updates after you save." />
+                            Text="When is this card due, and which checking pays it? We pay the statement in full on that day." />
                         <ComboBox x:Name="CardFixCardBox" Header="Credit card" HorizontalAlignment="Stretch"
                                   PlaceholderText="Pick a card" SelectionChanged="CardFixCard_Changed" />
-                        <Grid ColumnSpacing="12" RowSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
-                            </Grid.RowDefinitions>
-                            <NumberBox x:Name="CardFixDueDayBox" Header="Due day (1–31)" Minimum="1" Maximum="31"
-                                       Value="15" Grid.Row="0" Grid.Column="0" />
-                            <NumberBox x:Name="CardFixCloseDayBox" Header="Close day (1–31)" Minimum="1" Maximum="31"
-                                       Value="1" Grid.Row="0" Grid.Column="1" />
-                            <ComboBox x:Name="CardFixFundingBox" Header="Pay from" HorizontalAlignment="Stretch"
-                                      PlaceholderText="Checking / cash" Grid.Row="1" Grid.Column="0"
-                                      Grid.ColumnSpan="2" />
-                            <ComboBox x:Name="CardFixPolicyBox" Header="What to pay" SelectedIndex="1" MinWidth="200"
-                                      Grid.Row="2" Grid.Column="0" HorizontalAlignment="Stretch"
-                                      SelectionChanged="CardFixPolicy_Changed">
-                                <ComboBoxItem Content="Minimum only" Tag="min" />
-                                <ComboBoxItem Content="Pay statement in full" Tag="statement" />
-                                <ComboBoxItem Content="Pay current balance" Tag="books"
-                                              ToolTipService.ToolTip="Full books balance so the statement can open near $0." />
-                                <ComboBoxItem Content="Fixed amount" Tag="fixed" />
-                            </ComboBox>
-                            <ComboBox x:Name="CardFixTimingBox" Header="When cash leaves" SelectedIndex="0" MinWidth="200"
-                                      Grid.Row="2" Grid.Column="1" HorizontalAlignment="Stretch">
-                                <ComboBoxItem Content="On due day" Tag="on_due" />
-                                <ComboBoxItem Content="Day before statement closes" Tag="day_before_close" />
-                                <ComboBoxItem Content="On statement close day" Tag="on_close" />
-                            </ComboBox>
-                            <NumberBox x:Name="CardFixFixedBox" Header="Fixed amount ($)" Minimum="0" Value="0"
-                                       Grid.Row="3" Grid.Column="0" Visibility="Collapsed" />
-                        </Grid>
+                        <NumberBox x:Name="CardFixDueDayBox" Header="Due day (1–31)" Minimum="1" Maximum="31"
+                                   Value="15" />
+                        <ComboBox x:Name="CardFixFundingBox" Header="Which checking pays it?"
+                                  HorizontalAlignment="Stretch"
+                                  PlaceholderText="Checking / cash" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button Content="Save" Style="{StaticResource AccentButtonStyle}"
                                     Click="CardFixSave_Click" MinWidth="100" />
@@ -203,7 +172,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border x:Name="BudgetCard"
+                <Border x:Name="BudgetCard" Visibility="Collapsed"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="12" Padding="16">
@@ -331,7 +300,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border x:Name="TaxYearCard"
+                <Border x:Name="TaxYearCard" Visibility="Collapsed"
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1" CornerRadius="12" Padding="16">
@@ -380,7 +349,8 @@
                     <Button Content="Done for now" Click="Done_Click" />
                 </StackPanel>
                 <TextBlock x:Name="DoneText" Opacity="0.75" />
-                <StackPanel x:Name="PowerToolsPanel" Orientation="Horizontal" Spacing="8">
+                <StackPanel x:Name="PowerToolsPanel" Orientation="Horizontal" Spacing="8"
+                            Visibility="Collapsed">
                     <Button Content="Rescue options" Click="Rescue_Click" />
                     <Button Content="Money brief" Click="Brief_Click" />
                 </StackPanel>

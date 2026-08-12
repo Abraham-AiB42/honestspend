@@ -23,8 +23,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Keep package version aligned with honestspend / Inno when releasing -->
-    <ApplicationDisplayVersion>1.0.56</ApplicationDisplayVersion>
-    <ApplicationVersion>1.0.56.0</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0.57</ApplicationDisplayVersion>
+    <ApplicationVersion>1.0.57.0</ApplicationVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,9 +37,20 @@
     </Content>
   </ItemGroup>
 
-  <!-- Store/MSIX: first-run extracts to %LocalAppData%\HonestSpend\engine (see EngineBootstrap) -->
+  <!-- Unpackaged zip payload only. Store launch uses package-local engine\python\. -->
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)engine-portable.zip')">
     <Content Include="engine-portable.zip" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Store 10.1.2.10: python3xx.dll must ship as a package file next to python.exe.
+       package-msix.ps1 stages clients/HonestSpend.WinUI/engine/ (gitignored). -->
+  <ItemGroup Condition="'$(WindowsPackageType)' == 'MSIX' AND Exists('$(MSBuildThisFileDirectory)engine\python\python314.dll')">
+    <Content Include="engine\**\*.*" Exclude="engine\**\__pycache__\**\*;engine\**\*.pyc">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <!-- pip wheel tags (cp312-win_amd64) are not PRI qualifiers -->
+      <ExcludeFromResourceIndex>true</ExcludeFromResourceIndex>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

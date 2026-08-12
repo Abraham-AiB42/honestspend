@@ -9,18 +9,17 @@ C:\HonestSpend\
   HonestSpend.WinUI.exe      â† native UI
   â€¦ (WinAppSDK runtime files)
   engine\                    â† shipped with the app
-    python\python.exe        â† embeddable CPython (private; not on PATH)
+    python\python.exe        ← embeddable CPython (private; not on PATH)
+    python\python314.dll     ← versioned runtime DLL next to python.exe
     src\honestspend\
     pyproject.toml
-  engine-portable.zip        â† Store first-run extract source
+  engine-portable.zip        ← unpackaged repair payload (not the Store launch path)
   README-INSTALL.txt
 ```
 
-**End users do not install Python.** The package ships a private embeddable runtime under `engine\python\`.  
-Developers still use a normal `.venv` for day-to-day work (`pip install -e ".[dev]"`).
-
-The app finds `engine\` next to the EXE, or extracts `engine-portable.zip` to  
-`%LocalAppData%\HonestSpend\engine\` (`BackendHost` + `EngineBootstrap`).
+**End users do not install Python.** The Store/MSIX package runs `engine\python\python.exe` from inside the package.  
+Unpackaged zip installs may extract `engine-portable.zip` to `%LocalAppData%\HonestSpend\engine\`.  
+Developers use a normal `.venv` (`pip install -e ".[dev]"`); that wins over any leftover staged `engine\`.
 
 Data defaults to:
 
@@ -97,8 +96,8 @@ Engine is auto-detected from `.\engine\`. If offline: Settings â†’ **Start 
 See **[docs/MSIX.md](./MSIX.md)** for identity, `runFullTrust` certification notes, and engine packaging strategy.  
 Partner Center: **[STORE_CHECKLIST.md](./STORE_CHECKLIST.md)** Â· listing **[STORE_LISTING.md](./STORE_LISTING.md)** Â· **[PRIVACY.md](./PRIVACY.md)**.
 
-On first launch, Store builds extract **engine-portable.zip** to  
-`%LocalAppData%\HonestSpend\engine` (or Settings â†’ **Install / repair engine**).
+Store builds run **engine\python\python.exe** from inside the package (python314.dll next to it).  
+Unpackaged zip/Inno may extract **engine-portable.zip** to `%LocalAppData%\HonestSpend\engine`.
 
 GitHub zip/Inno (Option B) remains the power-user / freeware sideload path.
 

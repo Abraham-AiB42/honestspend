@@ -198,8 +198,8 @@ def test_fill_missing_only_does_not_overwrite_non_user(tmp_path: Path, monkeypat
     s.close()
 
 
-def test_setup_discover_applies_funding_and_source(tmp_path: Path, monkeypatch):
-    """Discover apply creates credit with funding + cycle_config_source (non-user)."""
+def test_setup_discover_leaves_due_and_funding_for_simple_confirm(tmp_path: Path, monkeypatch):
+    """Discover must not invent due=15 / first checking as user-confirmed setup."""
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
     cash = Account(
@@ -230,11 +230,9 @@ def test_setup_discover_applies_funding_and_source(tmp_path: Path, monkeypatch):
     s.commit()
     assert res["count"] == 1
     card = s.query(Account).filter(Account.kind == "credit").one()
-    assert card.statement_close_day == 1
-    assert card.payment_due_day == 15
     assert card.autopay_policy == "statement"
-    assert card.payment_funding_account_id == cash.id
-    assert card.cycle_config_source in ("import", "default")
+    assert card.payment_due_day is None
+    assert card.payment_funding_account_id is None
     s.close()
 
 
@@ -280,11 +278,9 @@ def test_plaid_new_credit_gets_cycle_defaults(tmp_path: Path, monkeypatch):
     assert len(out) == 1
     card = out[0]
     assert card.kind == "credit"
-    assert card.statement_close_day == 1
-    assert card.payment_due_day == 15
     assert card.autopay_policy == "statement"
-    assert card.payment_funding_account_id == cash.id
-    assert card.cycle_config_source == "plaid"
+    assert card.payment_due_day is None
+    assert card.payment_funding_account_id is None
     s.close()
 
 
@@ -454,8 +450,8 @@ def test_default_funding_prefers_checking(tmp_path: Path, monkeypatch):
     s.close()
 
 
-def test_bank_csv_import_fills_missing_cycle_on_credit(tmp_path: Path, monkeypatch):
-    """CSV import into a bare credit account applies import-safe cycle defaults."""
+def test_bank_csv_import_does_not_invent_due_or_funding(tmp_path: Path, monkeypatch):
+    """CSV import must not invent due=15 / first checking as user-confirmed setup."""
     from honestspend.services.bank_csv import import_bank_csv
 
     s = _session(tmp_path, monkeypatch)
@@ -492,9 +488,7 @@ def test_bank_csv_import_fills_missing_cycle_on_credit(tmp_path: Path, monkeypat
     s.commit()
     s.refresh(card)
 
-    assert card.statement_close_day == 1
-    assert card.payment_due_day == 15
     assert card.autopay_policy == "statement"
-    assert card.payment_funding_account_id == cash.id
-    assert card.cycle_config_source == "import"
+    assert card.payment_due_day is None
+    assert card.payment_funding_account_id is None
     s.close()

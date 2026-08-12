@@ -83,23 +83,22 @@ public static class TrayHost
 
             // Same resolution as fiscal engine (embeddable python\ first — not system PATH)
             var py = BackendHost.ResolvePython(root);
-            if (string.IsNullOrWhiteSpace(py) || (py == "python" && !File.Exists(Path.Combine(root, "python", "python.exe"))))
-            {
-                // Refuse bare system python on Store path — tray would be wrong or missing
-                if (!File.Exists(py))
-                    return false;
-            }
+            if (string.IsNullOrWhiteSpace(py) || py == "python" || !File.Exists(py))
+                return false;
 
             try
             {
+                var pyDir = Path.GetDirectoryName(py) ?? root;
+                var workDir = BackendHost.IsRunnableEmbed(root) ? pyDir : root;
                 var psi = new ProcessStartInfo
                 {
                     FileName = py,
                     Arguments = "-m honestspend.cli tray",
-                    WorkingDirectory = root,
+                    WorkingDirectory = workDir,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 };
+                BackendHost.ApplyEmbedEnvironment(psi, root, pyDir);
                 psi.Environment["FOS_HOST"] = "127.0.0.1";
                 psi.Environment["FOS_PORT"] = "7420";
                 if (!string.IsNullOrWhiteSpace(AppConfig.DataDir))

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Store 10.1.2.10 (python3xx.dll)**: MSIX now ships unpacked `engine\python\` + `python3*.dll` next to `python.exe` (package files). Launch refuses PATH/`WindowsApps` python and refuses `python.exe` without a sibling `python3*.dll`. Package-local engine is preferred over LocalAppData extract (packaged child could not load extracted DLLs).
+- **Embeddable CPython 3.14.7** (newest stable): `prepare-engine-bundle.ps1` default was 3.12.8. Launch/packaging require versioned `python314.dll` (not the `python3.dll` stub) plus an `honestspend` package.
+- **Simple Home**: card setup is due day + pay-from only; budget desk and Rescue/Money brief stay off the first screen (rescue only when status is danger).
 - **Full HonestSpend rename**: Python package `honestspend` (was `honestspend`); data dir `~/.HonestSpend` (legacy `~/.HonestSpend` still opens); DB `honestspend.db` (legacy `honestspend.db` still opens); user-facing HonestSpend/HonestSpend strings removed
 - **Setup storage freeze fix**: engine `Stop()` no longer deadlocks WinUI via sync seal; progress status + indeterminate bar while moving books; 45s restart timeout
 

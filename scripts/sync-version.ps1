@@ -69,13 +69,21 @@ if (Test-Path $csproj) {
 $verify = Join-Path $Root "scripts\verify-grade-a.ps1"
 if (Test-Path $verify) {
     $v = Get-Content $verify -Raw
-    # Keep pattern in sync: 1\.0\.NN
-    $escaped = [regex]::Escape($Version) -replace '\\', '\'
-    # Simpler: replace known version numbers in throws
-    $v = $v -replace "1\\\.0\\\.[0-9]+", ($Version -replace '\.', '\.')
-    $v = $v -replace "1\.0\.[0-9]+", $Version
-    Set-Content $verify $v -NoNewline -Encoding utf8
+    $v = $v -replace '__init__\.py not 1\.0\.[0-9]+', "__init__.py not $Version"
+    $v = $v -replace 'pyproject\.toml not 1\.0\.[0-9]+', "pyproject.toml not $Version"
+    $v = $v -replace 'HonestSpend\.iss not 1\.0\.[0-9]+', "HonestSpend.iss not $Version"
+    $v = $v -replace 'version 1\.0\.[0-9]+ consistent', "version $Version consistent"
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($verify, $v, $utf8)
 }
 
-Write-Host "Updated: pyproject, __init__, Inno, Package.appxmanifest, csproj, verify-grade-a (best effort)"
+$relNotes = Join-Path $Root "scripts\package-release.ps1"
+if (Test-Path $relNotes) {
+    $r = Get-Content $relNotes -Raw
+    $r = $r -replace 'Windows package \(1\.0\.[0-9]+\)', "Windows package ($Version)"
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($relNotes, $r, $utf8)
+}
+
+Write-Host "Updated: pyproject, __init__, Inno, Package.appxmanifest, csproj, verify-grade-a, package-release"
 Write-Host "Done. Next: .\scripts\package-msix.ps1"

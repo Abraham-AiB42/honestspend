@@ -145,13 +145,15 @@ def apply_credit_cycle_defaults(
     autopay_policy: str | None = None,
     payment_funding_account_id: int | None = None,
     suggest_funding: bool = True,
+    invent_calendar: bool = True,
 ) -> dict[str, Any]:
     """Fill missing cycle fields on a credit account without overwriting user config.
 
     Only mutates when ``cycle_config_source != "user"``. Existing non-null
     close/due/funding/policy are left alone (fill-missing). Explicit kwargs are
-    used when filling a blank field; otherwise defaults are 1 / 15 / statement /
-    first checking (or payment-history suggestion).
+    used when filling a blank field. When ``invent_calendar`` is True, blanks
+    become 1 / 15 / first checking. When False (Plaid/CSV), leave due/funding
+    empty unless the caller passed them — Simple Home confirms.
 
     Returns a small result dict: ok, changed, reason?, fields set.
     """
@@ -170,7 +172,9 @@ def apply_credit_cycle_defaults(
 
     filled: list[str] = []
 
-    if account.statement_close_day is None:
+    if account.statement_close_day is None and (
+        statement_close_day is not None or invent_calendar
+    ):
         day = (
             int(statement_close_day)
             if statement_close_day is not None
@@ -183,7 +187,9 @@ def apply_credit_cycle_defaults(
         account.statement_close_day = day
         filled.append("statement_close_day")
 
-    if account.payment_due_day is None:
+    if account.payment_due_day is None and (
+        payment_due_day is not None or invent_calendar
+    ):
         day = int(payment_due_day) if payment_due_day is not None else DEFAULT_DUE_DAY
         if day < 1:
             day = DEFAULT_DUE_DAY
@@ -197,7 +203,9 @@ def apply_credit_cycle_defaults(
         account.autopay_policy = pol
         filled.append("autopay_policy")
 
-    if account.payment_funding_account_id is None:
+    if account.payment_funding_account_id is None and (
+        payment_funding_account_id is not None or invent_calendar
+    ):
         fid = payment_funding_account_id
         if fid is None and suggest_funding:
             fid = suggest_funding_from_payment_history(

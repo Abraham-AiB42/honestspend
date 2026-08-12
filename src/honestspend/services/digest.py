@@ -48,7 +48,7 @@ def build_digest(
             {
                 "level": "critical",
                 "code": "red_now",
-                "message": "Checking is negative or runway is already red — open rescue options",
+                "message": "Checking is negative or Safe to spend is already below $0 — open rescue options",
                 "action": "rescue",
             }
         )
@@ -57,7 +57,7 @@ def build_digest(
             {
                 "level": "critical",
                 "code": "red_day",
-                "message": f"Red day {ifpp['next_red_day']} — protect checking",
+                "message": f"Next risk day {ifpp['next_red_day']} — protect checking",
                 "action": "bills",
                 "next_red_day": ifpp["next_red_day"],
             }

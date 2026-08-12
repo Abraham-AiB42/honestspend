@@ -22,14 +22,16 @@ Do these in order. Product type must be **MSIX** (not EXE/MSI).
 ```powershell
 # From repo root — needs Python + .NET 10 SDK
 .\scripts\sync-version.ps1          # optional: align all version files
-.\scripts\package-msix.ps1          # builds engine-portable.zip + .msix
+.\scripts\package-msix.ps1          # builds engine-portable.zip + unpacked engine\ + .msix
 # Output: dist\msix\**\*.msix
 ```
 
 - [ ] Confirm `engine-portable.zip` was included (script logs “Packaged: engine-portable.zip”)  
+- [ ] Confirm unpacked runtime (script logs “Packaged loose python314.dll”)  
 - [ ] Sideload test on a clean PC or VM:  
   `Add-AppxPackage -Path <msix>`  
-  First launch should extract engine to `%LocalAppData%\HonestSpend\engine`  
+  First launch must **not** show “python314.dll was not found”.  
+  Engine is package-local `engine\python\python.exe`.  
   Home should reach Safe to spend (not permanent offline)
 
 ## C. Submission content
@@ -61,7 +63,8 @@ python scripts/generate-store-tiles.py
 .\scripts\package-msix.ps1          # fails if engine zip missing
 # Sideload on a clean VM (no Python installed):
 Add-AppxPackage -Path dist\msix\**\*.msix
-# Confirm: window appears <3s; Home or Get started; engine extract under %LocalAppData%\HonestSpend\engine
+# Confirm: window appears <3s; Home or Get started; no python3xx.dll loader dialog;
+# engine is package-local engine\python\python.exe (+ python314.dll)
 ```
 
 ## D. Dual channel (keep)

@@ -252,27 +252,11 @@ public sealed partial class MainWindow : Window
             // Full books if needed for other pages — settings always available
             return;
         }
-        // Deep-link to Full books pages should leave Simple mode (with plain notice)
-        if (AppState.SimpleMode && !SimpleNavTags.Contains(tag) && tag is not ("home" or "settings" or "license"))
+        // Guest pages (Plaid, tax vault, …) stay in Simple. View toggle is the only persist.
+        if (AppState.SimpleMode && !SimpleNavTags.Contains(tag)
+            && tag is not ("home" or "settings" or "license"))
         {
-            AppState.SimpleMode = false;
-            try
-            {
-                Windows.Storage.ApplicationData.Current.LocalSettings.Values["UiMode"] = "full";
-            }
-            catch { /* ignore */ }
-            ApplySimpleChrome();
-            for (var j = 0; j < UiModeBox.Items.Count; j++)
-            {
-                if (UiModeBox.Items[j] is ComboBoxItem cbi && cbi.Tag as string == "full")
-                {
-                    _shellLoading = true;
-                    UiModeBox.SelectedIndex = j;
-                    _shellLoading = false;
-                    break;
-                }
-            }
-            ShellModeText.Text = $"Opening Full books for {tag}…";
+            try { ShellModeText.Text = "Opening " + tag + "…"; } catch { /* chrome optional */ }
         }
         SelectNav(tag);
         NavigateTag(tag);

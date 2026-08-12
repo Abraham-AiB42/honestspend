@@ -22,7 +22,7 @@ param(
     [switch]$CreateSelfSignedCert,
     [switch]$IncludeEngine,
     [switch]$SkipBuild,
-    # Store submission MUST ship engine-portable.zip (first-run extract). Only skip for UI-only experiments.
+    # Store submission MUST ship engine-portable.zip (unpackaged repair). Only skip for UI-only experiments.
     [switch]$AllowNoEngine,
     [string]$Publisher = "CN=HonestSpend Dev",
     [string]$CertPassword = "HonestSpend-Dev-Only"
@@ -91,12 +91,11 @@ else {
 }
 
 if (-not $SkipBuild) {
-    # Engine portable zip: first-run extracts to %LocalAppData%\HonestSpend\engine
-    # Without this, Store cert often reports "crashes after launch" (engine never starts / permanent offline).
+    # Engine portable zip: unpackaged repair payload. Store launch uses package-local engine\python\.
     $projDir = Join-Path $Root "clients\HonestSpend.WinUI"
     $zipDist = Join-Path $Root "dist\engine-portable.zip"
     $zipInProj = Join-Path $projDir "engine-portable.zip"
-    Write-Host "Preparing engine-portable.zip for Store first-run..." -ForegroundColor Cyan
+    Write-Host "Preparing engine-portable.zip (unpackaged repair) + unpacked engine\..." -ForegroundColor Cyan
     if (-not (Test-Path $zipDist) -or $IncludeEngine) {
         $tmp = Join-Path $Root "dist\msix-engine-stage"
         if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
@@ -115,7 +114,83 @@ if (-not $SkipBuild) {
     else {
         Copy-Item $zipDist $zipInProj -Force
         $zipMb = [math]::Round((Get-Item $zipInProj).Length / 1MB, 1)
-        Write-Host "  Packaged: engine-portable.zip ($zipMb MB) - first-run extract to LocalAppData" -ForegroundColor Green
+        Write-Host "  Packaged: engine-portable.zip ($zipMb MB) - unpackaged repair payload" -ForegroundColor Green
+    }
+
+    # Ship unpacked engine\python\ + versioned python3xx.dll inside the MSIX.
+    $engineInProj = Join-Path $projDir "engine"
+    $RequiredDll = "python314.dll"
+    function Test-VersionedDllName([string]$name) {
+        return $name -match '^python3[0-9]+\.dll$'
+    }
+    function Get-EmbedDll([string]$engineRoot) {
+        Get-ChildItem (Join-Path $engineRoot "python") -Filter "python3*.dll" -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Length -gt 0 -and (Test-VersionedDllName $_.Name) } |
+            Select-Object -First 1
+    }
+    function Test-EngineReady([string]$engineRoot) {
+        $dll = Get-EmbedDll $engineRoot
+        if (-not $dll -or $dll.Name -ne $RequiredDll) { return $false }
+        $pkg = Join-Path $engineRoot "python\Lib\site-packages\honestspend"
+        $src = Join-Path $engineRoot "src\honestspend"
+        return (Test-Path $pkg) -or (Test-Path $src)
+    }
+    $srcEngine = @(
+        (Join-Path $Root "dist\msix-engine-stage\engine"),
+        (Join-Path $Root "dist\engine-stage\engine"),
+        (Join-Path $Root "dist\HonestSpend-Windows-x64\engine")
+    ) | Where-Object { Test-EngineReady $_ } | Select-Object -First 1
+
+    if ($srcEngine) {
+        Write-Host "  Staging unpacked engine\ into WinUI project from $srcEngine ..." -ForegroundColor Cyan
+        if (Test-Path $engineInProj) { Remove-Item $engineInProj -Recurse -Force }
+        Copy-Item $srcEngine $engineInProj -Recurse -Force
+    }
+    elseif ((Test-Path $zipDist) -and -not (Test-EngineReady $engineInProj)) {
+        Write-Host "  Unpacking engine-portable.zip into WinUI engine\ ..." -ForegroundColor Cyan
+        if (Test-Path $engineInProj) { Remove-Item $engineInProj -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path $engineInProj | Out-Null
+        Expand-Archive -Path $zipDist -DestinationPath $engineInProj -Force
+    }
+
+    $needRebuild = -not (Test-EngineReady $engineInProj)
+    $embedPy = Join-Path $engineInProj "python\python.exe"
+    if (-not $needRebuild -and (Test-Path $embedPy)) {
+        & $embedPy -c "import honestspend"
+        if ($LASTEXITCODE -ne 0) { $needRebuild = $true }
+    }
+
+    if ($needRebuild) {
+        if ($AllowNoEngine) {
+            Write-Host "  WARNING: $RequiredDll / honestspend not staged (-AllowNoEngine)." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "  Staged engine is stale or incomplete. Rebuilding $RequiredDll bundle..." -ForegroundColor Yellow
+            $tmp = Join-Path $Root "dist\msix-engine-stage"
+            if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+            New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+            & (Join-Path $Root "scripts\prepare-engine-bundle.ps1") -Target $tmp
+            $rebuilt = Join-Path $tmp "engine"
+            if (-not (Test-EngineReady $rebuilt)) {
+                Write-Error "Rebuild did not produce $RequiredDll + honestspend"
+            }
+            if (Test-Path $engineInProj) { Remove-Item $engineInProj -Recurse -Force }
+            Copy-Item $rebuilt $engineInProj -Recurse -Force
+            if (Test-Path (Join-Path $Root "dist\engine-portable.zip")) {
+                Copy-Item (Join-Path $Root "dist\engine-portable.zip") $zipInProj -Force
+            }
+            & $embedPy -c "import honestspend"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "Rebuilt engine still cannot import honestspend"
+            }
+        }
+    }
+
+    $dllInProj = Get-EmbedDll $engineInProj
+    if ($dllInProj) {
+        $dllMb = [math]::Round($dllInProj.Length / 1MB, 1)
+        Write-Host "  Packaged loose $($dllInProj.Name) ($dllMb MB) next to python.exe" -ForegroundColor Green
+        Write-Host "  Staged engine imports honestspend" -ForegroundColor Green
     }
 
     # Refresh branded tiles before package (Store 10.1.1.11)

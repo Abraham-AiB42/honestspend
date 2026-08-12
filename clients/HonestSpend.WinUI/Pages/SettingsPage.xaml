@@ -22,7 +22,7 @@
                 <Button Content="Show window" Click="ShowWindow_Click" />
             </StackPanel>
             <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                Text="Store installs extract the money engine to %LocalAppData%\HonestSpend\engine on first start (or use Install / repair)." />
+                Text="Store installs ship a private CPython engine inside the package (engine\python\). Install / repair re-points at that copy. LocalAppData extract is only for unpackaged zip builds." />
             <TextBlock x:Name="EngineLogText" Opacity="0.6" FontSize="11" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
 
             <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Startup shortcuts (optional)" />

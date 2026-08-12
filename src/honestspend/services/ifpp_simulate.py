@@ -172,9 +172,9 @@ def simulate_ifpp(
         },
         "delta_cash_spendable": str((sim_cash - base_cash).quantize(Decimal("0.01"))),
         "message": (
-            f"Spendable {base_cash} → {sim_cash} "
-            f"(Δ {sim_cash - base_cash}). "
-            f"Red day: {base_d['next_red_day'] or 'none'} → {sim_d['next_red_day'] or 'none'}."
+            f"Safe to spend ${base_cash} → ${sim_cash}. "
+            f"Next risk day: {base_d['next_red_day'] or 'none'} "
+            f"→ {sim_d['next_red_day'] or 'none'}."
         ),
     }
 

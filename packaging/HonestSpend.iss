@@ -1,4 +1,4 @@
-﻿; Inno Setup 6 script â€” compile AFTER .\scripts\package-release.ps1
+; Inno Setup 6 script â€” compile AFTER .\scripts\package-release.ps1
 ; Output: dist\HonestSpend-Setup-x64.exe
 ;
 ; Prerequisites:
@@ -6,7 +6,7 @@
 ;   - dist\HonestSpend-Windows-x64\ populated by package-release.ps1
 
 #define MyAppName "HonestSpend"
-#define MyAppVersion "1.0.56"
+#define MyAppVersion "1.0.57"
 ; Keep in sync with pyproject.toml / honestspend.__version__
 #define MyAppPublisher "HonestSpend contributors"
 #define MyAppExeName "HonestSpend.WinUI.exe"

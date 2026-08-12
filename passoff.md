@@ -151,6 +151,7 @@ Tree is **1.0.56**. Recent `main` themes (newest last):
 
 ## 5. Open / next (not done)
 
+- **Store 10.1.2.10:** resubmit MSIX after python312.dll-in-package fix (see `docs/STORE_CERT_ANALYSIS.md`)  
 - Store package cert + Partner Center listing upload  
 - Multi-day real-household dogfood  
 - Bump CHANGELOG **1.0.56** section from Unreleased when cutting release notes  
@@ -174,6 +175,7 @@ Tree is **1.0.56**. Recent `main` themes (newest last):
 
 - Force-push `main` without review  
 - Commit `.superpowers/` SDD ledgers or local `~/.HonestSpend` data  
+- Ship Store without `engine\python\python314.dll` in the MSIX (zip-only extract fails 10.1.2.10)  
 - Ship Store without `engine-portable.zip` / cert notes  
 - Reintroduce `financial-os` / FloatPile product strings or default data dirs  
 

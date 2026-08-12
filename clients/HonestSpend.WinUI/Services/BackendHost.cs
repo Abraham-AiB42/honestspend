@@ -139,26 +139,45 @@ public sealed class BackendHost : IDisposable
             ResolvedRoot = root;
             if (root is null)
             {
+                LastError = PackageInfo.IsPackaged
+                    ? "This Store install is missing its private engine. Reinstall HonestSpend from the Store."
+                    : "Could not find HonestSpend engine. Unpackaged zips need engine\\ next to the EXE, " +
+                      "or Settings → Backend root pointing at a clone with .venv.";
+                return false;
+            }
+
+            if (PackageInfo.IsPackaged && !IsAllowedEngineRoot(root))
+            {
                 LastError =
-                    "Could not find HonestSpend engine. Store builds need engine-portable.zip " +
-                    "(auto-installs to %LocalAppData%\\HonestSpend\\engine). Zip installs need " +
-                    "engine\\ next to the EXE. Or set Backend root in Settings.";
+                    "This Store install must use the engine inside the package. " +
+                    "Reinstall HonestSpend from the Store if Home stays offline.";
                 return false;
             }
 
             var py = ResolvePython(root);
+            if (string.IsNullOrWhiteSpace(py) || py == "python" || !File.Exists(py))
+            {
+                LastError =
+                    "HonestSpend engine is incomplete (python.exe without python3xx.dll). " +
+                    "Reinstall the Store package or run Settings → Install / repair engine.";
+                return false;
+            }
+
             OpenLog();
 
+            var pyDir = Path.GetDirectoryName(py) ?? root;
+            var workDir = IsRunnableEmbed(root) ? pyDir : root;
             var psi = new ProcessStartInfo
             {
                 FileName = py,
                 Arguments = "-m honestspend.cli serve --host 127.0.0.1 --port 7420",
-                WorkingDirectory = root,
+                WorkingDirectory = workDir,
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+            ApplyEmbedEnvironment(psi, root, pyDir);
             psi.Environment["FOS_HOST"] = "127.0.0.1";
             psi.Environment["FOS_PORT"] = "7420";
             if (!string.IsNullOrWhiteSpace(AppConfig.DataDir))
@@ -229,13 +248,102 @@ public sealed class BackendHost : IDisposable
         }
     }
 
+    /// <summary>True for python314.dll; false for the stable-ABI stub python3.dll.</summary>
+    public static bool IsVersionedRuntimeDll(string fileName)
+    {
+        var name = Path.GetFileName(fileName);
+        if (string.IsNullOrEmpty(name) || !name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (!name.StartsWith("python3", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var mid = name[7..^4]; // after python3, before .dll
+        return mid.Length > 0 && mid.All(char.IsDigit);
+    }
+
+    public static bool HasHonestSpendPackage(string root)
+    {
+        return Directory.Exists(Path.Combine(root, "python", "Lib", "site-packages", "honestspend"))
+            || Directory.Exists(Path.Combine(root, "src", "honestspend"));
+    }
+
+    /// <summary>
+    /// Do not start python.exe unless a versioned python3xx.dll sits beside it;
+    /// packaged processes cannot load that DLL from LocalAppData.
+    /// </summary>
+    public static bool IsRunnableEmbed(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return false;
+        var pyDir = Path.Combine(root, "python");
+        var exe = Path.Combine(pyDir, "python.exe");
+        if (!File.Exists(exe) || new FileInfo(exe).Length == 0)
+            return false;
+        if (!Directory.Exists(pyDir))
+            return false;
+        var hasDll = false;
+        foreach (var f in Directory.EnumerateFiles(pyDir, "python3*.dll"))
+        {
+            if (new FileInfo(f).Length > 0 && IsVersionedRuntimeDll(f))
+            {
+                hasDll = true;
+                break;
+            }
+        }
+        return hasDll && HasHonestSpendPackage(root);
+    }
+
+    /// <summary>Store packages may only launch python.exe that lives inside the MSIX.</summary>
+    public static bool IsAllowedEngineRoot(string root)
+    {
+        if (!LooksLikeEngine(root))
+            return false;
+        if (!PackageInfo.IsPackaged)
+            return true;
+        try
+        {
+            var baseDir = Path.GetFullPath(AppContext.BaseDirectory)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var full = Path.GetFullPath(root)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return full.StartsWith(baseDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(full, baseDir, StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Put the embeddable folder first on PATH so python3xx.dll loads from the exe dir.</summary>
+    public static void ApplyEmbedEnvironment(ProcessStartInfo psi, string engineRoot, string pythonDir)
+    {
+        if (!IsRunnableEmbed(engineRoot))
+            return;
+        var path = psi.Environment.TryGetValue("PATH", out var existing) ? existing : Environment.GetEnvironmentVariable("PATH");
+        psi.Environment["PATH"] = pythonDir + Path.PathSeparator + (path ?? "");
+        psi.Environment["PYTHONDONTWRITEBYTECODE"] = "1";
+        psi.Environment["PYTHONUTF8"] = "1";
+        try
+        {
+            var cache = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HonestSpend",
+                "pycache");
+            Directory.CreateDirectory(cache);
+            psi.Environment["PYTHONPYCACHEPREFIX"] = cache;
+        }
+        catch
+        {
+            /* read-only package still runs with DONTWRITEBYTECODE */
+        }
+    }
+
     public static string ResolvePython(string root)
     {
-        // Prefer self-contained embeddable (Store / portable zip) over dev venv / system PATH
+        if (IsRunnableEmbed(root))
+            return Path.Combine(root, "python", "python.exe");
         foreach (var rel in new[]
                  {
-                     Path.Combine("python", "python.exe"),
-                     Path.Combine("python", "python"),
                      Path.Combine(".venv", "Scripts", "python.exe"),
                      Path.Combine(".venv", "Scripts", "python"),
                  })
@@ -244,67 +352,82 @@ public sealed class BackendHost : IDisposable
             if (File.Exists(cand))
                 return cand;
         }
-        // Last resort: system PATH (developers only — end-user packages must ship embeddable)
-        return "python";
+        return "";
     }
 
     public static string? ResolveBackendRoot()
     {
+        var baseDir = new DirectoryInfo(AppContext.BaseDirectory);
+
+        if (PackageInfo.IsPackaged)
+        {
+            foreach (var engineRel in new[] { "engine", Path.Combine("..", "engine") })
+            {
+                try
+                {
+                    var eng = Path.GetFullPath(Path.Combine(baseDir.FullName, engineRel));
+                    if (IsRunnableEmbed(eng) && IsAllowedEngineRoot(eng))
+                        return eng;
+                }
+                catch
+                {
+                    /* ignore */
+                }
+            }
+            return null;
+        }
+
         if (!string.IsNullOrWhiteSpace(AppConfig.BackendRoot) &&
             Directory.Exists(AppConfig.BackendRoot) &&
-            LooksLikeEngine(AppConfig.BackendRoot))
+            LooksLikeEngine(AppConfig.BackendRoot) &&
+            IsAllowedEngineRoot(AppConfig.BackendRoot))
             return AppConfig.BackendRoot;
 
-        // Store install path (first-run extract of engine-portable.zip)
+        foreach (var engineRel in new[] { "engine", Path.Combine("..", "engine") })
+        {
+            try
+            {
+                var eng = Path.GetFullPath(Path.Combine(baseDir.FullName, engineRel));
+                if (IsRunnableEmbed(eng))
+                    return eng;
+            }
+            catch
+            {
+                /* ignore */
+            }
+        }
+
+        // Dev: repo + .venv when launching from bin\ (no shipped embed)
+        var walk = baseDir;
+        for (var i = 0; i < 12 && walk is not null; i++, walk = walk.Parent)
+        {
+            if (LooksLikeDevClone(walk.FullName))
+                return walk.FullName;
+        }
+
         var localStore = EngineBootstrap.LocalEngineRoot;
         if (LooksLikeEngine(localStore))
             return localStore;
 
-        var baseDir = new DirectoryInfo(AppContext.BaseDirectory);
-
-        foreach (var engineRel in new[] { "engine", Path.Combine("..", "engine") })
-        {
-            var eng = Path.GetFullPath(Path.Combine(baseDir.FullName, engineRel));
-            if (LooksLikeEngine(eng))
-                return eng;
-        }
-
-        var dir = baseDir;
-        for (var i = 0; i < 12 && dir is not null; i++, dir = dir.Parent)
-        {
-            if (LooksLikeEngine(dir.FullName))
-                return dir.FullName;
-        }
-
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var repo in new[] { "honestspend", "HonestSpend" })
-        {
-            var known = Path.Combine(home, "source", "repos", repo);
-            if (LooksLikeEngine(known))
-                return known;
-        }
-        // Also detect current clone path if still named HonestSpend on disk
-        var clone = Path.Combine(home, "source", "repos", "HonestSpend");
-        if (LooksLikeEngine(clone))
-            return clone;
-
         return null;
+    }
+
+    public static bool LooksLikeDevClone(string root)
+    {
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+            return false;
+        var src = Path.Combine(root, "src", "honestspend");
+        var venvPy = Path.Combine(root, ".venv", "Scripts", "python.exe");
+        return Directory.Exists(src) && File.Exists(venvPy);
     }
 
     public static bool LooksLikeEngine(string root)
     {
         if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
             return false;
-        // Self-contained embeddable (Store / GitHub zip)
-        var embedPy = Path.Combine(root, "python", "python.exe");
-        if (File.Exists(embedPy))
+        if (IsRunnableEmbed(root))
             return true;
-        var src = Path.Combine(root, "src", "honestspend");
-        if (Directory.Exists(src))
-            return true;
-        // Dev clone with venv
-        var venvPy = Path.Combine(root, ".venv", "Scripts", "python.exe");
-        return File.Exists(venvPy);
+        return LooksLikeDevClone(root);
     }
 
     /// <summary>
