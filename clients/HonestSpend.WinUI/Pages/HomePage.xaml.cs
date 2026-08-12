@@ -1046,6 +1046,10 @@ public sealed partial class HomePage : Page
 
     private void CardFixPolicy_Changed(object sender, SelectionChangedEventArgs e)
     {
+        // ComboBox SelectionChanged fires during InitializeComponent when SelectedIndex is set
+        // in XAML — CardFixFixedBox may not exist yet (declared after the policy box).
+        if (CardFixFixedBox is null || CardFixPolicyBox is null)
+            return;
         var policy = "statement";
         if (CardFixPolicyBox.SelectedItem is ComboBoxItem { Tag: string p })
             policy = p;

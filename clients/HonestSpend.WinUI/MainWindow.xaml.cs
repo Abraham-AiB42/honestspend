@@ -574,40 +574,62 @@ public sealed partial class MainWindow : Window
 
     private void NavigateTag(string tag)
     {
-        if (AppState.ReadOnlySession && WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "about" or "buy" or "license"))
+        try
         {
-            SelectNav("home");
-            NavFrame.Navigate(typeof(HomePage));
-            return;
-        }
+            if (AppState.ReadOnlySession && WriteNavTags.Contains(tag) && tag is not ("tax" or "home" or "about" or "buy" or "license"))
+            {
+                SelectNav("home");
+                NavFrame.Navigate(typeof(HomePage));
+                return;
+            }
 
-        switch (tag)
+            switch (tag)
+            {
+                case "home": NavFrame.Navigate(typeof(HomePage)); break;
+                case "add": NavFrame.Navigate(typeof(AddHubPage)); break;
+                case "setup": NavFrame.Navigate(typeof(FirstRunPage)); break;
+                case "entities": NavFrame.Navigate(typeof(EntitiesPage)); break;
+                case "accounts": NavFrame.Navigate(typeof(AccountsPage)); break;
+                case "ledger": NavFrame.Navigate(typeof(LedgerPage)); break;
+                case "budgets": NavFrame.Navigate(typeof(BudgetsPage)); break;
+                case "review": NavFrame.Navigate(typeof(ReviewPage)); break;
+                case "rules": NavFrame.Navigate(typeof(RulesPage)); break;
+                case "import": NavFrame.Navigate(typeof(ImportPage)); break;
+                case "plaid": NavFrame.Navigate(typeof(PlaidPage)); break;
+                case "reconcile": NavFrame.Navigate(typeof(ReconcilePage)); break;
+                case "data": NavFrame.Navigate(typeof(DataPage)); break;
+                case "users": NavFrame.Navigate(typeof(UsersPage)); break;
+                case "audit": NavFrame.Navigate(typeof(AuditPage)); break;
+                case "bills": NavFrame.Navigate(typeof(BillsPage)); break;
+                case "credit": NavFrame.Navigate(typeof(CreditPage)); break;
+                case "buy": NavFrame.Navigate(typeof(BuyPage)); break;
+                case "scenarios": NavFrame.Navigate(typeof(ScenariosPage)); break;
+                case "taxvault": NavFrame.Navigate(typeof(TaxVaultPage)); break;
+                case "tax": NavFrame.Navigate(typeof(TaxPage)); break;
+                case "reports": NavFrame.Navigate(typeof(ReportsPage)); break;
+                case "intermix": NavFrame.Navigate(typeof(IntermixPage)); break;
+                case "license": NavFrame.Navigate(typeof(LicensePage)); break;
+                case "about": NavFrame.Navigate(typeof(AboutPage)); break;
+            }
+        }
+        catch (Exception ex)
         {
-            case "home": NavFrame.Navigate(typeof(HomePage)); break;
-            case "add": NavFrame.Navigate(typeof(AddHubPage)); break;
-            case "setup": NavFrame.Navigate(typeof(FirstRunPage)); break;
-            case "entities": NavFrame.Navigate(typeof(EntitiesPage)); break;
-            case "accounts": NavFrame.Navigate(typeof(AccountsPage)); break;
-            case "ledger": NavFrame.Navigate(typeof(LedgerPage)); break;
-            case "budgets": NavFrame.Navigate(typeof(BudgetsPage)); break;
-            case "review": NavFrame.Navigate(typeof(ReviewPage)); break;
-            case "rules": NavFrame.Navigate(typeof(RulesPage)); break;
-            case "import": NavFrame.Navigate(typeof(ImportPage)); break;
-            case "plaid": NavFrame.Navigate(typeof(PlaidPage)); break;
-            case "reconcile": NavFrame.Navigate(typeof(ReconcilePage)); break;
-            case "data": NavFrame.Navigate(typeof(DataPage)); break;
-            case "users": NavFrame.Navigate(typeof(UsersPage)); break;
-            case "audit": NavFrame.Navigate(typeof(AuditPage)); break;
-            case "bills": NavFrame.Navigate(typeof(BillsPage)); break;
-            case "credit": NavFrame.Navigate(typeof(CreditPage)); break;
-            case "buy": NavFrame.Navigate(typeof(BuyPage)); break;
-            case "scenarios": NavFrame.Navigate(typeof(ScenariosPage)); break;
-            case "taxvault": NavFrame.Navigate(typeof(TaxVaultPage)); break;
-            case "tax": NavFrame.Navigate(typeof(TaxPage)); break;
-            case "reports": NavFrame.Navigate(typeof(ReportsPage)); break;
-            case "intermix": NavFrame.Navigate(typeof(IntermixPage)); break;
-            case "license": NavFrame.Navigate(typeof(LicensePage)); break;
-            case "about": NavFrame.Navigate(typeof(AboutPage)); break;
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    ".financial-os");
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(
+                    Path.Combine(dir, "winui-crash.log"),
+                    $"[{DateTime.Now:O}] [NavigateTag:{tag}] {ex}\n\n");
+            }
+            catch { /* ignore */ }
+            // Keep shell alive — fall back to Home if target page blew up during load
+            if (tag != "home")
+            {
+                try { NavFrame.Navigate(typeof(HomePage)); } catch { /* ignore */ }
+            }
         }
     }
 }
