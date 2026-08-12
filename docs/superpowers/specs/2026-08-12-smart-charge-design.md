@@ -1,6 +1,6 @@
 # Smart charge — Can I buy? + promo terms + offer desk
 
-**Status:** Draft — awaiting user review  
+**Status:** Approved for implementation  
 **Date:** 2026-08-12  
 **Product:** Everyone (smart fiscal decisions, not cash-first)
 
@@ -27,6 +27,7 @@ Promo periods on statements (Amazon monthly / ISB plans, retail purchase 0%, lis
 | D9 | Statement scrape is a **required** promo source, including Amazon-style plan tables. Plaid is best-effort (APR buckets, due dates — usually no plan rows). | Plaid will miss retail monthlies. |
 | D10 | **User-sourced lines never change silently.** Statement or Plaid vs a `source=user` line → **review prompt** (keep yours / take statement / edit). Silent upsert only for empty fields or lines whose source is `statement` / `plaid`. Among silent sources: **statement > Plaid**. | Honesty + user control. |
 | D11 | Product-wide audit is **in this plan**, not a later maybe. Known cash-first / rewards-only call sites must switch to the ranker. | The whole app’s job is smart fiscal decisions. |
+| D12 | **Statement is not the source of truth for prior transactions.** Local books own the ledger (existence, meaning, category, Who, transfers). The statement is ultimate only for **issuer cycle facts**: ending balance, min due, close/due, promo remaining, plan monthlies. Txn amount/date mismatch or a books row the statement omitted → review, never silent rewrite or delete. One tap may still set books/Safe from statement ending bal when the user agrees. | Constitution: books day-to-day; bank/statement keep them honest. |
 
 ## Out of scope
 
@@ -288,6 +289,16 @@ Existing cycle recompute stays the single writer of `Card payment · {nickname}`
 - Offer BT: Skip when fee > estimated interest saved; Take when opposite and Safe fits.
 - Regression: `prefer=auto` is not cash-first.
 
+## Prior transactions (D12)
+
+Import still **adds** statement charges that books lack (deduped). It does **not**:
+
+- Overwrite amount, date, payee, category, or Who on an existing books row
+- Delete a books row the statement omitted
+- Re-categorize from statement text when the user already set a category
+
+Amount/date mismatch on a fingerprint match → `import` review item (`review_txn_mismatch`), same spirit as promo conflicts. Ending-balance “set Safe from bank” remains a **user tap**, not an automatic books rewrite.
+
 ## Key decisions (summary)
 
 1. One ranker: safety → float → rewards. Cash is last among safe options.
@@ -295,7 +306,8 @@ Existing cycle recompute stays the single writer of `Card payment · {nickname}`
 3. Check vs commit split; post-time choice of recommended vs proposed.
 4. Reward category required; budget optional and non-picking.
 5. Statements must parse plan tables; conflicts with user lines require a review prompt.
-6. Audit is part of ship, not a sequel.
+6. Statement is issuer-cycle truth, not ledger truth (D12).
+7. Audit is part of ship, not a sequel.
 
 ## Open questions
 
