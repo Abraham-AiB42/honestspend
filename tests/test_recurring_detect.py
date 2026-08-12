@@ -3,9 +3,9 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from financial_os.db import Account, Profile, Transaction, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
-from financial_os.services.recurring_detect import detect_recurring, normalize_payee
+from honestspend.db import Account, Profile, Transaction, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
+from honestspend.services.recurring_detect import detect_recurring, normalize_payee
 
 
 def test_normalize_payee():
@@ -16,7 +16,7 @@ def test_normalize_payee():
 def test_detect_monthly_subscription(tmp_path):
     eng = make_engine()
     # override data dir not needed for in-memory-ish file
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     settings.data_dir = tmp_path / "d"
     settings.data_dir.mkdir()
@@ -55,7 +55,7 @@ def test_detect_monthly_subscription(tmp_path):
         assert "NETFLIX" in names
         assert out["needs_attention"] is True
         sug = out["suggestions"][0]
-        from financial_os.services.recurring_detect import accept_recurring_suggestion
+        from honestspend.services.recurring_detect import accept_recurring_suggestion
 
         acc = accept_recurring_suggestion(
             s,

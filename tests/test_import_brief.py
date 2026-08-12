@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import Account, Transaction, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
-from financial_os.services.import_brief import build_import_brief, build_post_import_next_steps
+from honestspend.config import settings
+from honestspend.db import Account, Transaction, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
+from honestspend.services.import_brief import build_import_brief, build_post_import_next_steps
 
 
 @pytest.fixture()
@@ -22,7 +22,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -44,7 +44,7 @@ def test_import_brief_uncategorized(client: TestClient, tmp_path, monkeypatch):
     SF = make_session_factory(eng)
     with SF() as s:
         seed_all(s)
-        from financial_os.db import Profile
+        from honestspend.db import Profile
 
         personal = s.query(Profile).filter(Profile.slug == "personal").one()
         acct = Account(
@@ -76,7 +76,7 @@ def test_import_brief_uncategorized(client: TestClient, tmp_path, monkeypatch):
 
 
 def test_import_brief_books_vs_bank_drift(tmp_path: Path):
-    from financial_os.db import Profile
+    from honestspend.db import Profile
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -110,7 +110,7 @@ def test_import_brief_books_vs_bank_drift(tmp_path: Path):
 def test_import_brief_honesty_beats_uncategorized(tmp_path: Path):
     """Safe-to-spend honesty ranks above Sort charges when both apply."""
     from datetime import date
-    from financial_os.db import Profile, Transaction
+    from honestspend.db import Profile, Transaction
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -153,7 +153,7 @@ def test_import_brief_honesty_beats_uncategorized(tmp_path: Path):
 
 
 def test_post_import_next_steps_uncategorized(tmp_path: Path):
-    from financial_os.db import Profile
+    from honestspend.db import Profile
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy import create_engine
 
@@ -198,7 +198,7 @@ def test_post_import_next_steps_uncategorized(tmp_path: Path):
 
 def test_post_import_enter_ending_bal_when_no_institution(tmp_path: Path):
     """Bal-less CSV/PDF: prompt to type ending bal so Safe to spend stays honest."""
-    from financial_os.db import Profile
+    from honestspend.db import Profile
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 

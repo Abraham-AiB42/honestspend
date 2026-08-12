@@ -9,13 +9,13 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Category, Profile, Transaction, init_db
-from financial_os.engine.ifpp import CashAccountView, compute_cash_spendable
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.pre_purchase import check_purchase
-from financial_os.services.setup_budgets import budgets_review, buffers_status, save_buffers
+from honestspend.config import settings
+from honestspend.db import Account, Category, Profile, Transaction, init_db
+from honestspend.engine.ifpp import CashAccountView, compute_cash_spendable
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.pre_purchase import check_purchase
+from honestspend.services.setup_budgets import budgets_review, buffers_status, save_buffers
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -75,7 +75,7 @@ def test_save_buffers_and_ifpp(tmp_path: Path, monkeypatch):
 def test_pre_purchase_lists_cash_accounts(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
-    settings_row = s.get(__import__("financial_os.db", fromlist=["AppSettings"]).AppSettings, 1)
+    settings_row = s.get(__import__("honestspend.db", fromlist=["AppSettings"]).AppSettings, 1)
     settings_row.safety_buffer = Decimal("0")
     s.add(
         Account(

@@ -49,14 +49,14 @@ Sheets: Balance · Payroll · Employees · e-Folio · Expenses · **Recurring Ex
 
 | Path | Responsibility |
 |------|----------------|
-| `src/financial_os/db.py` | ScheduledItem columns; optional Category flags |
-| `src/financial_os/migrations.py` | SCHEMA 22+ |
-| `src/financial_os/services/schedule_series.py` | **New** — create step, activate series as-of, list series |
-| `src/financial_os/services/payroll_package.py` | **New** — create net + employer-tax schedules |
-| `src/financial_os/services/entity_pnl.py` | **New** — year P&L from ledger |
-| `src/financial_os/engine/schedule_expand.py` | Honor `start_date` / effective window if added |
-| `src/financial_os/services/coming_up.py` | Treat owner_draw as outflow; no credit skip change |
-| `src/financial_os/api/app.py` | CRUD fields + series + payroll package + P&L |
+| `src/honestspend/db.py` | ScheduledItem columns; optional Category flags |
+| `src/honestspend/migrations.py` | SCHEMA 22+ |
+| `src/honestspend/services/schedule_series.py` | **New** — create step, activate series as-of, list series |
+| `src/honestspend/services/payroll_package.py` | **New** — create net + employer-tax schedules |
+| `src/honestspend/services/entity_pnl.py` | **New** — year P&L from ledger |
+| `src/honestspend/engine/schedule_expand.py` | Honor `start_date` / effective window if added |
+| `src/honestspend/services/coming_up.py` | Treat owner_draw as outflow; no credit skip change |
+| `src/honestspend/api/app.py` | CRUD fields + series + payroll package + P&L |
 | `clients/.../Pages/*` | Bills/schedules UI, business setup, reports |
 | `docs/BUSINESS_ENTITY.md` | **New** — product contract for steals |
 | `tests/test_schedule_series.py` | Versioned bills |
@@ -113,8 +113,8 @@ Cadence stays `yearly` or monthly with short start/end (BOP Aug 2–5). No speci
 ### Task 1: Schema — schedule window + series + vendor + opex + income_source + owner_draw
 
 **Files:**
-- Modify: `src/financial_os/db.py` (`ScheduledItem`)
-- Modify: `src/financial_os/migrations.py` (`SCHEMA_VERSION` 21→22, `_mig_22_schedule_agency_steals`)
+- Modify: `src/honestspend/db.py` (`ScheduledItem`)
+- Modify: `src/honestspend/migrations.py` (`SCHEMA_VERSION` 21→22, `_mig_22_schedule_agency_steals`)
 - Test: `tests/test_schedule_schema_agency.py`
 
 **Migration SQL (SQLite ALTER pattern):**
@@ -140,9 +140,9 @@ CREATE INDEX IF NOT EXISTS ix_scheduled_items_series ON scheduled_items(series_i
 ### Task 2: Expand respects start_date; kind owner_draw is cash outflow
 
 **Files:**
-- Modify: `src/financial_os/engine/schedule_expand.py`
-- Modify: `src/financial_os/services/coming_up.py` (owner_draw → out)
-- Modify: `src/financial_os/services/ifpp_service.py` if kind filters exist
+- Modify: `src/honestspend/engine/schedule_expand.py`
+- Modify: `src/honestspend/services/coming_up.py` (owner_draw → out)
+- Modify: `src/honestspend/services/ifpp_service.py` if kind filters exist
 - Test: `tests/test_schedule_expand_window.py`, extend `tests/test_coming_up.py`
 
 **Interfaces:**
@@ -186,7 +186,7 @@ All callers that expand items must pass `start_date=getattr(s, "start_date", Non
 ### Task 3: Series service — create step / list series / supersede
 
 **Files:**
-- Create: `src/financial_os/services/schedule_series.py`
+- Create: `src/honestspend/services/schedule_series.py`
 - Test: `tests/test_schedule_series.py`
 
 **Interfaces:**
@@ -241,7 +241,7 @@ def list_series(session, profile_id: int) -> list[dict]:
 ### Task 4: API for schedule fields + series
 
 **Files:**
-- Modify: `src/financial_os/api/app.py` (Scheduled create/patch models)
+- Modify: `src/honestspend/api/app.py` (Scheduled create/patch models)
 - Test: `tests/test_schedule_api_agency.py`
 
 **Endpoints:**
@@ -291,7 +291,7 @@ Plain language: **Pay from**, **Vendor**, **Starts**, **Ends**, **Owner draw**
 ### Task 6: Payroll package (business entity thin)
 
 **Files:**
-- Create: `src/financial_os/services/payroll_package.py`
+- Create: `src/honestspend/services/payroll_package.py`
 - API + test
 - Optional WinUI business setup
 
@@ -353,7 +353,7 @@ Coming up shows both on pay day → Safe honest.
 ### Task 8: Entity year P&L report
 
 **Files:**
-- Create: `src/financial_os/services/entity_pnl.py`
+- Create: `src/honestspend/services/entity_pnl.py`
 - API: `GET /api/reports/entity-pnl?profile_id=&year=`
 - WinUI Full books Reports or new section
 - Test: seed txns → income/expense/owner_draw buckets

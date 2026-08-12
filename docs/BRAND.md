@@ -1,4 +1,4 @@
-# Brand
+﻿# Brand
 
 **Product name:** **HonestSpend**
 
@@ -20,18 +20,18 @@ Confirm domain + USPTO before a hard commercial launch under this name.
 | Layer | Name |
 |-------|------|
 | Display / UI / docs | **HonestSpend** |
-| Python import package | `financial_os` (engine; path stable) |
-| PyPI / CLI script | `honestspend` (+ legacy `floatpile`, `ledgerring`, `financial-os`) |
+| Python package | `honestspend` |
+| PyPI / CLI | `honestspend` (legacy aliases: `floatpile`, `ledgerring`, `financial-os`) |
 | WinUI project / EXE | `HonestSpend.WinUI` / `HonestSpend.WinUI.exe` |
-| Data dir | `~/.financial-os` (FOS_* env; path stable) |
+| Data dir | `~/.HonestSpend` (legacy `~/.financial-os` still opened if present) |
+| Database file | `honestspend.db` (legacy `financial_os.db` still opened if present) |
+| Env prefix | `FOS_*` (stable) |
 | Task Scheduler | `HonestSpend-AutoBackup`, `HonestSpend-Digest`, `HonestSpend-ImportInbox` |
 
 ## History
 
 | Name | Notes |
 |------|--------|
-| **HonestSpend** | Current product name |
-| **Floatpile** | Working alpha (CLI `floatpile` still aliases) |
-| **LedgerRing** | Earlier name (CLI `ledgerring` still aliases) |
-
-Rejected candidates: SpendRoom, TrueBooks, HonestBooks, Spendkin, CashRunway, etc.
+| **HonestSpend** | Current product name (everywhere) |
+| **Floatpile** | Working alpha — CLI alias only |
+| **LedgerRing** | Earlier name — CLI alias only |

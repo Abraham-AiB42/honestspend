@@ -5,9 +5,9 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
+from honestspend.config import settings
+from honestspend.db import init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
 
 
 @pytest.fixture()
@@ -16,7 +16,7 @@ def client(tmp_path, monkeypatch):
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
     monkeypatch.setattr(settings, "require_api_key", False)
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -84,9 +84,9 @@ def test_mark_month_closed(client: TestClient):
 
 def test_month_close_gate_partial_bank_bal(tmp_path, monkeypatch):
     """After first bank bal, every cash IFPP account needs one."""
-    from financial_os.db import Account, Profile
-    from financial_os.services.month_close import build_month_close
-    from financial_os.services.onboarding import apply_first_run
+    from honestspend.db import Account, Profile
+    from honestspend.services.month_close import build_month_close
+    from honestspend.services.onboarding import apply_first_run
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
@@ -129,9 +129,9 @@ def test_month_close_gate_partial_bank_bal(tmp_path, monkeypatch):
 
 
 def test_month_close_gate_cash_drift(tmp_path, monkeypatch):
-    from financial_os.db import Account, Profile
-    from financial_os.services.month_close import build_month_close
-    from financial_os.services.onboarding import apply_first_run
+    from honestspend.db import Account, Profile
+    from honestspend.services.month_close import build_month_close
+    from honestspend.services.onboarding import apply_first_run
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 

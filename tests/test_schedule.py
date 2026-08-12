@@ -7,11 +7,11 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.api.app import ScheduledIn
-from financial_os.db import Account, AppSettings, Base, Profile, ScheduledItem, init_db
-from financial_os.engine.schedule_expand import expand_scheduled, next_occurrence
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
+from honestspend.api.app import ScheduledIn
+from honestspend.db import Account, AppSettings, Base, Profile, ScheduledItem, init_db
+from honestspend.engine.schedule_expand import expand_scheduled, next_occurrence
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
 
 
 def _session(tmp_path: Path):

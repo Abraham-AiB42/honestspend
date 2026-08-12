@@ -10,7 +10,7 @@ public static class AppConfig
 
     /// <summary>
     /// Repo root or install dir containing .venv and src.
-    /// Default: walk up from app folder looking for pyproject.toml / financial-os.
+    /// Default: walk up from app folder looking for pyproject.toml / HonestSpend engine.
     /// </summary>
     public static string? BackendRoot { get; set; }
 

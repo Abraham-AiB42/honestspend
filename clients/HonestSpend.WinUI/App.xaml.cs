@@ -34,9 +34,7 @@ public partial class App : Application
         {
             try
             {
-                var dir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                    ".financial-os");
+                var dir = WinUiPaths.DefaultLocalDataDir();
                 Directory.CreateDirectory(dir);
                 var path = Path.Combine(dir, "winui-crash.log");
                 File.AppendAllText(
@@ -80,8 +78,13 @@ public partial class App : Application
     {
         try
         {
-            // Always attempt seal when encryption may be on (not only UI lock mode)
-            AppLockService.SealDatabaseAsync().GetAwaiter().GetResult();
+            // Never GetResult on the UI thread — that deadlocks WinUI sync context.
+            // Run seal on a thread-pool thread and wait briefly.
+            Task.Run(async () =>
+            {
+                try { await AppLockService.SealDatabaseAsync().ConfigureAwait(false); }
+                catch { /* ignore */ }
+            }).Wait(TimeSpan.FromSeconds(4));
         }
         catch { /* ignore */ }
         try { Backend?.Dispose(); } catch { /* ignore */ }
@@ -211,9 +214,7 @@ public partial class App : Application
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".financial-os");
+            var dir = WinUiPaths.DefaultLocalDataDir();
             Directory.CreateDirectory(dir);
             File.AppendAllText(
                 Path.Combine(dir, "winui-crash.log"),

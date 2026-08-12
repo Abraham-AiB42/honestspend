@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Full HonestSpend rename**: Python package `honestspend` (was `financial_os`); data dir `~/.HonestSpend` (legacy `~/.financial-os` still opens); DB `honestspend.db` (legacy `financial_os.db` still opens); user-facing Floatpile/financial-os strings removed
+- **Setup storage freeze fix**: engine `Stop()` no longer deadlocks WinUI via sync seal; progress status + indeterminate bar while moving books; 45s restart timeout
+
 - **Trust bar (full review follow-through)**:
   - Home: STS primary; soft until = **runway − budgets − Coming up outflows once** (not Safe minus bills again); capped at Safe (hidden when same $); “Until …” plain labels; risk line = **Next risk day** only
   - Full **Bills · Mark paid** (same match / never-neg confirm as Home Coming up)
@@ -94,7 +97,7 @@
 
 ## 1.0.49 — Full DB encryption with unlock key
 
-- **At-rest encryption**: when app lock ≠ none, books use AES-256-GCM seal (`financial_os.db.sealed` + `crypto.json` key wrap)
+- **At-rest encryption**: when app lock ≠ none, books use AES-256-GCM seal (`honestspend.db.sealed` + `crypto.json` key wrap)
 - **Unlock key hierarchy**: PIN/password → KEK (PBKDF2) → DEK; Windows Hello uses client-held DEK
 - Engine boots sealed (HTTP 423 until unlock); `POST /api/crypto/unlock|enable|lock|disable`
 - WinUI: lock screen unseals; setup/Settings enable encryption with lock; seal on clean shutdown
@@ -175,7 +178,7 @@
 
 ## 1.0.40 — Plaid BYOK secrets + app Link + AI keys (PR2)
 
-- **Local secrets store** (`~/.financial-os/secrets.json`, Windows DPAPI for secret fields)
+- **Local secrets store** (`~/.HonestSpend/secrets.json`, Windows DPAPI for secret fields)
 - **`POST/GET/DELETE /api/plaid/credentials`** — client id + secret + env; hot-reload (no restart)
 - **`POST/GET/DELETE /api/ai/credentials`** — Grok (xAI), OpenAI, Anthropic, custom
 - **Plaid trial limit** — track Items n/10; block new Link at cap; status shows remaining
@@ -414,12 +417,12 @@
 - **CSV** and **PDF** import return the same structured next_steps as OFX
 - Import page CTAs after every file import (not only OFX)
 
-## 1.0.11 — Rename: Floatpile → HonestSpend
+## 1.0.11 — Rename: HonestSpend → HonestSpend
 
 - **Product name:** **HonestSpend**
 - Full rename: docs, CLI (`honestspend`), WinUI `HonestSpend.WinUI`, packaging, tray/tasks
-- Python import path stays `financial_os`; data dir stays `~/.financial-os` (FOS_*)
-- Legacy CLI aliases: `floatpile`, `ledgerring`, `financial-os`
+- Python import path stays `honestspend`; data dir stays `~/.HonestSpend` (FOS_*)
+- Legacy CLI aliases: `HonestSpend`, `ledgerring`, `financial-os`
 - See [`docs/BRAND.md`](docs/BRAND.md)
 
 ## 1.0.10 — OFX ledger balance + post-import next steps
@@ -445,15 +448,15 @@
 ## 1.0.7 — Bank download guides + inbox import
 
 - **Bank guides** on Import: Chase, Amex, Capital One, etc. — login link + steps (no passwords)
-- **Inbox drop folder** (`data_dir/inbox`) · `floatpile import-inbox` · `POST /api/import/inbox/process`
-- Scheduled task **Floatpile-ImportInbox** (daily 09:00) via register-tasks
+- **Inbox drop folder** (`data_dir/inbox`) · `HonestSpend import-inbox` · `POST /api/import/inbox/process`
+- Scheduled task **HonestSpend-ImportInbox** (daily 09:00) via register-tasks
 - Filename → account nickname matching; processed CSVs archived
 
-## 1.0.6 — Rename: LedgerRing → Floatpile (working alpha)
+## 1.0.6 — Rename: LedgerRing → HonestSpend (working alpha)
 
-- **Product name:** **Floatpile** (working alpha at the time)
-- Full rename: docs, CLI (`floatpile`), WinUI project `Floatpile.WinUI`, packaging, tray/tasks
-- Python import path stays `financial_os`; data dir stays `~/.financial-os`
+- **Product name:** **HonestSpend** (working alpha at the time)
+- Full rename: docs, CLI (`HonestSpend`), WinUI project `HonestSpend.WinUI`, packaging, tray/tasks
+- Python import path stays `honestspend`; data dir stays `~/.HonestSpend`
 - Legacy CLI alias `ledgerring` still points at the same entry point
 - See [`docs/BRAND.md`](docs/BRAND.md)
 
@@ -674,8 +677,8 @@ Ship bar: `scripts/verify-grade-a.ps1`, package-release one-folder install, Inno
 ### Engine
 - **Entity-scoped IFPP** (`scope=entity` default, `scope=group` for combined)
 - Query: `GET /api/ifpp?profile_id=&scope=` (also capital-desk, digest, pre-purchase)
-- **Staged backup restore**: writes `financial_os.db.next` + `.restore_pending`; applied on engine restart
-- **Schema migrations** via `schema_meta` + versioned runner (`financial_os.migrations`)
+- **Staged backup restore**: writes `honestspend.db.next` + `.restore_pending`; applied on engine restart
+- **Schema migrations** via `schema_meta` + versioned runner (`honestspend.migrations`)
 - **Non-loopback security**: require `X-API-Key` unless `FOS_ALLOW_NON_LOOPBACK=1`
 - **`PATCH /api/settings`** for true partial updates; `ifpp_scope` setting
 - FastAPI **lifespan** (replaces deprecated on_event startup)

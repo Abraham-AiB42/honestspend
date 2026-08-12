@@ -28,7 +28,7 @@ powershell -File scripts\check-no-private-names.ps1
 
 ## Upgrade from 0.5.x
 
-1. Backup data dir (`~/.financial-os` or `FOS_DATA_DIR`)  
+1. Backup data dir (`~/.HonestSpend` or `FOS_DATA_DIR`)  
 2. Install 0.6.0 engine  
 3. Start once — migrations to schema v9 apply automatically  
 4. Existing private-named profiles (if any) are **kept**; new installs only seed Personal  

@@ -11,12 +11,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, AppSettings, Profile, ScheduledItem, init_db, make_engine, make_session_factory
-from financial_os.migrations import SCHEMA_VERSION, get_schema_version
-from financial_os.seed import seed_all
-from financial_os.services.coming_up import build_coming_up, resolve_window
-from financial_os.services.home_simple import build_home_simple
+from honestspend.config import settings
+from honestspend.db import Account, AppSettings, Profile, ScheduledItem, init_db, make_engine, make_session_factory
+from honestspend.migrations import SCHEMA_VERSION, get_schema_version
+from honestspend.seed import seed_all
+from honestspend.services.coming_up import build_coming_up, resolve_window
+from honestspend.services.home_simple import build_home_simple
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -41,7 +41,7 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -644,7 +644,7 @@ def test_patch_coming_up_settings(api_client: TestClient):
 
 def test_owner_draw_is_outflow_not_income(tmp_path: Path, monkeypatch):
     """kind=owner_draw with negative amount → direction out; never payday income."""
-    from financial_os.services.coming_up import is_income_schedule, next_income_dates
+    from honestspend.services.coming_up import is_income_schedule, next_income_dates
 
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()

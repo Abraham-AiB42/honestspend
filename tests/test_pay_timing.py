@@ -9,12 +9,12 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.autopay import recompute_card_payment_schedule
-from financial_os.services.promo_installments import create_promo_line
-from financial_os.services.statement_cycle import (
+from honestspend.config import settings
+from honestspend.db import Account, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.autopay import recompute_card_payment_schedule
+from honestspend.services.promo_installments import create_promo_line
+from honestspend.services.statement_cycle import (
     compute_next_payment,
     day_before,
     next_payment_date,

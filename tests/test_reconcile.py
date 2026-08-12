@@ -6,10 +6,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.autopay import recompute_card_payment_schedule
-from financial_os.services.reconcile import reconcile_report, set_institution_balance, trust_balance
+from honestspend.db import Account, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.autopay import recompute_card_payment_schedule
+from honestspend.services.reconcile import reconcile_report, set_institution_balance, trust_balance
 
 
 def test_reconcile_drift_and_trust(tmp_path: Path):

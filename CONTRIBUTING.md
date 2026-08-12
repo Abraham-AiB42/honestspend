@@ -20,11 +20,11 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1   # or source .venv/bin/activate
 pip install -e ".[dev]"
 pytest -q
-python -m financial_os.cli serve
+python -m honestspend.cli serve
 ```
 
 App: http://127.0.0.1:7420  
-Data: `~/.financial-os/financial_os.db`
+Data: `~/.HonestSpend/honestspend.db`
 
 ## Guidelines
 

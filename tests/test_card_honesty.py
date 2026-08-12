@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from financial_os.db import Account
-from financial_os.services.card_honesty import (
+from honestspend.db import Account
+from honestspend.services.card_honesty import (
     amount_to_utilization_target,
     credit_advice_for_policy,
     estimated_min_payment,

@@ -28,7 +28,7 @@ public static class TrayHost
     {
         var dir = !string.IsNullOrWhiteSpace(AppConfig.DataDir)
             ? AppConfig.DataDir!
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".financial-os");
+            : WinUiPaths.DefaultLocalDataDir();
         Directory.CreateDirectory(dir);
         return Path.Combine(dir, "tray.pid");
     }
@@ -95,7 +95,7 @@ public static class TrayHost
                 var psi = new ProcessStartInfo
                 {
                     FileName = py,
-                    Arguments = "-m financial_os.cli tray",
+                    Arguments = "-m honestspend.cli tray",
                     WorkingDirectory = root,
                     UseShellExecute = false,
                     CreateNoWindow = true,

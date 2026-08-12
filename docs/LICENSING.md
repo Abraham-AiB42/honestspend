@@ -52,7 +52,7 @@ Pay on Store A (or direct)
 
 ## Local state (engine)
 
-File: `{data_dir}/license.json` (default `%USERPROFILE%\.financial-os\license.json`)
+File: `{data_dir}/license.json` (default `%USERPROFILE%\.HonestSpend\license.json`)
 
 ```json
 {

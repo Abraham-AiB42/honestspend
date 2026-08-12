@@ -7,23 +7,23 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.bank_guides import get_bank_guide, list_bank_guides
-from financial_os.services.import_inbox import (
+from honestspend.config import settings
+from honestspend.db import Account, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.bank_guides import get_bank_guide, list_bank_guides
+from honestspend.services.import_inbox import (
     ensure_inbox_layout,
     process_inbox,
     resolve_account_for_file,
 )
-from financial_os.services.onboarding import apply_first_run
+from honestspend.services.onboarding import apply_first_run
 
 
 def _session(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()
@@ -113,7 +113,7 @@ def test_inbox_default_only_when_passed(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("1000"))
     s.commit()
-    from financial_os.db import Account
+    from honestspend.db import Account
 
     acct = s.query(Account).filter(Account.kind == "checking").one()
     layout = ensure_inbox_layout()
@@ -196,7 +196,7 @@ def test_inbox_enter_ending_bal_bal_less_csv(tmp_path: Path, monkeypatch):
 
 def test_inbox_multi_account_enter_ending_bal(tmp_path: Path, monkeypatch):
     """Two bal-less cash accounts → enter_ending_bal for both."""
-    from financial_os.db import Account, Profile
+    from honestspend.db import Account, Profile
 
     s = _session(tmp_path, monkeypatch)
     apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("1000"))
@@ -282,7 +282,7 @@ def test_inbox_surfaces_schedule_advance(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     apply_first_run(s, cash_name="Primary checking", cash_balance=Decimal("2000"))
     s.commit()
-    from financial_os.db import Account
+    from honestspend.db import Account
 
     cash = s.query(Account).filter(Account.kind == "checking").one()
     personal = s.query(Profile).filter(Profile.slug == "personal").one()

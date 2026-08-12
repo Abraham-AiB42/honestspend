@@ -9,15 +9,15 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Category, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.setup_categorize import (
+from honestspend.config import settings
+from honestspend.db import Account, Category, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.setup_categorize import (
     auto_apply_high_confidence,
     categorize_status,
     confirm_payee_category,
 )
-from financial_os.services.setup_recurring_finalize import (
+from honestspend.services.setup_recurring_finalize import (
     apply_recurring_choices,
     remaining_recurring,
 )

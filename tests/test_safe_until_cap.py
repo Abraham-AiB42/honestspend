@@ -9,14 +9,14 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, AppSettings, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.cash_runway import build_safe_until_window
-from financial_os.services.home_simple import build_home_simple
+from honestspend.db import Account, AppSettings, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.cash_runway import build_safe_until_window
+from honestspend.services.home_simple import build_home_simple
 
 
 def _session(tmp_path: Path, monkeypatch):
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     data = tmp_path / "data"
     data.mkdir()
@@ -130,7 +130,7 @@ def test_soft_until_starting_cash_override(tmp_path: Path, monkeypatch):
     )
     s.commit()
 
-    from financial_os.services.coming_up import build_coming_up
+    from honestspend.services.coming_up import build_coming_up
 
     cu = build_coming_up(s, as_of=as_of, profile_id=p.id, mode="calendar", calendar_days=14)
     assert Decimal(cu["outflow_total"]) == Decimal("200.00")
@@ -158,9 +158,9 @@ def test_home_soft_single_counts_window_outflows(tmp_path: Path, monkeypatch):
     soft_start = max(0, runway_start − reserve); soft = max(0, soft_start − outflows);
     cap at STS.
     """
-    from financial_os.db import Category
-    from financial_os.services.budget_service import create_rule
-    from financial_os.services.cash_runway import runway_starting_cash
+    from honestspend.db import Category
+    from honestspend.services.budget_service import create_rule
+    from honestspend.services.cash_runway import runway_starting_cash
 
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()

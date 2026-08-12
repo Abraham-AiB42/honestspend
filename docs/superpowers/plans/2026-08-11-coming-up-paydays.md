@@ -76,10 +76,10 @@ Store on `AppSettings` (migration next integer). If Task 4 is deferred, hardcode
 
 | Path | Responsibility |
 |------|----------------|
-| `src/financial_os/services/coming_up.py` | **New** — window resolve + list builder |
-| `src/financial_os/services/home_simple.py` | Embed `coming_up` in Simple payload |
-| `src/financial_os/api/app.py` | `GET /api/coming-up` (+ optional settings fields) |
-| `src/financial_os/db.py` / `migrations.py` | Optional AppSettings columns (Task 4) |
+| `src/honestspend/services/coming_up.py` | **New** — window resolve + list builder |
+| `src/honestspend/services/home_simple.py` | Embed `coming_up` in Simple payload |
+| `src/honestspend/api/app.py` | `GET /api/coming-up` (+ optional settings fields) |
+| `src/honestspend/db.py` / `migrations.py` | Optional AppSettings columns (Task 4) |
 | `clients/.../LedgerApiClient.cs` | `GetComingUpAsync` |
 | `clients/.../Pages/HomePage.xaml(.cs)` | Coming up card under Safe / risk line |
 | `docs/SIMPLE_MODE.md` | Document strip |
@@ -90,7 +90,7 @@ Store on `AppSettings` (migration next integer). If Task 4 is deferred, hardcode
 ### Task 1: Window resolution + coming_up service (TDD)
 
 **Files:**
-- Create: `src/financial_os/services/coming_up.py`
+- Create: `src/honestspend/services/coming_up.py`
 - Test: `tests/test_coming_up.py`
 
 **Interfaces:**
@@ -220,7 +220,7 @@ def test_coming_up_sorts_by_date():
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/financial_os/services/coming_up.py tests/test_coming_up.py
+git add src/honestspend/services/coming_up.py tests/test_coming_up.py
 git commit -m "feat: coming-up window (calendar + 1–2 paydays)"
 ```
 
@@ -229,8 +229,8 @@ git commit -m "feat: coming-up window (calendar + 1–2 paydays)"
 ### Task 2: API + home_simple embed
 
 **Files:**
-- Modify: `src/financial_os/services/home_simple.py`
-- Modify: `src/financial_os/api/app.py`
+- Modify: `src/honestspend/services/home_simple.py`
+- Modify: `src/honestspend/api/app.py`
 - Test: `tests/test_coming_up.py` (API) and/or `tests/test_home_simple.py`
 
 **Interfaces:**
@@ -260,7 +260,7 @@ def get_coming_up(
     as_of: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
-    from financial_os.services.coming_up import build_coming_up
+    from honestspend.services.coming_up import build_coming_up
     return build_coming_up(
         db,
         as_of=as_of,

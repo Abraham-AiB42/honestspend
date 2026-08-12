@@ -6,22 +6,22 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import AppSettings, init_db
-from financial_os.seed import seed_all
-from financial_os.services.import_reminders import (
+from honestspend.config import settings
+from honestspend.db import AppSettings, init_db
+from honestspend.seed import seed_all
+from honestspend.services.import_reminders import (
     build_import_reminder,
     mark_import_activity,
     snooze_import_reminder,
 )
-from financial_os.services.onboarding import apply_first_run
+from honestspend.services.onboarding import apply_first_run
 
 
 def _session(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()

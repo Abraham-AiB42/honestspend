@@ -9,11 +9,11 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, AppSettings, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.account_balance import apply_amount_to_account
-from financial_os.services.autopay import (
+from honestspend.config import settings
+from honestspend.db import Account, AppSettings, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.account_balance import apply_amount_to_account
+from honestspend.services.autopay import (
     after_account_balance_changed,
     list_autopay,
     recompute_all_card_payments,
@@ -21,9 +21,9 @@ from financial_os.services.autopay import (
     set_autopay,
     _suggested_amount,
 )
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.promo_installments import create_promo_line, open_promo_totals
-from financial_os.services.statement_cycle import project_card_payment
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.promo_installments import create_promo_line, open_promo_totals
+from honestspend.services.statement_cycle import project_card_payment
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -293,9 +293,9 @@ def test_missing_funding_ends_stale_cash_schedule(tmp_path: Path, monkeypatch):
 
 def test_archive_credit_ends_card_payment_schedule(tmp_path: Path, monkeypatch):
     """POST archive on credit ends cash Card payment schedules for that card."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
     from fastapi.testclient import TestClient
-    from financial_os.db import init_db, make_engine, make_session_factory
+    from honestspend.db import init_db, make_engine, make_session_factory
 
     data = tmp_path / "data"
     data.mkdir(exist_ok=True)
@@ -490,7 +490,7 @@ def test_payment_option_alias_does_not_clobber_sticky_none(tmp_path: Path, monke
     Explicit none (and any other set policy) must stay sticky — same contract as
     ensure_autopay_policy_from_payment_option.
     """
-    from financial_os.api.app import _apply_payment_option_alias
+    from honestspend.api.app import _apply_payment_option_alias
 
     s = _session(tmp_path, monkeypatch)
     _p, _cash, card = _card_and_cash(s, bal=Decimal("100.00"), policy="none")

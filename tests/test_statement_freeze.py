@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, init_db
-from financial_os.seed import seed_all
-from financial_os.services.statement_freeze import freeze_statement_cycle, list_statement_cycles
+from honestspend.config import settings
+from honestspend.db import Account, Profile, init_db
+from honestspend.seed import seed_all
+from honestspend.services.statement_freeze import freeze_statement_cycle, list_statement_cycles
 
 
 def _session(tmp_path: Path, monkeypatch):

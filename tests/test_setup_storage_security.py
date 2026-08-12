@@ -7,19 +7,19 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import init_db
-from financial_os.seed import seed_all
-from financial_os.services import app_security as sec
-from financial_os.services import paths as pathsvc
-from financial_os.services import setup_wizard as sw
+from honestspend.config import settings
+from honestspend.db import init_db
+from honestspend.seed import seed_all
+from honestspend.services import app_security as sec
+from honestspend.services import paths as pathsvc
+from honestspend.services import setup_wizard as sw
 
 
 def _session(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()

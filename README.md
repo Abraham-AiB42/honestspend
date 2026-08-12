@@ -51,7 +51,7 @@ honestspend home --brief    # Safe to spend + Do this next
 python -m venv .venv
 # activate, then:
 pip install -e ".[dev]"
-python -m financial_os.cli serve
+python -m honestspend.cli serve
 # or: honestspend serve
 ```
 
@@ -60,7 +60,7 @@ python -m financial_os.cli serve
 3. Optional: Add → Link bank / Import CSV  
 4. Open rarely — run the **3-minute check** when you return
 
-Data: `~/.financial-os/financial_os.db` (or `FOS_DATA_DIR`)
+Data: `~/.HonestSpend/honestspend.db` (or `FOS_DATA_DIR`)
 
 Multi-client: [`docs/CLIENTS.md`](docs/CLIENTS.md)
 
@@ -95,14 +95,14 @@ $env:FOS_SEED_DEMO = "1"
 ## CLI
 
 ```powershell
-python -m financial_os.cli serve
-python -m financial_os.cli tray
-python -m financial_os.cli digest          # JSON; exit 2 if critical (cron)
-python -m financial_os.cli token owner     # mint X-API-Key for multi-client
-python -m financial_os.cli tax-packet --profile personal --year 2026
-python -m financial_os.cli version
+python -m honestspend.cli serve
+python -m honestspend.cli tray
+python -m honestspend.cli digest          # JSON; exit 2 if critical (cron)
+python -m honestspend.cli token owner     # mint X-API-Key for multi-client
+python -m honestspend.cli tax-packet --profile personal --year 2026
+python -m honestspend.cli version
 # Legacy migration only:
-python -m financial_os.cli import-xlsx path\to\old.xlsx --since 2025-01-01
+python -m honestspend.cli import-xlsx path\to\old.xlsx --since 2025-01-01
 ```
 
 ## Open source

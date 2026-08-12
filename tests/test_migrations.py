@@ -4,8 +4,8 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, text
 
-from financial_os.db import init_db
-from financial_os.migrations import SCHEMA_VERSION, get_schema_version
+from honestspend.db import init_db
+from honestspend.migrations import SCHEMA_VERSION, get_schema_version
 
 
 def test_migrations_reach_target(tmp_path: Path):

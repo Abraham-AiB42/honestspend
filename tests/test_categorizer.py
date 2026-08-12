@@ -5,9 +5,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Base, Category, CategoryRule, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.categorizer import (
+from honestspend.db import Account, Base, Category, CategoryRule, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.categorizer import (
     categorize_uncategorized,
     learn_rule_from_correction,
     match_rule,

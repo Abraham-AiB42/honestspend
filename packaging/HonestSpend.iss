@@ -1,4 +1,4 @@
-; Inno Setup 6 script — compile AFTER .\scripts\package-release.ps1
+﻿; Inno Setup 6 script â€” compile AFTER .\scripts\package-release.ps1
 ; Output: dist\HonestSpend-Setup-x64.exe
 ;
 ; Prerequisites:
@@ -6,8 +6,8 @@
 ;   - dist\HonestSpend-Windows-x64\ populated by package-release.ps1
 
 #define MyAppName "HonestSpend"
-#define MyAppVersion "1.0.55"
-; Keep in sync with pyproject.toml / financial_os.__version__
+#define MyAppVersion "1.0.56"
+; Keep in sync with pyproject.toml / honestspend.__version__
 #define MyAppPublisher "HonestSpend contributors"
 #define MyAppExeName "HonestSpend.WinUI.exe"
 #define MyAppURL "https://github.com/Abraham-AiB42/honestspend"
@@ -50,7 +50,7 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Registry]
-; Optional logon — tray-only (user can also set this in-app Settings)
+; Optional logon â€” tray-only (user can also set this in-app Settings)
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "HonestSpend"; ValueData: """{app}\{#MyAppExeName}"" --tray-only"; Flags: uninsdeletevalue; Tasks: logonstart
 
 [Run]

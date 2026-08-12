@@ -9,4 +9,4 @@ if (-not (Test-Path ".venv")) {
 & .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]" -q
 Write-Host "HonestSpend → http://127.0.0.1:7420" -ForegroundColor Cyan
-python -m financial_os.cli serve @args
+python -m honestspend.cli serve @args

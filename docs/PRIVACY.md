@@ -14,7 +14,7 @@ This policy describes how HonestSpend handles information when you use the deskt
 
 ## What we store locally
 
-On your PC (default folder `%USERPROFILE%\.financial-os`, or a path you choose in Settings):
+On your PC (default folder `%USERPROFILE%\.HonestSpend`, or a path you choose in Settings):
 
 - Accounts, transactions, categories, and balances you enter or import  
 - App settings (API URL, data folder, optional backend path)  

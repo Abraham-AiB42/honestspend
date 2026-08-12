@@ -7,9 +7,9 @@ from unittest.mock import patch
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, PlaidItem, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services import plaid_service
+from honestspend.db import Account, PlaidItem, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services import plaid_service
 
 
 def _session(tmp_path: Path):
@@ -35,7 +35,7 @@ def _item(s, profile_id: int) -> PlaidItem:
 
 
 def test_sync_accounts_sets_institution_and_books(tmp_path: Path, monkeypatch):
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     monkeypatch.setattr(settings, "plaid_client_id", "cid")
     monkeypatch.setattr(settings, "plaid_secret", "sec")
@@ -69,7 +69,7 @@ def test_sync_accounts_sets_institution_and_books(tmp_path: Path, monkeypatch):
 
 
 def test_sync_accounts_credit_available_fallback_on_create(tmp_path: Path, monkeypatch):
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     monkeypatch.setattr(settings, "plaid_client_id", "cid")
     monkeypatch.setattr(settings, "plaid_secret", "sec")
@@ -104,7 +104,7 @@ def test_sync_accounts_credit_available_fallback_on_create(tmp_path: Path, monke
 
 def test_sync_accounts_missing_current_counted(tmp_path: Path, monkeypatch):
     """Existing linked account with no balances.current leaves books unchanged."""
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     monkeypatch.setattr(settings, "plaid_client_id", "cid")
     monkeypatch.setattr(settings, "plaid_secret", "sec")
@@ -146,7 +146,7 @@ def test_sync_accounts_missing_current_counted(tmp_path: Path, monkeypatch):
 
 def test_sync_accounts_create_missing_current_not_ifpp_cash(tmp_path: Path, monkeypatch):
     """First link without balances.current must not invent $0 cash for Safe to spend."""
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     monkeypatch.setattr(settings, "plaid_client_id", "cid")
     monkeypatch.setattr(settings, "plaid_secret", "sec")
@@ -174,7 +174,7 @@ def test_sync_accounts_create_missing_current_not_ifpp_cash(tmp_path: Path, monk
 
 
 def test_upsert_plaid_txn_does_not_change_balance(tmp_path: Path, monkeypatch):
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     monkeypatch.setattr(settings, "plaid_client_id", "cid")
     monkeypatch.setattr(settings, "plaid_secret", "sec")
@@ -214,7 +214,7 @@ def test_upsert_plaid_txn_does_not_change_balance(tmp_path: Path, monkeypatch):
 
 
 def test_sync_transactions_refreshes_balance_without_double_apply(tmp_path: Path, monkeypatch):
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     monkeypatch.setattr(settings, "plaid_client_id", "cid")
     monkeypatch.setattr(settings, "plaid_secret", "sec")

@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, init_db
-from financial_os.seed import seed_all
-from financial_os.services.promo_installments import (
+from honestspend.config import settings
+from honestspend.db import Account, Profile, init_db
+from honestspend.seed import seed_all
+from honestspend.services.promo_installments import (
     create_promo_line,
     estimated_months_remaining,
     project_line_calendar,
@@ -122,7 +122,7 @@ def test_project_promo_calendar_merges_and_spans_longest(tmp_path, monkeypatch):
 def test_api_promo_calendar(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from financial_os.db import Account, Profile, init_db, make_engine, make_session_factory
+    from honestspend.db import Account, Profile, init_db, make_engine, make_session_factory
 
     data = tmp_path / "data"
     data.mkdir()
@@ -131,7 +131,7 @@ def test_api_promo_calendar(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)

@@ -5,20 +5,22 @@ namespace HonestSpend_WinUI.Services;
 /// <summary>Apply data-folder choice, books-bundle copy, restart engine with FOS_DATA_DIR.</summary>
 public static class StorageLocationService
 {
+    /// <summary>Modern + legacy book file names (copy both so old vaults migrate).</summary>
     private static readonly string[] BundleNames =
     {
+        "honestspend.db.sealed",
+        "honestspend.db",
+        "honestspend.db-wal",
+        "honestspend.db-shm",
         "financial_os.db.sealed",
-        "crypto.json",
         "financial_os.db",
         "financial_os.db-wal",
         "financial_os.db-shm",
+        "crypto.json",
         "license.json",
     };
 
-    public static string DefaultLocalPath()
-        => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".financial-os");
+    public static string DefaultLocalPath() => WinUiPaths.DefaultLocalDataDir();
 
     public static void PersistDataDir(string? path)
     {
@@ -87,38 +89,64 @@ public static class StorageLocationService
 
     /// <summary>
     /// Checkpoint/seal source vault, copy full books bundle, set DataDir, restart engine.
+    /// progress: optional UI status callback (called on the caller's context).
     /// </summary>
     public static async Task ApplyAndRestartEngineAsync(
         string path,
         bool copyFromPrevious = true,
+        Action<string>? progress = null,
         CancellationToken ct = default)
     {
+        void Report(string msg) => progress?.Invoke(msg);
+
         var previous = AppConfig.DataDir;
         if (string.IsNullOrWhiteSpace(previous))
             previous = DefaultLocalPath();
 
-        // Seal while engine still points at the previous data dir
+        // Seal while engine still points at the previous data dir (async — never GetResult)
         if (App.Backend is not null)
         {
-            try { await AppLockService.SealDatabaseAsync(ct); }
+            Report("Sealing books (if encrypted)…");
+            try { await AppLockService.SealDatabaseAsync(ct).ConfigureAwait(false); }
             catch { /* may not be encrypted */ }
         }
 
         string? copyMsg = null;
         if (copyFromPrevious)
-            copyMsg = CopyBooksBundle(previous, path);
+        {
+            Report("Copying books to new folder…");
+            // File I/O off UI thread
+            var prev = previous;
+            copyMsg = await Task.Run(() => CopyBooksBundle(prev, path), ct).ConfigureAwait(false);
+        }
 
+        Report("Saving folder setting…");
         PersistDataDir(path);
 
         if (App.Backend is not null)
         {
-            // RestartAsync seals again (idempotent) then kills with new FOS_DATA_DIR
-            var ok = await App.Backend.RestartAsync(ct);
+            Report("Restarting engine…");
+            // Timeout so the wizard never freezes forever
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            linked.CancelAfter(TimeSpan.FromSeconds(45));
+            bool ok;
+            try
+            {
+                ok = await App.Backend.RestartAsync(linked.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new InvalidOperationException(
+                    "Engine restart timed out after 45s. Close any other HonestSpend windows, " +
+                    "then try again. " + (copyMsg ?? ""));
+            }
             if (!ok)
                 throw new InvalidOperationException(
                     "Data folder saved but engine did not restart: " +
                     (App.Backend.LastError ?? "unknown") +
                     (copyMsg is null ? "" : " · " + copyMsg));
         }
+
+        Report("Engine ready.");
     }
 }

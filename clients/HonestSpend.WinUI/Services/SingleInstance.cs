@@ -19,9 +19,7 @@ public static class SingleInstance
     {
         try
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".financial-os");
+            var dir = WinUiPaths.DefaultLocalDataDir();
             Directory.CreateDirectory(dir);
             File.AppendAllText(
                 Path.Combine(dir, "winui-lifecycle.log"),

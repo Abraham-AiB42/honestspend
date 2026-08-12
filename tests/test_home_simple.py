@@ -5,11 +5,11 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
-from financial_os.services.profiles import create_profile
-from financial_os.services.wealth_basics import build_wealth_tips
+from honestspend.config import settings
+from honestspend.db import init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
+from honestspend.services.profiles import create_profile
+from honestspend.services.wealth_basics import build_wealth_tips
 
 
 @pytest.fixture()
@@ -21,7 +21,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -82,14 +82,14 @@ def test_home_do_this_next_books_vs_bank(client: TestClient):
 def test_home_do_this_next_sort_when_uncat_only(client: TestClient, tmp_path, monkeypatch):
     """When books primary is review (no drift), Do this next elevates Sort charges."""
     from datetime import date
-    from financial_os.db import Account, Profile, Transaction
+    from honestspend.db import Account, Profile, Transaction
 
     client.post("/api/onboarding/quick-setup", json={"cash_balance": 8000})
     # Use API session DB: post an uncategorized txn via account
     accts = client.get("/api/accounts").json()
     cash = next(a for a in accts if a.get("is_cash_for_ifpp") or a.get("kind") == "checking")
     # Direct DB insert on the app's engine
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     with app_mod.SessionLocal() as s:
         personal = s.query(Profile).filter(Profile.slug == "personal").one()

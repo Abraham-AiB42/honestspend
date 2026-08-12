@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import (
+from honestspend.db import (
     Account,
     AppSettings,
     Base,
@@ -19,9 +19,9 @@ from financial_os.db import (
     Transaction,
     init_db,
 )
-from financial_os.services import budget_periods as bp
-from financial_os.services import budget_service as bs
-from financial_os.services.home_simple import build_home_simple
+from honestspend.services import budget_periods as bp
+from honestspend.services import budget_service as bs
+from honestspend.services.home_simple import build_home_simple
 
 
 @pytest.fixture()

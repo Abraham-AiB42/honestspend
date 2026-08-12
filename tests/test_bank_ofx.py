@@ -6,12 +6,12 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.bank_ofx import import_ofx, parse_ofx_transactions, preview_ofx
-from financial_os.services.import_inbox import ensure_inbox_layout, process_inbox
-from financial_os.services.onboarding import apply_first_run
+from honestspend.config import settings
+from honestspend.db import Account, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.bank_ofx import import_ofx, parse_ofx_transactions, preview_ofx
+from honestspend.services.import_inbox import ensure_inbox_layout, process_inbox
+from honestspend.services.onboarding import apply_first_run
 
 SAMPLE_OFX = """OFXHEADER:100
 DATA:OFXSGML
@@ -125,12 +125,12 @@ NEWFILEUID:NONE
 
 def test_credit_ofx_normalizer_payment(tmp_path: Path, monkeypatch):
     """Credit OFX: positive charge + negative payment → correct ledger signs and balance."""
-    from financial_os.db import Profile
+    from honestspend.db import Profile
 
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()
@@ -167,7 +167,7 @@ def test_import_ofx_and_dedupe(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()
@@ -195,13 +195,13 @@ def test_import_ofx_and_dedupe(tmp_path: Path, monkeypatch):
 
 
 def test_ofx_last4_unique_only(tmp_path: Path, monkeypatch):
-    from financial_os.services.import_inbox import resolve_account_for_file
-    from financial_os.services.bank_ofx import ofx_external_account_key
+    from honestspend.services.import_inbox import resolve_account_for_file
+    from honestspend.services.bank_ofx import ofx_external_account_key
 
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()
@@ -211,7 +211,7 @@ def test_ofx_last4_unique_only(tmp_path: Path, monkeypatch):
     acct = s.query(Account).filter(Account.kind == "checking").one()
     # Two accounts with same last-4 in nickname — last4 must not match
     acct.nickname = "Checking 6789"
-    from financial_os.db import Profile
+    from honestspend.db import Profile
 
     personal = s.query(Profile).filter(Profile.slug == "personal").one()
     s.add(
@@ -245,7 +245,7 @@ def test_inbox_ofx(tmp_path: Path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()

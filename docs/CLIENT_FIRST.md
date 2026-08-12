@@ -63,7 +63,7 @@ Tray menu opens the **WinUI** EXE (from `winui.path`), not Glance:
 | Reports | `--page reports` |
 | Settings | `--page settings` |
 
-A second launch writes `~/.financial-os/winui.navigate` (or `FOS_DATA_DIR`) and signals the running instance to show + navigate. Cold start: same `--page` flag on the EXE.
+A second launch writes `~/.HonestSpend/winui.navigate` (or `FOS_DATA_DIR`) and signals the running instance to show + navigate. Cold start: same `--page` flag on the EXE.
 
 ## 1.x roadmap alignment
 

@@ -4,7 +4,7 @@ RESTRICTED CAPABILITY: runFullTrust
 ------------------------------------
 HonestSpend is a local-first personal finance desktop app (WinUI 3) that:
   • Spawns a local Python fiscal engine (localhost API on 127.0.0.1 only)
-  • Stores all ledger data on the user's machine (default %USERPROFILE%\.financial-os)
+  • Stores all ledger data on the user's machine (default %USERPROFILE%\.HonestSpend)
   • Optionally registers tray / logon helpers and scheduled backup tasks
 
 No bank website passwords are collected. Money-in is CSV/OFX/PDF import and optional
@@ -31,6 +31,6 @@ stock icons. Solid brand background #0F2744; DisplayName/ShortName "HonestSpend"
 
 VERSION
 -------
-Keep Package.appxmanifest Identity Version in sync with financial_os / ApplicationVersion
+Keep Package.appxmanifest Identity Version in sync with honestspend / ApplicationVersion
 (e.g. 1.0.55.0). Identity Name/Publisher must match Partner Center Product identity.
 Device family: Windows.Desktop only — uncheck Xbox and other families in the submission.

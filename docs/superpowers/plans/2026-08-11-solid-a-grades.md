@@ -6,7 +6,7 @@
 
 **Architecture:** Keep one cash spine (Safe to spend) and one pay-policy spine (`autopay_policy`). Collapse dual models where they still create honesty drift. Make Full progressive disclosure, not a second product.
 
-**Tech stack:** Python FastAPI/SQLite (`financial_os`), WinUI 3, pytest, existing SIMPLE_MODE / STATEMENT_CYCLES contracts.
+**Tech stack:** Python FastAPI/SQLite (`honestspend`), WinUI 3, pytest, existing SIMPLE_MODE / STATEMENT_CYCLES contracts.
 
 **Current baseline (post trust-bar + polish, 2026-08-11):**
 | Category | Grade | Why not A yet |
@@ -91,8 +91,8 @@ Phases 1–3 are sequential for honesty. Phase 0 can run anytime.
 **Decision (recommended):** Rebuild soft from **same cash as STS** (`cash` after budget reserve in `home_simple`), then subtract Coming up outflows, floor at 0, **do not** re-cap to STS if already same base (or cap only if soft would exceed STS due to pending).
 
 **Files:**
-- Modify: `src/financial_os/services/home_simple.py` — pass post-reserve cash into soft builder
-- Modify: `src/financial_os/services/cash_runway.py` — `build_safe_until_window` accept `starting_cash` override
+- Modify: `src/honestspend/services/home_simple.py` — pass post-reserve cash into soft builder
+- Modify: `src/honestspend/services/cash_runway.py` — `build_safe_until_window` accept `starting_cash` override
 - Test: `tests/test_safe_until_cap.py`, `tests/test_safe_until_window.py`
 
 **Steps:**
@@ -144,7 +144,7 @@ soft_raw = max(0, post_reserve - coming_up.outflow_total)
 4. **Stop reverse-sync complexity** once nothing reads `payment_option` for amounts.
 
 **Files:**
-- Modify: `src/financial_os/services/autopay.py`, `setup_discover.py`, `api/app.py`
+- Modify: `src/honestspend/services/autopay.py`, `setup_discover.py`, `api/app.py`
 - Modify: tests that assert `payment_option == "statement"`
 - Docs: `STATEMENT_CYCLES.md`, `SIMPLE_MODE.md` one-liner “pay policy = autopay_policy”
 
@@ -165,7 +165,7 @@ soft_raw = max(0, post_reserve - coming_up.outflow_total)
 **Why A−:** mark-paid uses `recompute=False` then restore next_date; void may recompute and rewrite schedule.
 
 **Files:**
-- Modify: `src/financial_os/services/account_balance.py` — `reverse_amount_on_account(..., recompute=True)`
+- Modify: `src/honestspend/services/account_balance.py` — `reverse_amount_on_account(..., recompute=True)`
 - Modify: void path in `txn_void.py` / API
 - Test: void card payment after mark-paid → schedule next_date restored reasonably (or recompute once intentionally)
 

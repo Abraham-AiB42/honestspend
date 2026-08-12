@@ -9,13 +9,13 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, AppSettings, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.account_balance import apply_amount_to_account
-from financial_os.services.autopay import recompute_card_payment_schedule
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.promo_installments import create_promo_line
+from honestspend.config import settings
+from honestspend.db import Account, AppSettings, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.account_balance import apply_amount_to_account
+from honestspend.services.autopay import recompute_card_payment_schedule
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.promo_installments import create_promo_line
 
 
 def _session(tmp_path: Path, monkeypatch):

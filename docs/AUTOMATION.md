@@ -41,15 +41,15 @@ On logon:
 ### CLI used by tasks
 
 ```powershell
-python -m financial_os.cli backup --auto          # skip if not due
-python -m financial_os.cli backup --force --keep 14
-python -m financial_os.cli digest                 # exit 2 if critical
-python -m financial_os.cli health                 # exit 1 if API down
+python -m honestspend.cli backup --auto          # skip if not due
+python -m honestspend.cli backup --force --keep 14
+python -m honestspend.cli digest                 # exit 2 if critical
+python -m honestspend.cli health                 # exit 1 if API down
 ```
 
 Force backup from env in task runner: `$env:FOS_BACKUP_FORCE=1`.
 
-Backups land in `%USERPROFILE%\.financial-os\backups\` (or `FOS_DATA_DIR\backups`).
+Backups land in `%USERPROFILE%\.HonestSpend\backups\` (or `FOS_DATA_DIR\backups`).
 
 ## 3. Digest for monitoring
 
@@ -57,7 +57,7 @@ Backups land in `%USERPROFILE%\.financial-os\backups\` (or `FOS_DATA_DIR\backups
 - Exit **2** — critical (red day, etc.) — suitable for monitoring  
 - `task-digest.ps1` may start `serve` if health fails, then runs digest  
 
-Last digest may be written to `~\.financial-os\last_digest.json`.
+Last digest may be written to `~\.HonestSpend\last_digest.json`.
 
 ## 4. Recommended “minimum time” stack
 

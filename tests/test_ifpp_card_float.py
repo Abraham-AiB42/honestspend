@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from financial_os.engine.ifpp import CashAccountView, CardView, card_safe_to_charge, compute_ifpp
+from honestspend.engine.ifpp import CashAccountView, CardView, card_safe_to_charge, compute_ifpp
 
 
 def test_promo_float_reserves_existing_promo_balance():

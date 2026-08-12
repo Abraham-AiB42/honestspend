@@ -5,10 +5,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, AppSettings, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.capital_desk import build_capital_desk
-from financial_os.engine.ifpp import CashAccountView, compute_cash_spendable
+from honestspend.db import Account, AppSettings, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.capital_desk import build_capital_desk
+from honestspend.engine.ifpp import CashAccountView, compute_cash_spendable
 
 
 def _session(tmp_path: Path):

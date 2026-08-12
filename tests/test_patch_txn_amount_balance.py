@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.account_balance import (
+from honestspend.config import settings
+from honestspend.db import Account, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.account_balance import (
     apply_amount_to_account,
     reverse_amount_on_account,
 )

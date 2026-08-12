@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from financial_os.config import settings
-from financial_os.services import secrets_store as ss
+from honestspend.config import settings
+from honestspend.services import secrets_store as ss
 
 
 def test_save_plaid_under_lock(tmp_path: Path, monkeypatch):

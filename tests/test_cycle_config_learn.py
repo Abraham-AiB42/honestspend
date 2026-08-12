@@ -10,17 +10,17 @@ from unittest.mock import patch
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.cycle_config import (
+from honestspend.config import settings
+from honestspend.db import Account, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.cycle_config import (
     apply_credit_cycle_defaults,
     default_funding_account_id,
     suggest_funding_from_payment_history,
 )
-from financial_os.services.setup_discover import apply_discoveries
-from financial_os.services import plaid_service
-from financial_os.db import PlaidItem
+from honestspend.services.setup_discover import apply_discoveries
+from honestspend.services import plaid_service
+from honestspend.db import PlaidItem
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -456,7 +456,7 @@ def test_default_funding_prefers_checking(tmp_path: Path, monkeypatch):
 
 def test_bank_csv_import_fills_missing_cycle_on_credit(tmp_path: Path, monkeypatch):
     """CSV import into a bare credit account applies import-safe cycle defaults."""
-    from financial_os.services.bank_csv import import_bank_csv
+    from honestspend.services.bank_csv import import_bank_csv
 
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()

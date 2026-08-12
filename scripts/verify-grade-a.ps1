@@ -52,19 +52,19 @@ Step "private-name gate" {
 }
 
 Step "version sync" {
-    $init = Get-Content (Join-Path $Root "src\financial_os\__init__.py") -Raw
+    $init = Get-Content (Join-Path $Root "src\honestspend\__init__.py") -Raw
     $pyproj = Get-Content (Join-Path $Root "pyproject.toml") -Raw
-    if ($init -notmatch '1\.0\.55') { throw "__init__.py not 1.0.55" }
-    if ($pyproj -notmatch '1\.0\.55') { throw "pyproject.toml not 1.0.55" }
+    if ($init -notmatch '1\.0\.56') { throw "__init__.py not 1.0.56" }
+    if ($pyproj -notmatch '1\.0\.56') { throw "pyproject.toml not 1.0.56" }
     $iss = Get-Content (Join-Path $Root "packaging\HonestSpend.iss") -Raw
-    if ($iss -notmatch '1\.0\.55') { throw "HonestSpend.iss not 1.0.55" }
-    Write-Host "version 1.0.55 consistent"
+    if ($iss -notmatch '1\.0\.56') { throw "HonestSpend.iss not 1.0.56" }
+    Write-Host "version 1.0.56 consistent"
 }
 
 Step "north-star surface files" {
     $need = @(
-        "src\financial_os\services\home_simple.py",
-        "src\financial_os\services\wealth_basics.py",
+        "src\honestspend\services\home_simple.py",
+        "src\honestspend\services\wealth_basics.py",
         "docs\SIMPLE_MODE.md",
         "docs\RELEASE_0.7.0.md",
         "clients\HonestSpend.WinUI\Pages\FirstRunPage.xaml",

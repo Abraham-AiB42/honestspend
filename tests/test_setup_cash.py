@@ -8,10 +8,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, init_db
-from financial_os.seed import seed_all
-from financial_os.services.setup_cash import cash_accounts_status, create_cash_account
+from honestspend.config import settings
+from honestspend.db import Account, init_db
+from honestspend.seed import seed_all
+from honestspend.services.setup_cash import cash_accounts_status, create_cash_account
 
 
 def _session(tmp_path: Path, monkeypatch):

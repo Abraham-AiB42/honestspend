@@ -4,10 +4,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, AppSettings, init_db
-from financial_os.seed import seed_all
-from financial_os.services.onboarding import (
+from honestspend.config import settings
+from honestspend.db import Account, AppSettings, init_db
+from honestspend.seed import seed_all
+from honestspend.services.onboarding import (
     apply_quick_setup,
     complete_onboarding,
     get_onboarding_status,
@@ -19,7 +19,7 @@ def _session(tmp_path: Path, monkeypatch):
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
     # Align SQLAlchemy engine with FOS data dir
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()

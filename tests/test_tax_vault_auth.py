@@ -5,12 +5,12 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, AppSettings, AppUser, Profile, ScheduledItem, init_db
-from financial_os.engine.ifpp import CashAccountView, compute_cash_spendable
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.permissions import Role, generate_api_token, resolve_context
-from financial_os.services.tax_vault import adjust_tax_vault, get_tax_vault, set_tax_vault
+from honestspend.db import Account, AppSettings, AppUser, Profile, ScheduledItem, init_db
+from honestspend.engine.ifpp import CashAccountView, compute_cash_spendable
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.permissions import Role, generate_api_token, resolve_context
+from honestspend.services.tax_vault import adjust_tax_vault, get_tax_vault, set_tax_vault
 
 
 def _session(tmp_path: Path):

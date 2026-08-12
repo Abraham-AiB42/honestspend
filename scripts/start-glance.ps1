@@ -21,7 +21,7 @@ if (-not (Test-Health)) {
     } else {
         $py = "python"
     }
-    Start-Process -FilePath $py -ArgumentList "-m","financial_os.cli","serve","--host",$hostName,"--port","$port" -WindowStyle Minimized
+    Start-Process -FilePath $py -ArgumentList "-m","honestspend.cli","serve","--host",$hostName,"--port","$port" -WindowStyle Minimized
     for ($i = 0; $i -lt 40; $i++) {
         if (Test-Health) { break }
         Start-Sleep -Milliseconds 500

@@ -9,9 +9,9 @@ from pathlib import Path
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Profile, ScheduledItem, init_db
-from financial_os.migrations import SCHEMA_VERSION, get_schema_version
-from financial_os.seed import seed_all
+from honestspend.db import Profile, ScheduledItem, init_db
+from honestspend.migrations import SCHEMA_VERSION, get_schema_version
+from honestspend.seed import seed_all
 
 
 def _engine(tmp_path: Path):

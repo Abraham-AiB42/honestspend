@@ -5,14 +5,31 @@ namespace HonestSpend_WinUI.Services;
 /// <summary>Locate this WinUI EXE for tray / package cold-start (client-first).</summary>
 public static class WinUiPaths
 {
+    public const string PreferredDataDirName = ".HonestSpend";
+    public const string LegacyDataDirName = ".financial-os";
+
+    /// <summary>
+    /// Default on-disk data folder: prefer ~/.HonestSpend; keep using legacy
+    /// ~/.financial-os when that folder already exists (existing books).
+    /// </summary>
+    public static string DefaultLocalDataDir()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var preferred = Path.Combine(home, PreferredDataDirName);
+        var legacy = Path.Combine(home, LegacyDataDirName);
+        if (Directory.Exists(preferred))
+            return preferred;
+        if (Directory.Exists(legacy))
+            return legacy;
+        return preferred;
+    }
+
     /// <summary>Default data folder used when AppConfig.DataDir is unset.</summary>
     public static string DataDirRoot()
     {
         if (!string.IsNullOrWhiteSpace(AppConfig.DataDir))
             return AppConfig.DataDir!;
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".financial-os");
+        return DefaultLocalDataDir();
     }
 
     /// <summary>Pending page tag from tray / second launch (e.g. review, reports).</summary>

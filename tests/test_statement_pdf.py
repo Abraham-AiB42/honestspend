@@ -6,11 +6,11 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.onboarding import apply_first_run
-from financial_os.services.statement_pdf import (
+from honestspend.config import settings
+from honestspend.db import Account, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.onboarding import apply_first_run
+from honestspend.services.statement_pdf import (
     parse_statement_ending_balance,
     parse_statement_lines,
 )
@@ -95,9 +95,9 @@ def test_parse_keeps_dated_interest_charged():
 
 def test_credit_pdf_import_payment_reduces_owed(tmp_path: Path, monkeypatch):
     """End-to-end PDF credit import: charge + bare PAYMENT → owed falls."""
-    from financial_os.db import Profile
-    from financial_os.services import statement_pdf
-    from financial_os.services.statement_pdf import import_statement_pdf
+    from honestspend.db import Profile
+    from honestspend.services import statement_pdf
+    from honestspend.services.statement_pdf import import_statement_pdf
 
     eng = create_engine(f"sqlite:///{(tmp_path / 'pdf.db').as_posix()}")
     init_db(eng)
@@ -146,9 +146,9 @@ def test_credit_pdf_import_payment_reduces_owed(tmp_path: Path, monkeypatch):
 
 def test_pdf_import_sets_institution_from_new_balance(tmp_path: Path, monkeypatch):
     """New Balance line → institution_balance + set_books next_step when drifted."""
-    from financial_os.db import Profile
-    from financial_os.services import statement_pdf
-    from financial_os.services.statement_pdf import import_statement_pdf
+    from honestspend.db import Profile
+    from honestspend.services import statement_pdf
+    from honestspend.services.statement_pdf import import_statement_pdf
 
     eng = create_engine(f"sqlite:///{(tmp_path / 'pdf2.db').as_posix()}")
     init_db(eng)
@@ -192,9 +192,9 @@ New Balance $995.50
 
 
 def test_pdf_import_new_balance_with_drift_next_step(tmp_path: Path, monkeypatch):
-    from financial_os.db import Profile
-    from financial_os.services import statement_pdf
-    from financial_os.services.statement_pdf import import_statement_pdf
+    from honestspend.db import Profile
+    from honestspend.services import statement_pdf
+    from honestspend.services.statement_pdf import import_statement_pdf
 
     eng = create_engine(f"sqlite:///{(tmp_path / 'pdf3.db').as_posix()}")
     init_db(eng)
@@ -234,12 +234,12 @@ New Balance $900.00
 
 def test_import_via_csv_inbox_still_works(tmp_path: Path, monkeypatch):
     """Regression: inbox path unchanged for CSV alongside PDF support."""
-    from financial_os.services.import_inbox import ensure_inbox_layout, process_inbox
+    from honestspend.services.import_inbox import ensure_inbox_layout, process_inbox
 
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
-    engine = create_engine(f"sqlite:///{(data / 'financial_os.db').as_posix()}")
+    engine = create_engine(f"sqlite:///{(data / 'honestspend.db').as_posix()}")
     init_db(engine)
     Session = sessionmaker(bind=engine)
     s = Session()

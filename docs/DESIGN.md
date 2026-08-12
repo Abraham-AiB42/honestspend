@@ -69,7 +69,7 @@ A local multi-entity financial OS for small business owners: books + liquidity c
 ```
 
 **Stack (v1):**
-- Python 3.11+ package `financial_os`
+- Python 3.11+ package `honestspend`
 - SQLite via SQLAlchemy
 - FastAPI local API
 - Static web UI (served by FastAPI)
@@ -90,7 +90,7 @@ Fields: `profile_id`, `kind`, `institution`, `nickname`, `current_balance`, `ava
 `statement_close_day`, `payment_due_day`, `apr`, `promo_apr`, `promo_end_date`, `promo_balance`, `min_payment`, `rewards_program`, `utilization_warn_pct`
 
 ### 4.4 Categories (Chart of Accounts)
-See `src/financial_os/data/tax_coa.json`.  
+See `src/honestspend/data/tax_coa.json`.  
 Every category: `display_name`, `profile_scope`, `tax_form`, `tax_line`, `deductibility`, `partial_rule`, `parent_id`, `budget_group`
 
 ### 4.5 Transactions
@@ -147,7 +147,7 @@ Bills and expected income: `amount`, `cadence`, `next_date`, `account_id?`, `cat
 
 ## 6. Tax Chart of Accounts
 
-Locked seed: `src/financial_os/data/tax_coa.json`.
+Locked seed: `src/honestspend/data/tax_coa.json`.
 
 - **Business profiles:** Form 1120-S lines 1–22 + line 20 detail + K-1 separately stated tags; Schedule C crosswalk on each expense.
 - **Personal:** budget groups + Schedule A / 1040 adjustments where real; else `tax_form: none`.

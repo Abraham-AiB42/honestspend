@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-from financial_os.config import settings
-from financial_os.services import secrets_store as ss
-from financial_os.services.categorizer import _build_categorize_prompt, suggest_from_llm
+from honestspend.config import settings
+from honestspend.services import secrets_store as ss
+from honestspend.services.categorizer import _build_categorize_prompt, suggest_from_llm
 
 
 def test_build_prompt_shape():
@@ -62,7 +62,7 @@ def test_suggest_from_llm_openai_compatible(tmp_path: Path, monkeypatch):
     fake_json = '{"category_id": 7, "confidence": 0.9, "reason": "gas station", "is_transfer": false}'
 
     with patch(
-        "financial_os.services.categorizer._chat_openai_compatible",
+        "honestspend.services.categorizer._chat_openai_compatible",
         return_value=fake_json,
     ) as mock_chat:
         sug = suggest_from_llm(FakeSession(), T(), candidates=[C()])  # type: ignore[arg-type]
@@ -106,10 +106,10 @@ def test_suggest_from_llm_tries_next_provider(tmp_path: Path, monkeypatch):
         raise RuntimeError("openai down")
 
     with patch(
-        "financial_os.services.categorizer._chat_openai_compatible",
+        "honestspend.services.categorizer._chat_openai_compatible",
         side_effect=boom,
     ), patch(
-        "financial_os.services.categorizer._chat_anthropic",
+        "honestspend.services.categorizer._chat_anthropic",
         return_value='{"category_id": 3, "confidence": 0.8, "reason": "fallback", "is_transfer": false}',
     ):
         sug = suggest_from_llm(FakeSession(), T(), candidates=[C()])  # type: ignore[arg-type]

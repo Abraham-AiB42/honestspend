@@ -31,15 +31,15 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `src/financial_os/db.py` | Columns + new tables |
-| `src/financial_os/migrations.py` | Schema migration |
-| `src/financial_os/services/account_ledger.py` | **New** — running balance from ledger (rebuild/verify) |
-| `src/financial_os/services/statement_cycle.py` | **New** — cycle windows, projected statement, payment amount |
-| `src/financial_os/services/promo_installments.py` | **New** — ISB-like lines (optional phase 2 in same plan Tasks 6–7) |
-| `src/financial_os/services/autopay.py` | Recompute + cash-funded schedule sync |
-| `src/financial_os/services/account_balance.py` | Hook recompute after apply |
-| `src/financial_os/api/app.py` | API endpoints |
-| `src/financial_os/services/ifpp_service.py` | Use cash payment schedules; already skips credit expense schedules |
+| `src/honestspend/db.py` | Columns + new tables |
+| `src/honestspend/migrations.py` | Schema migration |
+| `src/honestspend/services/account_ledger.py` | **New** — running balance from ledger (rebuild/verify) |
+| `src/honestspend/services/statement_cycle.py` | **New** — cycle windows, projected statement, payment amount |
+| `src/honestspend/services/promo_installments.py` | **New** — ISB-like lines (optional phase 2 in same plan Tasks 6–7) |
+| `src/honestspend/services/autopay.py` | Recompute + cash-funded schedule sync |
+| `src/honestspend/services/account_balance.py` | Hook recompute after apply |
+| `src/honestspend/api/app.py` | API endpoints |
+| `src/honestspend/services/ifpp_service.py` | Use cash payment schedules; already skips credit expense schedules |
 | `clients/HonestSpend.WinUI/Pages/CreditPage.*` | Show cycle + next payment + pay-from |
 | `clients/HonestSpend.WinUI/Pages/AccountsPage.*` | Close/due/funding edit |
 | `tests/test_statement_cycle.py` | Core cycle math |
@@ -128,8 +128,8 @@ This matches the spirit of `Budget!P2487 = -running + ISB.Deferred - ISB.Payment
 ### Task 1: Schema — funding account + cycle cache columns + statement_cycles table
 
 **Files:**
-- Modify: `src/financial_os/db.py` (Account + new models)
-- Modify: `src/financial_os/migrations.py` (next migration id)
+- Modify: `src/honestspend/db.py` (Account + new models)
+- Modify: `src/honestspend/migrations.py` (next migration id)
 - Test: `tests/test_migrations.py` (or new `tests/test_statement_cycle_schema.py`)
 
 **Interfaces:**
@@ -165,7 +165,7 @@ Run: `pytest tests/test_statement_cycle_schema.py -v`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/financial_os/db.py src/financial_os/migrations.py tests/test_statement_cycle_schema.py
+git add src/honestspend/db.py src/honestspend/migrations.py tests/test_statement_cycle_schema.py
 git commit -m "feat(schema): statement cycle cache and funding account on cards"
 ```
 
@@ -174,7 +174,7 @@ git commit -m "feat(schema): statement cycle cache and funding account on cards"
 ### Task 2: Running balance rebuild (ledger integrity)
 
 **Files:**
-- Create: `src/financial_os/services/account_ledger.py`
+- Create: `src/honestspend/services/account_ledger.py`
 - Test: `tests/test_account_ledger.py`
 
 **Interfaces:**
@@ -209,9 +209,9 @@ def test_rebuild_running_balance_credit(tmp_path, monkeypatch):
 ### Task 3: Cycle window + projected statement + next payment math
 
 **Files:**
-- Create: `src/financial_os/services/statement_cycle.py`
+- Create: `src/honestspend/services/statement_cycle.py`
 - Test: `tests/test_statement_cycle.py`
-- Reuse: `financial_os.engine.ifpp.next_due_date`
+- Reuse: `honestspend.engine.ifpp.next_due_date`
 
 **Interfaces:**
 - Produces:
@@ -265,8 +265,8 @@ def test_statement_payment_carves_out_promo():
 ### Task 4: Recompute hook + cash-funded autopay schedule sync
 
 **Files:**
-- Modify: `src/financial_os/services/autopay.py`
-- Modify: `src/financial_os/services/account_balance.py` (or call sites in `app.py` after commit)
+- Modify: `src/honestspend/services/autopay.py`
+- Modify: `src/honestspend/services/account_balance.py` (or call sites in `app.py` after commit)
 - Test: `tests/test_autopay_recompute.py`
 
 **Interfaces:**
@@ -310,7 +310,7 @@ Prefer a single helper `after_account_balance_changed(session, account_id)` call
 ### Task 5: API + settings surface
 
 **Files:**
-- Modify: `src/financial_os/api/app.py`
+- Modify: `src/honestspend/api/app.py`
 - Test: `tests/test_statement_cycle_api.py` (use existing TestClient fixture pattern from `test_api_http.py`)
 
 **Interfaces:**
@@ -332,7 +332,7 @@ Prefer a single helper `after_account_balance_changed(session, account_id)` call
 ### Task 6: Promo installment lines (ISB better)
 
 **Files:**
-- Create: `src/financial_os/services/promo_installments.py`
+- Create: `src/honestspend/services/promo_installments.py`
 - Modify: `db.py` + migrations (`PromoInstallmentLine`)
 - Modify: `statement_cycle.compute_next_payment` inputs from lines
 - Test: `tests/test_promo_installments.py`
@@ -363,7 +363,7 @@ def apply_month_roll(session, account_id: int, *, as_of: date) -> None:
 ### Task 7: Import / Plaid config hints (non-destructive)
 
 **Files:**
-- Modify: `src/financial_os/services/bank_csv.py` / plaid account upsert (where accounts created)
+- Modify: `src/honestspend/services/bank_csv.py` / plaid account upsert (where accounts created)
 - Modify: `setup_discover.py` card apply to set funding default + policy
 - Test: `tests/test_cycle_config_learn.py`
 

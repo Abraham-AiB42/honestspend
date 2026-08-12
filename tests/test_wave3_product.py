@@ -7,11 +7,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import Account, Transaction, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
-from financial_os.services.profiles import create_profile
-from financial_os.services.intermix import apply_intermix
+from honestspend.config import settings
+from honestspend.db import Account, Transaction, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
+from honestspend.services.profiles import create_profile
+from honestspend.services.intermix import apply_intermix
 
 
 @pytest.fixture()
@@ -23,7 +23,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -74,7 +74,7 @@ def test_intermix_graph(tmp_path: Path):
     SF = make_session_factory(eng)
     with SF() as s:
         seed_all(s)
-        personal = s.query(__import__("financial_os.db", fromlist=["Profile"]).Profile).filter_by(
+        personal = s.query(__import__("honestspend.db", fromlist=["Profile"]).Profile).filter_by(
             slug="personal"
         ).one()
         biz = create_profile(s, display_name="Biz", entity_type="business")
@@ -102,7 +102,7 @@ def test_intermix_graph(tmp_path: Path):
             to_account_id=b.id,
         )
         s.commit()
-        from financial_os.services.intermix_graph import build_money_map
+        from honestspend.services.intermix_graph import build_money_map
 
         g = build_money_map(s, days=30)
         assert g["count"] >= 1

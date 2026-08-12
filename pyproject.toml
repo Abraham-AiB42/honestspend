@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "honestspend"
-version = "1.0.55"
-description = "HonestSpend — open-source liquidity cockpit (safe to spend · multi-entity · local books)"
+version = "1.0.56"
+description = "HonestSpend - open-source liquidity cockpit (safe to spend, multi-entity, local books)"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.11"
@@ -40,17 +40,17 @@ dev = [
 ]
 
 [project.scripts]
-honestspend = "financial_os.cli:main"
-financial-os = "financial_os.cli:main"
-floatpile = "financial_os.cli:main"
-# legacy aliases (Floatpile / LedgerRing)
-ledgerring = "financial_os.cli:main"
+honestspend = "honestspend.cli:main"
+# Legacy CLI entry points (old product names) -> same app
+financial-os = "honestspend.cli:main"
+floatpile = "honestspend.cli:main"
+ledgerring = "honestspend.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-financial_os = ["data/*.json", "data/*.sql"]
+honestspend = ["data/*.json", "data/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

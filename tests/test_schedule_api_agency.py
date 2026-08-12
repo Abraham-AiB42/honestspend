@@ -9,10 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from financial_os.api.app import ScheduledIn
-from financial_os.config import settings
-from financial_os.db import Account, Profile, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
+from honestspend.api.app import ScheduledIn
+from honestspend.config import settings
+from honestspend.db import Account, Profile, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
 
 
 @pytest.fixture()
@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -113,7 +113,7 @@ def test_owner_draw_requires_account():
 
 
 def test_create_scheduled_with_agency_fields(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     pid, cash_id = _personal_and_cash(app_mod)
     series = "rent-series-api-001"
@@ -150,7 +150,7 @@ def test_create_scheduled_with_agency_fields(client: TestClient):
 
 
 def test_create_owner_draw_via_api(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     pid, cash_id = _personal_and_cash(app_mod)
     r = client.post(
@@ -175,7 +175,7 @@ def test_create_owner_draw_via_api(client: TestClient):
 
 
 def test_series_step_and_list(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     pid, cash_id = _personal_and_cash(app_mod)
     series = "rent-step-series"
@@ -260,7 +260,7 @@ def test_list_series_profile_not_found(client: TestClient):
 
 def test_list_scheduled_filter_opex_class_and_income_source(client: TestClient):
     """Create with opex_class / income_source; list filters return only matches."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     pid, cash_id = _personal_and_cash(app_mod)
 

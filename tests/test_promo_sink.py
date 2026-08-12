@@ -7,9 +7,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.promo_sink import create_promo_sink_bill
+from honestspend.db import Account, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.promo_sink import create_promo_sink_bill
 
 
 def test_create_promo_sink(tmp_path: Path):

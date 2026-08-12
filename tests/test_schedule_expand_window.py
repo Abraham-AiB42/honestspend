@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
-from financial_os.engine.schedule_expand import expand_scheduled
+from honestspend.engine.schedule_expand import expand_scheduled
 
 
 def test_expand_skips_occurrences_before_start_date():

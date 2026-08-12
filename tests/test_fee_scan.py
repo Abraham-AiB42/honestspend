@@ -7,9 +7,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.fee_scan import scan_fees
+from honestspend.db import Account, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.fee_scan import scan_fees
 
 
 def test_scan_detects_late_fee(tmp_path: Path):

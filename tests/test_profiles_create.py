@@ -5,12 +5,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import Category, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.profiles import create_profile
-from financial_os.db import Account
+from honestspend.config import settings
+from honestspend.db import Category, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.profiles import create_profile
+from honestspend.db import Account
 from decimal import Decimal
 from datetime import date
 
@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -78,7 +78,7 @@ def test_entity_silo_after_create(tmp_path: Path):
     with SF() as s:
         seed_all(s)
         s.commit()
-        personal = s.query(__import__("financial_os.db", fromlist=["Profile"]).Profile).filter_by(
+        personal = s.query(__import__("honestspend.db", fromlist=["Profile"]).Profile).filter_by(
             slug="personal"
         ).one()
         biz = create_profile(s, display_name="Biz Co", entity_type="business")

@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import (
+from honestspend.config import settings
+from honestspend.db import (
     Account,
     Profile,
     ScheduledItem,
@@ -21,8 +21,8 @@ from financial_os.db import (
     make_engine,
     make_session_factory,
 )
-from financial_os.seed import seed_all
-from financial_os.services.schedule_mark_paid import mark_schedule_paid
+from honestspend.seed import seed_all
+from honestspend.services.schedule_mark_paid import mark_schedule_paid
 
 
 def _session(tmp_path: Path):
@@ -185,7 +185,7 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -200,8 +200,8 @@ def api_client(tmp_path, monkeypatch):
 
 def test_mark_paid_never_neg_with_session(tmp_path: Path, monkeypatch):
     """Mark paid passes session so warn/hard never-neg can fire on checking."""
-    from financial_os.db import AppSettings
-    from financial_os.services.never_neg import WouldGoNegative
+    from honestspend.db import AppSettings
+    from honestspend.services.never_neg import WouldGoNegative
 
     s = _session(tmp_path)
     settings = s.get(AppSettings, 1)
@@ -617,7 +617,7 @@ def test_mark_paid_same_amount_does_not_steal(tmp_path: Path):
 
 
 def test_advance_schedules_after_import(tmp_path: Path):
-    from financial_os.services.schedule_mark_paid import advance_schedules_after_import
+    from honestspend.services.schedule_mark_paid import advance_schedules_after_import
 
     s = _session(tmp_path)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -676,7 +676,7 @@ def test_advance_digit_safe_card_account_id_prefix(tmp_path: Path):
     Same-amount cash outflows exist for both cards — only the schedule tagged for
     the filtered account may advance.
     """
-    from financial_os.services.schedule_mark_paid import advance_schedules_after_import
+    from honestspend.services.schedule_mark_paid import advance_schedules_after_import
 
     s = _session(tmp_path)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -807,7 +807,7 @@ def test_advance_digit_safe_card_account_id_does_not_cross_match(tmp_path: Path)
     When the only cash match is for the *other* card's payment name, filtering by
     account_id=1 advances nothing (and must not steal the id=12 schedule).
     """
-    from financial_os.services.schedule_mark_paid import advance_schedules_after_import
+    from honestspend.services.schedule_mark_paid import advance_schedules_after_import
 
     s = _session(tmp_path)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -1094,7 +1094,7 @@ def test_card_payment_already_paired_not_rebound(tmp_path: Path):
 
 
 def test_api_mark_paid(api_client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     with app_mod.SessionLocal() as s:
         p = s.query(Profile).filter(Profile.slug == "personal").one()

@@ -14,7 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-if (-not (Test-Path (Join-Path $Root "src\financial_os"))) {
+if (-not (Test-Path (Join-Path $Root "src\honestspend"))) {
   $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 }
 
@@ -37,7 +37,7 @@ if ($Uninstall) {
   Remove-LrTask $TaskBackup
   Remove-LrTask $TaskDigest
   Remove-LrTask $TaskInbox
-  # legacy names (Floatpile / LedgerRing era)
+  # legacy brand task names
   Remove-LrTask "Floatpile-AutoBackup"
   Remove-LrTask "Floatpile-Digest"
   Remove-LrTask "Floatpile-ImportInbox"

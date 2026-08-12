@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
@@ -22,9 +22,9 @@
     <AppxAutoIncrementPackageRevision>false</AppxAutoIncrementPackageRevision>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Keep package version aligned with financial_os / Inno when releasing -->
-    <ApplicationDisplayVersion>1.0.55</ApplicationDisplayVersion>
-    <ApplicationVersion>1.0.55.0</ApplicationVersion>
+    <!-- Keep package version aligned with honestspend / Inno when releasing -->
+    <ApplicationDisplayVersion>1.0.56</ApplicationDisplayVersion>
+    <ApplicationVersion>1.0.56.0</ApplicationVersion>
   </PropertyGroup>
 
   <ItemGroup>

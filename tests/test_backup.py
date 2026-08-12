@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from financial_os.config import settings
-from financial_os.db import AppSettings, init_db, make_engine, make_session_factory
-from financial_os.services.backup import (
+from honestspend.config import settings
+from honestspend.db import AppSettings, init_db, make_engine, make_session_factory
+from honestspend.services.backup import (
     apply_pending_restore,
     create_backup,
     db_status,
@@ -22,7 +22,7 @@ def test_create_list_restore_backup(tmp_path, monkeypatch):
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
 
-    db = data / "financial_os.db"
+    db = data / "honestspend.db"
     data.mkdir(parents=True, exist_ok=True)
     db.write_bytes(b"SQLite format 3\x00" + b"A" * 200)
 

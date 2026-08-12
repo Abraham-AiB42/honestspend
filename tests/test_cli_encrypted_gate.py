@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from financial_os.config import settings
-from financial_os.db import init_db, make_engine
-from financial_os.services import db_crypto as dc
-from financial_os.services import db_runtime as rt
+from honestspend.config import settings
+from honestspend.db import init_db, make_engine
+from honestspend.services import db_crypto as dc
+from honestspend.services import db_runtime as rt
 
 
 def test_refuse_offline_when_encrypted(tmp_path: Path, monkeypatch):

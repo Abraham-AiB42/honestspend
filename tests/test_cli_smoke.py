@@ -1,4 +1,4 @@
-from financial_os.cli import main
+from honestspend.cli import main
 
 
 def test_version_cli(capsys):

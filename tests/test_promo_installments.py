@@ -11,16 +11,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, PromoInstallmentLine, init_db, make_engine, make_session_factory
-from financial_os.migrations import SCHEMA_VERSION, get_schema_version
-from financial_os.seed import seed_all
-from financial_os.services.promo_installments import (
+from honestspend.config import settings
+from honestspend.db import Account, Profile, PromoInstallmentLine, init_db, make_engine, make_session_factory
+from honestspend.migrations import SCHEMA_VERSION, get_schema_version
+from honestspend.seed import seed_all
+from honestspend.services.promo_installments import (
     apply_month_roll,
     create_promo_line,
     open_promo_totals,
 )
-from financial_os.services.statement_cycle import project_card_payment
+from honestspend.services.statement_cycle import project_card_payment
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -276,7 +276,7 @@ def test_apply_month_roll_skips_not_yet_open(tmp_path: Path, monkeypatch):
 
 
 def test_roll_line_errors_when_not_open(tmp_path: Path, monkeypatch):
-    from financial_os.services.promo_installments import roll_line
+    from honestspend.services.promo_installments import roll_line
 
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -312,7 +312,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -344,7 +344,7 @@ def _seed_credit(app_mod) -> int:
 
 
 def test_api_promo_lines_crud_and_roll(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id = _seed_credit(app_mod)
 
@@ -389,7 +389,7 @@ def test_api_promo_lines_crud_and_roll(client: TestClient):
 
 
 def test_api_promo_line_not_found(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id = _seed_credit(app_mod)
     r = client.post(f"/api/accounts/{card_id}/promo-lines/999999/roll")
@@ -398,7 +398,7 @@ def test_api_promo_line_not_found(client: TestClient):
 
 def test_api_promo_line_patch(client: TestClient):
     """PATCH remaining + monthly updates line and recomputes caches."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id = _seed_credit(app_mod)
     r = client.post(
@@ -432,7 +432,7 @@ def test_api_promo_line_patch(client: TestClient):
 
 def test_api_promo_create_and_roll_recomputes_cache(client: TestClient):
     """POST create/roll should refresh next_payment_amount_cached via recompute."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id = _seed_credit(app_mod)
 
@@ -468,7 +468,7 @@ def test_api_promo_create_and_roll_recomputes_cache(client: TestClient):
 
 
 def test_api_roll_not_open_returns_400(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id = _seed_credit(app_mod)
     r = client.post(

@@ -8,9 +8,9 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
+from honestspend.config import settings
+from honestspend.db import Account, Profile, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
 
 
 @pytest.fixture()
@@ -22,7 +22,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -66,7 +66,7 @@ def _seed_card_and_cash(app_mod) -> tuple[int, int]:
 
 
 def test_get_cycle_projection(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, cash_id = _seed_card_and_cash(app_mod)
 
@@ -93,7 +93,7 @@ def test_get_cycle_not_found(client: TestClient):
 
 
 def test_list_cycles(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, _cash_id = _seed_card_and_cash(app_mod)
 
@@ -111,7 +111,7 @@ def test_list_cycles(client: TestClient):
 
 
 def test_list_cycles_profile_filter(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, _ = _seed_card_and_cash(app_mod)
     with app_mod.SessionLocal() as s:
@@ -129,7 +129,7 @@ def test_list_cycles_profile_filter(client: TestClient):
 
 
 def test_put_cycle_config_sets_user_source_and_recomputes(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, cash_id = _seed_card_and_cash(app_mod)
 
@@ -170,7 +170,7 @@ def test_put_cycle_config_sets_user_source_and_recomputes(client: TestClient):
 
 
 def test_put_cycle_config_fixed_amount(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, cash_id = _seed_card_and_cash(app_mod)
 
@@ -190,7 +190,7 @@ def test_put_cycle_config_fixed_amount(client: TestClient):
 
 
 def test_put_cycle_config_not_credit(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     with app_mod.SessionLocal() as s:
         personal = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -214,7 +214,7 @@ def test_put_cycle_config_not_credit(client: TestClient):
 
 def test_put_cycle_config_rejects_credit_as_funding(client: TestClient):
     """Funding must be cash-like — another credit card is 400."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, _cash_id = _seed_card_and_cash(app_mod)
     with app_mod.SessionLocal() as s:
@@ -239,7 +239,7 @@ def test_put_cycle_config_rejects_credit_as_funding(client: TestClient):
 
 
 def test_post_recompute_cycle(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, cash_id = _seed_card_and_cash(app_mod)
 
@@ -257,7 +257,7 @@ def test_post_recompute_cycle(client: TestClient):
 
 def test_put_cycle_config_clears_funding_with_null(client: TestClient):
     """Explicit null payment_funding_account_id clears server-side funding."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, cash_id = _seed_card_and_cash(app_mod)
     r = client.put(
@@ -280,7 +280,7 @@ def test_put_cycle_config_clears_funding_with_null(client: TestClient):
 
 def test_list_accounts_includes_cycle_caches(client: TestClient):
     """AccountOut serializes statement/next-payment caches for AccountsPage."""
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     card_id, _ = _seed_card_and_cash(app_mod)
     r = client.post(f"/api/accounts/{card_id}/recompute-cycle")

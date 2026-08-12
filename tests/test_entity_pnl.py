@@ -11,11 +11,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Category, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.entity_pnl import build_entity_pnl
-from financial_os.services.profiles import create_profile
+from honestspend.config import settings
+from honestspend.db import Account, Category, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.entity_pnl import build_entity_pnl
+from honestspend.services.profiles import create_profile
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -220,8 +220,8 @@ def client(tmp_path, monkeypatch):
     data.mkdir()
     monkeypatch.setattr(settings, "data_dir", data)
     monkeypatch.setattr(settings, "require_api_key", False)
-    import financial_os.api.app as app_mod
-    from financial_os.db import make_engine, make_session_factory
+    import honestspend.api.app as app_mod
+    from honestspend.db import make_engine, make_session_factory
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -234,7 +234,7 @@ def client(tmp_path, monkeypatch):
 
 
 def test_entity_pnl_api(client: TestClient):
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     with app_mod.SessionLocal() as s:
         biz = create_profile(s, display_name="API Biz", entity_type="business")

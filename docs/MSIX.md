@@ -86,10 +86,10 @@ A customer PC only needs the WinUI EXE + that zip.
 1. `package-msix.ps1` runs the bundle script and embeds **engine-portable.zip**.  
 2. On first `EnsureRunning`, **EngineBootstrap** extracts to  
    **`%LocalAppData%\HonestSpend\engine\`**.  
-3. `BackendHost` starts `engine\python\python.exe -m financial_os.cli serve` (not system `python`).  
+3. `BackendHost` starts `engine\python\python.exe -m honestspend.cli serve` (not system `python`).  
 4. Settings → **Install / repair engine** re-extracts if needed.  
 
-Still requires **runFullTrust** to spawn that private `python.exe` and write under LocalAppData / `.financial-os`.
+Still requires **runFullTrust** to spawn that private `python.exe` and write under LocalAppData / `.HonestSpend`.
 
 ### Unpackaged GitHub zip
 

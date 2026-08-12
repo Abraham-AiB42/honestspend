@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from financial_os.config import settings
-from financial_os.services import secrets_store as ss
+from honestspend.config import settings
+from honestspend.services import secrets_store as ss
 
 
 @pytest.fixture()

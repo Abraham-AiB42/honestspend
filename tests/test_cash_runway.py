@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Account, Profile, ScheduledItem, init_db
-from financial_os.seed import seed_all
-from financial_os.services.cash_runway import build_cash_runway
+from honestspend.config import settings
+from honestspend.db import Account, Profile, ScheduledItem, init_db
+from honestspend.seed import seed_all
+from honestspend.services.cash_runway import build_cash_runway
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -42,7 +42,7 @@ def test_runway_flags_red_day(tmp_path, monkeypatch):
     s.add(cash)
     s.flush()
     # Kill default safety buffer for this test
-    from financial_os.db import AppSettings
+    from honestspend.db import AppSettings
 
     st = s.get(AppSettings, 1)
     if st:

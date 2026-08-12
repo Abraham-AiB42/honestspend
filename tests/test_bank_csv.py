@@ -6,9 +6,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, ScheduledItem, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.bank_csv import import_bank_csv
+from honestspend.db import Account, Profile, ScheduledItem, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.bank_csv import import_bank_csv
 
 
 def _session(tmp_path: Path):
@@ -112,7 +112,7 @@ def test_csv_ending_balance_column(tmp_path: Path):
 2026-08-01,COFFEE,-4.50,995.50
 2026-08-02,PAY,-20.00,975.50
 """
-    from financial_os.services.bank_csv import preview_bank_csv
+    from honestspend.services.bank_csv import preview_bank_csv
 
     prev = preview_bank_csv(StringIO(csv_text))
     assert prev.get("ending_balance") == "975.50"
@@ -157,7 +157,7 @@ def test_csv_ending_balance_newest_first(tmp_path: Path):
 2026-08-05,PAY,-20.00,980.00
 2026-08-01,COFFEE,-4.50,1000.00
 """
-    from financial_os.services.bank_csv import preview_bank_csv
+    from honestspend.services.bank_csv import preview_bank_csv
 
     prev = preview_bank_csv(StringIO(csv_text))
     assert prev.get("ending_balance") == "980.00"
@@ -175,7 +175,7 @@ def test_csv_ending_balance_newest_first(tmp_path: Path):
 
 def test_csv_ending_balance_same_day_newest_first(tmp_path: Path):
     """Same-calendar-day newest-first: first row is latest running bal."""
-    from financial_os.services.bank_csv import ending_balance_from_pairs, preview_bank_csv
+    from honestspend.services.bank_csv import ending_balance_from_pairs, preview_bank_csv
     from datetime import date as date_cls
 
     pairs = [
@@ -216,7 +216,7 @@ def test_csv_ending_balance_same_day_newest_first(tmp_path: Path):
 
 def test_csv_ending_balance_same_day_chronological(tmp_path: Path):
     """Same-day chronological: last row is ending running bal (amount-consistent)."""
-    from financial_os.services.bank_csv import ending_balance_from_pairs, preview_bank_csv
+    from honestspend.services.bank_csv import ending_balance_from_pairs, preview_bank_csv
     from datetime import date as date_cls
 
     pairs = [
@@ -257,7 +257,7 @@ def test_csv_ending_balance_same_day_chronological(tmp_path: Path):
 
 def test_csv_ending_balance_max_day_slice_amount_orientation():
     """Multi-day file: amount orientation on max-day rows only (not whole-file same-day)."""
-    from financial_os.services.bank_csv import ending_balance_from_pairs
+    from honestspend.services.bank_csv import ending_balance_from_pairs
     from datetime import date as date_cls
 
     # Newest-first multi-day; max day (08-05) has two rows: pay then older coffee same day
@@ -295,7 +295,7 @@ def test_csv_import_updates_safe_to_spend_via_trust(tmp_path: Path):
     csv_text = """Date,Description,Amount,Balance
 2026-08-01,COFFEE,-4.50,995.50
 """
-    from financial_os.services.reconcile import trust_balance
+    from honestspend.services.reconcile import trust_balance
 
     result = import_bank_csv(
         s,
@@ -340,7 +340,7 @@ def test_csv_txn_id_dedupe(tmp_path: Path):
     r2 = import_bank_csv(s, account_id=acct.id, file_obj=StringIO(csv_text2), auto_categorize=False)
     assert r2.transactions_created == 0
     assert r2.skipped_existing == 2
-    from financial_os.db import Transaction
+    from honestspend.db import Transaction
 
     assert s.query(Transaction).count() == 2
     s.close()

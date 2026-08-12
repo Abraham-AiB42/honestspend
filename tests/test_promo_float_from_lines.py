@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, init_db
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.promo_installments import (
+from honestspend.db import Account, Profile, init_db
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.promo_installments import (
     create_promo_line,
     effective_promo_balance,
     open_promo_totals,
@@ -75,7 +75,7 @@ def test_effective_promo_balance_prefers_open_lines(tmp_path: Path):
 
 def test_ifpp_float_uses_line_principal(tmp_path: Path, monkeypatch):
     """Card float reserves open promo line principal, not stale account field alone."""
-    from financial_os.config import settings
+    from honestspend.config import settings
 
     data = tmp_path / "data"
     data.mkdir()
@@ -117,7 +117,7 @@ def test_ifpp_float_uses_line_principal(tmp_path: Path, monkeypatch):
         start_date=as_of - timedelta(days=10),
     )
     # Zero buffer so cash_spendable ≈ 3000
-    from financial_os.db import AppSettings
+    from honestspend.db import AppSettings
 
     st = s.get(AppSettings, 1)
     st.safety_buffer = Decimal("0")
@@ -134,7 +134,7 @@ def test_ifpp_float_uses_line_principal(tmp_path: Path, monkeypatch):
 
 def test_promo_balance_clears_when_lines_paid_off(tmp_path: Path):
     """After installment principal hits 0, float must not keep stale promo_balance."""
-    from financial_os.services.promo_installments import (
+    from honestspend.services.promo_installments import (
         sync_account_promo_balance_from_lines,
         update_promo_line,
     )
@@ -186,7 +186,7 @@ def test_promo_balance_clears_when_lines_paid_off(tmp_path: Path):
     assert Decimal(str(card.promo_balance)) == Decimal("0.00")
 
     # Death clock / Home promo nags must not keep a paid-off installment balloon
-    from financial_os.services.promo_clock import promo_death_clock
+    from honestspend.services.promo_clock import promo_death_clock
 
     clock = promo_death_clock(s, as_of=as_of)
     assert all(i["account_id"] != card.id for i in clock["items"])

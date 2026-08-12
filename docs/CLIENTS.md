@@ -22,7 +22,7 @@ HonestSpend is **API-first**. One local (or Docker) engine; any client speaks HT
 |--------|-----|
 | **WinUI 3 (native)** | `clients/HonestSpend.WinUI` — primary desktop |
 | **Web** | Frozen minimal + **Plaid Link** only |
-| **Windows tray** | `python -m financial_os.cli tray` |
+| **Windows tray** | `python -m honestspend.cli tray` |
 | **CLI** | `serve`, `digest`, `token`, `backup`, `health`, … |
 | **Docker** | `docker compose up` — lab only; set API keys |
 

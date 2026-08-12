@@ -3,9 +3,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Base, Category, Profile, init_db
-from financial_os.seed import load_coa, seed_all
-from financial_os.services.profiles import create_profile
+from honestspend.db import Base, Category, Profile, init_db
+from honestspend.seed import load_coa, seed_all
+from honestspend.services.profiles import create_profile
 
 
 def test_coa_json_loads():

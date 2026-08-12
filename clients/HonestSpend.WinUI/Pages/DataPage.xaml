@@ -39,7 +39,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Auto-backup schedule" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="While the engine is running it checks every ~15 min. Keep copies under ~/.financial-os/backups." />
+                        Text="While the engine is running it checks every ~15 min. Keep copies under ~/.HonestSpend/backups." />
                     <CheckBox x:Name="AutoOnBox" Content="Enable scheduled auto-backup" IsChecked="True" />
                     <Grid ColumnSpacing="12">
                         <Grid.ColumnDefinitions>

@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from financial_os.config import settings
-from financial_os.services.paths_safe import (
+from honestspend.config import settings
+from honestspend.services.paths_safe import (
     enforce_upload_size,
     resolve_under_data_dir,
     safe_filename,

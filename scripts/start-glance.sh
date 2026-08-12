@@ -20,7 +20,7 @@ echo "API docs         → http://${FOS_HOST}:${FOS_PORT}/docs"
 
 # Start server in background if not already healthy
 if ! curl -sf "http://${FOS_HOST}:${FOS_PORT}/api/health" >/dev/null 2>&1; then
-  python -m financial_os.cli serve --host "$FOS_HOST" --port "$FOS_PORT" &
+  python -m honestspend.cli serve --host "$FOS_HOST" --port "$FOS_PORT" &
   SERVER_PID=$!
   echo "Started engine pid $SERVER_PID"
   for i in $(seq 1 30); do
@@ -33,7 +33,7 @@ else
   echo "Engine already running"
 fi
 
-python -m financial_os.cli glance --open --host "$FOS_HOST" --port "$FOS_PORT" || true
+python -m honestspend.cli glance --open --host "$FOS_HOST" --port "$FOS_PORT" || true
 echo "Press Ctrl+C in the serve terminal to stop, or kill the background job."
 # If we started the server, wait on it
 if [[ -n "${SERVER_PID:-}" ]]; then

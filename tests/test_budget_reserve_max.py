@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.config import settings
-from financial_os.db import Category, Profile, init_db
-from financial_os.seed import seed_all
-from financial_os.services.budget_service import budget_reserve_total, create_rule, budgets_status
+from honestspend.config import settings
+from honestspend.db import Category, Profile, init_db
+from honestspend.seed import seed_all
+from honestspend.services.budget_service import budget_reserve_total, create_rule, budgets_status
 
 
 def _session(tmp_path: Path, monkeypatch):

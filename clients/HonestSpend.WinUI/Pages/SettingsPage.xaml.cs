@@ -42,7 +42,7 @@ public sealed partial class SettingsPage : Page
             " · flags: --tray-only · --minimized · --tray · single-instance";
         EngineLogText.Text = App.Backend?.LogPath is string lp
             ? $"Engine log: {lp}"
-            : "Engine log: ~/.financial-os/engine.log (after Start engine)";
+            : "Engine log: ~/.HonestSpend/engine.log (after Start engine)";
         RefreshTaskStatus();
         RefreshAppLockStatus();
         await LoadPathsAsync();
@@ -424,7 +424,7 @@ public sealed partial class SettingsPage : Page
     private void DefaultDataDir_Click(object sender, RoutedEventArgs e)
     {
         DataDirBox.Text = "";
-        PathsHintText.Text = "Empty = engine default (~/.financial-os).";
+        PathsHintText.Text = "Empty = engine default (~/.HonestSpend).";
     }
 
     private async void CopyDataDir_Click(object sender, RoutedEventArgs e)

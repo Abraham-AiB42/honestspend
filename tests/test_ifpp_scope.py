@@ -7,10 +7,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, init_db
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.profiles import create_profile
+from honestspend.db import Account, Profile, init_db
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.profiles import create_profile
 
 
 def _session(tmp_path: Path):

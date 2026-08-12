@@ -1398,7 +1398,17 @@ public sealed partial class FirstRunPage : Page
         if (string.IsNullOrWhiteSpace(_storagePath))
             _storagePath = StorageLocationService.DefaultLocalPath();
 
-        MsgText.Text = "Saving books folder…";
+        void Status(string s)
+        {
+            try
+            {
+                MsgText.Text = s;
+                ProgressBar.IsIndeterminate = true;
+            }
+            catch { /* ignore */ }
+        }
+
+        Status("Saving books folder…");
 
         // Only restart engine when the folder actually changes (Back → re-Next was hanging here)
         var previous = string.IsNullOrWhiteSpace(AppConfig.DataDir)
@@ -1414,47 +1424,65 @@ public sealed partial class FirstRunPage : Page
         }
         catch { /* treat as different */ }
 
-        if (sameFolder)
-        {
-            StorageLocationService.PersistDataDir(_storagePath);
-        }
-        else
-        {
-            MsgText.Text = "Moving books folder and restarting engine…";
-            await StorageLocationService.ApplyAndRestartEngineAsync(_storagePath, copyFromPrevious: true);
-        }
-
-        using var api = new LedgerApiClient();
-        await api.EnsureBackendAsync();
         try
         {
-            var res = await api.PostSetupStorageAsync(_storageKind, _storagePath, advance: true);
-            if (res.TryGetProperty("setup", out var st) && st.ValueKind == JsonValueKind.Object)
-                ApplyState(st);
+            if (sameFolder)
+            {
+                Status("Using this folder…");
+                StorageLocationService.PersistDataDir(_storagePath);
+            }
             else
             {
-                var st2 = await api.SetupAdvanceAsync("next", payload: new
+                Status("Moving books folder and restarting engine…");
+                // Progress callback marshals to UI dispatcher so status updates while we wait
+                var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                await StorageLocationService.ApplyAndRestartEngineAsync(
+                    _storagePath,
+                    copyFromPrevious: true,
+                    progress: msg =>
+                    {
+                        if (dq is null || !dq.TryEnqueue(() => Status(msg)))
+                            Status(msg);
+                    });
+            }
+
+            Status("Confirming setup with engine…");
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            try
+            {
+                var res = await api.PostSetupStorageAsync(_storageKind, _storagePath, advance: true);
+                if (res.TryGetProperty("setup", out var st) && st.ValueKind == JsonValueKind.Object)
+                    ApplyState(st);
+                else
+                {
+                    var st2 = await api.SetupAdvanceAsync("next", payload: new
+                    {
+                        storage_kind = _storageKind,
+                        storage_path = _storagePath,
+                        storage_chosen = true,
+                    });
+                    ApplyState(st2);
+                }
+            }
+            catch
+            {
+                // Engine may have just restarted — advance via state machine
+                var st = await api.SetupAdvanceAsync("next", payload: new
                 {
                     storage_kind = _storageKind,
                     storage_path = _storagePath,
                     storage_chosen = true,
                 });
-                ApplyState(st2);
+                ApplyState(st);
             }
+            MsgText.Text = "Books folder: " + _storagePath;
+            Render();
         }
-        catch
+        finally
         {
-            // Engine may have just restarted — advance via state machine
-            var st = await api.SetupAdvanceAsync("next", payload: new
-            {
-                storage_kind = _storageKind,
-                storage_path = _storagePath,
-                storage_chosen = true,
-            });
-            ApplyState(st);
+            try { ProgressBar.IsIndeterminate = false; } catch { /* ignore */ }
         }
-        MsgText.Text = "Books folder: " + _storagePath;
-        Render();
     }
 
     private async Task RenderSecurityAsync()

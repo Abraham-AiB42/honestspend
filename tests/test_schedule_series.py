@@ -9,10 +9,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Profile, init_db
-from financial_os.engine.schedule_expand import expand_scheduled
-from financial_os.seed import seed_all
-from financial_os.services.schedule_series import (
+from honestspend.db import Profile, init_db
+from honestspend.engine.schedule_expand import expand_scheduled
+from honestspend.seed import seed_all
+from honestspend.services.schedule_series import (
     add_series_step,
     create_schedule_segment,
     list_series,

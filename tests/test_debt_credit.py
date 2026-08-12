@@ -1,8 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from financial_os.services.credit_sim import CreditProfileInputs, simulate_credit
-from financial_os.services.debt_strategy import (
+from honestspend.services.credit_sim import CreditProfileInputs, simulate_credit
+from honestspend.services.debt_strategy import (
     DebtView,
     YieldAccountView,
     compare_strategies,

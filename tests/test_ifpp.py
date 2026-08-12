@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from financial_os.engine.ifpp import (
+from honestspend.engine.ifpp import (
     CardView,
     CashAccountView,
     ScheduledView,

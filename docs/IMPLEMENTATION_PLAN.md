@@ -66,7 +66,7 @@ When this plan is complete:
 **Problem:** Overwrite live SQLite while connections open.  
 **Work:**
 - `POST /api/backup/restore/*` returns `requires_restart: true` and sets a flag file `data_dir/.restore_pending`.  
-- Prefer: copy restored DB to `financial_os.db.next`, set flag, **refuse writes** until process restart.  
+- Prefer: copy restored DB to `honestspend.db.next`, set flag, **refuse writes** until process restart.  
 - On startup (lifespan): if `.db.next` exists, replace live DB atomically, clear flag.  
 - WinUI Data page: wizard steps (confirm → restore → auto-restart engine → health ping).  
 - Document: never restore while another client is writing.  

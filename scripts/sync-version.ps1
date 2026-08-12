@@ -34,7 +34,7 @@ $pyText = Get-Content $pyPath -Raw
 $pyText = $pyText -replace 'version\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+"', "version = `"$Version`""
 Set-Content $pyPath $pyText -NoNewline -Encoding utf8
 
-$init = Join-Path $Root "src\financial_os\__init__.py"
+$init = Join-Path $Root "src\honestspend\__init__.py"
 $initText = Get-Content $init -Raw
 $initText = $initText -replace '__version__\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+"', "__version__ = `"$Version`""
 Set-Content $init $initText -NoNewline -Encoding utf8
@@ -49,8 +49,11 @@ if (Test-Path $iss) {
 $manifest = Join-Path $Root "clients\HonestSpend.WinUI\Package.appxmanifest"
 if (Test-Path $manifest) {
     $m = Get-Content $manifest -Raw
-    $m = $m -replace 'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"', "Version=`"$msixVer`""
-    Set-Content $manifest $m -NoNewline -Encoding utf8
+    # Only Identity Version — never TargetDeviceFamily MinVersion (Windows OS version)
+    $m = $m -replace '(<Identity[\s\S]*?Version=")[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(")', "`${1}$msixVer`${2}"
+    # UTF-8 without BOM (BOM breaks some tools)
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($manifest, $m, $utf8)
 }
 
 $csproj = Join-Path $Root "clients\HonestSpend.WinUI\HonestSpend.WinUI.csproj"

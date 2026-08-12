@@ -15,20 +15,20 @@ Write-Host "=== HonestSpend logon / automation smoke ===" -ForegroundColor Cyan
 Write-Host "Root: $Root"
 
 # 1. version / health CLI
-& $Py -m financial_os.cli version
+& $Py -m honestspend.cli version
 if ($LASTEXITCODE -eq 0) { Ok "version" } else { Bad "version" }
 
 # 2. backup --force
-$bak = & $Py -m financial_os.cli backup --force --note smoke 2>&1 | Out-String
+$bak = & $Py -m honestspend.cli backup --force --note smoke 2>&1 | Out-String
 if ($bak -match '"ok": true' -or $bak -match '"ok":true') { Ok "backup --force" } else { Bad "backup: $bak" }
 
 # 3. digest
-& $Py -m financial_os.cli digest | Out-Null
+& $Py -m honestspend.cli digest | Out-Null
 # exit 0 or 2 both ok (2 = critical alerts)
 if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 2) { Ok "digest (exit $LASTEXITCODE)" } else { Bad "digest exit $LASTEXITCODE" }
 
 # 4. health (engine may be down — not fatal)
-& $Py -m financial_os.cli health | Out-Null
+& $Py -m honestspend.cli health | Out-Null
 if ($LASTEXITCODE -eq 0) { Ok "engine healthy" } else { Write-Host "[--] engine offline (start WinUI or serve)" -ForegroundColor Yellow }
 
 # 5. scheduled tasks registered?
@@ -48,7 +48,7 @@ if ($run) {
 }
 
 # 7. tray pid file
-$pidFile = Join-Path $env:USERPROFILE ".financial-os\tray.pid"
+$pidFile = Join-Path $env:USERPROFILE ".HonestSpend\tray.pid"
 if (Test-Path $pidFile) { Ok "tray.pid exists ($((Get-Content $pidFile -Raw).Trim()))" }
 else { Write-Host "[--] tray not running" -ForegroundColor Yellow }
 

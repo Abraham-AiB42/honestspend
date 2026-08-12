@@ -3,9 +3,9 @@
 import json
 from pathlib import Path
 
-from financial_os.cli import main
-from financial_os.config import settings
-from financial_os.db import init_db, make_engine
+from honestspend.cli import main
+from honestspend.config import settings
+from honestspend.db import init_db, make_engine
 
 
 def test_backup_force_cli(tmp_path, monkeypatch, capsys):

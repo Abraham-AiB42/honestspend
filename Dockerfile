@@ -20,4 +20,4 @@ ENV FOS_DATA_DIR=/data
 EXPOSE 7420
 VOLUME ["/data"]
 
-CMD ["python", "-m", "financial_os.cli", "serve", "--host", "0.0.0.0", "--port", "7420"]
+CMD ["python", "-m", "honestspend.cli", "serve", "--host", "0.0.0.0", "--port", "7420"]

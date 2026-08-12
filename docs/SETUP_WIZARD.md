@@ -37,7 +37,7 @@ After you have cash, **Make it smarter** offers jump-in modules. Each returns to
 
 1. **Welcome** — time honesty, resume support  
 2. **Path** — Plaid / CSV / manual  
-3a. **Plaid keys** — [dashboard.plaid.com/signup](https://dashboard.plaid.com/signup); stored in `~/.financial-os/secrets.json` (Windows DPAPI + file lock)  
+3a. **Plaid keys** — [dashboard.plaid.com/signup](https://dashboard.plaid.com/signup); stored in `~/.HonestSpend/secrets.json` (Windows DPAPI + file lock)  
 3b. **Plaid Link** — app opens `/static/plaid-link.html`  
 4. **Cash loop** (CSV) or **manual** form  
 5. **Power menu** — optional depth (above)  
@@ -68,7 +68,7 @@ After you have cash, **Make it smarter** offers jump-in modules. Each returns to
 
 ## Secrets
 
-- Path: `%USERPROFILE%\.financial-os\secrets.json`  
+- Path: `%USERPROFILE%\.HonestSpend\secrets.json`  
 - Windows DPAPI for values; exclusive file lock on read-modify-write  
 - Not included in SQLite backup zips  
 - Settings → **BYOK connections** to edit without re-running the wizard  
@@ -76,7 +76,7 @@ After you have cash, **Make it smarter** offers jump-in modules. Each returns to
 
 ## Fresh dogfood
 
-1. Close app; delete `~/.financial-os/financial_os.db` (optional: secrets.json)  
+1. Close app; delete `~/.HonestSpend/honestspend.db` (optional: secrets.json)  
 2. Run WinUI unpackaged  
 3. Get started → walk path of choice  
 

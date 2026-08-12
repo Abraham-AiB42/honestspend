@@ -5,13 +5,13 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, AppSettings, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.intermix import apply_intermix
-from financial_os.services.pre_purchase import check_purchase
-from financial_os.services.promo_clock import promo_death_clock
-from financial_os.services.digest import build_digest
-from financial_os.services.permissions import Role, list_roles, default_context
+from honestspend.db import Account, AppSettings, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.intermix import apply_intermix
+from honestspend.services.pre_purchase import check_purchase
+from honestspend.services.promo_clock import promo_death_clock
+from honestspend.services.digest import build_digest
+from honestspend.services.permissions import Role, list_roles, default_context
 
 
 def _session(tmp_path: Path):
@@ -66,8 +66,8 @@ def test_pre_purchase_unsafe_when_broke(tmp_path: Path):
 
 def test_pre_purchase_respects_budget_reserve(tmp_path: Path):
     """Cash path must use Safe to spend after period budget reserve (Home parity)."""
-    from financial_os.db import Category
-    from financial_os.services.budget_service import create_rule
+    from honestspend.db import Category
+    from honestspend.services.budget_service import create_rule
 
     s = _session(tmp_path)
     settings = s.get(AppSettings, 1)
@@ -114,8 +114,8 @@ def test_pre_purchase_respects_budget_reserve(tmp_path: Path):
 
 
 def test_pre_purchase_category_budget_tight(tmp_path: Path):
-    from financial_os.db import Category
-    from financial_os.services.budget_service import create_rule
+    from honestspend.db import Category
+    from honestspend.services.budget_service import create_rule
 
     s = _session(tmp_path)
     settings = s.get(AppSettings, 1)
@@ -189,7 +189,7 @@ def test_promo_clock_sinking_fund(tmp_path: Path):
 
 def test_intermix_capital_inject(tmp_path: Path):
     s = _session(tmp_path)
-    from financial_os.services.profiles import create_profile
+    from honestspend.services.profiles import create_profile
 
     personal = s.query(Profile).filter(Profile.slug == "personal").one()
     biz = create_profile(s, display_name="Demo Business", entity_type="business")

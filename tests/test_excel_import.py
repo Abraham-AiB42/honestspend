@@ -6,9 +6,9 @@ from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Base, Transaction
-from financial_os.seed import seed_all
-from financial_os.services.excel_import import import_budget_xlsx
+from honestspend.db import Base, Transaction
+from honestspend.seed import seed_all
+from honestspend.services.excel_import import import_budget_xlsx
 
 
 def _session(tmp_path: Path):

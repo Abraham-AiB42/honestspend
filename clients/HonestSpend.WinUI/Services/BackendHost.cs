@@ -144,7 +144,7 @@ public sealed class BackendHost : IDisposable
             var psi = new ProcessStartInfo
             {
                 FileName = py,
-                Arguments = "-m financial_os.cli serve --host 127.0.0.1 --port 7420",
+                Arguments = "-m honestspend.cli serve --host 127.0.0.1 --port 7420",
                 WorkingDirectory = root,
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -192,7 +192,7 @@ public sealed class BackendHost : IDisposable
         {
             var dir = !string.IsNullOrWhiteSpace(AppConfig.DataDir)
                 ? AppConfig.DataDir!
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".financial-os");
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".HonestSpend");
             Directory.CreateDirectory(dir);
             LogPath = Path.Combine(dir, "engine.log");
             _logWriter?.Dispose();
@@ -269,9 +269,12 @@ public sealed class BackendHost : IDisposable
         }
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var known = Path.Combine(home, "source", "repos", "financial-os");
-        if (LooksLikeEngine(known))
-            return known;
+        foreach (var repo in new[] { "honestspend", "financial-os", "HonestSpend" })
+        {
+            var known = Path.Combine(home, "source", "repos", repo);
+            if (LooksLikeEngine(known))
+                return known;
+        }
 
         return null;
     }
@@ -284,25 +287,23 @@ public sealed class BackendHost : IDisposable
         var embedPy = Path.Combine(root, "python", "python.exe");
         if (File.Exists(embedPy))
             return true;
-        var src = Path.Combine(root, "src", "financial_os");
-        if (Directory.Exists(src))
-            return true;
+        foreach (var pkg in new[] { "honestspend", "financial_os" })
+        {
+            var src = Path.Combine(root, "src", pkg);
+            if (Directory.Exists(src))
+                return true;
+        }
         // Dev clone with venv
         var venvPy = Path.Combine(root, ".venv", "Scripts", "python.exe");
         return File.Exists(venvPy);
     }
 
+    /// <summary>
+    /// Kill the engine process. Does NOT seal — await SealDatabaseAsync first if needed.
+    /// Sync seal via GetResult here deadlocks WinUI when Restart runs under a UI sync context.
+    /// </summary>
     public void Stop()
     {
-        // Prefer seal-first path when caller can await; sync Stop still best-effort seals
-        try
-        {
-            AppLockService.SealDatabaseAsync().GetAwaiter().GetResult();
-        }
-        catch
-        {
-            /* engine may already be down */
-        }
         try
         {
             if (_process is { HasExited: false })
@@ -326,11 +327,12 @@ public sealed class BackendHost : IDisposable
 
     public async Task<bool> RestartAsync(CancellationToken ct = default)
     {
-        // Seal while engine is still alive (encrypted vaults)
-        try { await AppLockService.SealDatabaseAsync(ct); } catch { /* best-effort */ }
+        // Seal while engine is still alive (encrypted vaults) — async only
+        try { await AppLockService.SealDatabaseAsync(ct).ConfigureAwait(false); }
+        catch { /* best-effort */ }
         Stop();
-        await Task.Delay(400, ct);
-        return await EnsureRunningAsync(ct);
+        await Task.Delay(400, ct).ConfigureAwait(false);
+        return await EnsureRunningAsync(ct).ConfigureAwait(false);
     }
 
     public void Dispose() => Stop();

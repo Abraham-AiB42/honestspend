@@ -45,7 +45,7 @@ if (-not $SkipEngine) {
 
 # 4) Install notes
 $notes = @"
-HonestSpend — Windows package (1.0.55)
+HonestSpend — Windows package (1.0.56)
 =====================================
 
 ONE-CLICK USE
@@ -65,7 +65,7 @@ ENGINE
 - If Home says offline: Settings → Start engine
 
 DATA
-- %USERPROFILE%\.financial-os  (or Settings → data folder / OneDrive)
+- %USERPROFILE%\.HonestSpend  (or Settings → data folder / OneDrive)
 
 Docs: INSTALL.md · CLIENT_FIRST.md · CHANGELOG.md
 

@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
-from financial_os.db import Account, AppSettings, Transaction, init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
-from financial_os.services.ifpp_service import run_ifpp
-from financial_os.services.liquidity_rescue import build_rescue_plan
-from financial_os.services.profiles import create_profile
+from honestspend.config import settings
+from honestspend.db import Account, AppSettings, Transaction, init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
+from honestspend.services.ifpp_service import run_ifpp
+from honestspend.services.liquidity_rescue import build_rescue_plan
+from honestspend.services.profiles import create_profile
 
 
 @pytest.fixture()
@@ -24,7 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "require_api_key", False)
     monkeypatch.setattr(settings, "allow_non_loopback", False)
 
-    import financial_os.api.app as app_mod
+    import honestspend.api.app as app_mod
 
     app_mod.engine = make_engine()
     app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -111,7 +111,7 @@ def test_is_red_now_on_negative_checking(tmp_path: Path):
     SF = make_session_factory(eng)
     with SF() as s:
         seed_all(s)
-        personal = s.query(__import__("financial_os.db", fromlist=["Profile"]).Profile).filter_by(
+        personal = s.query(__import__("honestspend.db", fromlist=["Profile"]).Profile).filter_by(
             slug="personal"
         ).one()
         s.add(
@@ -135,7 +135,7 @@ def test_rescue_includes_transfer_before_revolve(tmp_path: Path):
     SF = make_session_factory(eng)
     with SF() as s:
         seed_all(s)
-        personal = s.query(__import__("financial_os.db", fromlist=["Profile"]).Profile).filter_by(
+        personal = s.query(__import__("honestspend.db", fromlist=["Profile"]).Profile).filter_by(
             slug="personal"
         ).one()
         s.add(

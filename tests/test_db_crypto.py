@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from financial_os.config import settings
-from financial_os.db import init_db, make_engine
-from financial_os.services import db_crypto as dc
-from financial_os.services import db_runtime as rt
+from honestspend.config import settings
+from honestspend.db import init_db, make_engine
+from honestspend.services import db_crypto as dc
+from honestspend.services import db_runtime as rt
 
 
 def _prep(tmp_path: Path, monkeypatch):
@@ -41,7 +41,7 @@ def test_seal_unseal_roundtrip(tmp_path: Path, monkeypatch):
     un = dc.unseal_database(dek)
     assert un["ok"]
     assert dc.plaintext_present()
-    assert (data / "financial_os.db").is_file()
+    assert (data / "honestspend.db").is_file()
 
 
 def test_wrong_pin_fails(tmp_path: Path, monkeypatch):
@@ -81,7 +81,7 @@ def test_no_silent_boot_when_encrypted(tmp_path: Path, monkeypatch):
     rt.enable(secret="9999", mode_hint="pin", wrap="password")
     assert dc.plaintext_present()
     # Soft crash: dispose without seal (plaintext leftover on disk)
-    from financial_os.services import db_runtime as rtmod
+    from honestspend.services import db_runtime as rtmod
 
     rtmod._dispose_unlocked()
     rtmod._session_dek = None

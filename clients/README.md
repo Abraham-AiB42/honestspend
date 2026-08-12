@@ -24,7 +24,7 @@ dotnet run -c Debug -p:Platform=x64
 
 Open `HonestSpend.WinUI.csproj` in Visual Studio for designer/debug.
 
-The app auto-starts `python -m financial_os.cli serve` if nothing is on `:7420` (expects repo-root `.venv`).  
+The app auto-starts `python -m honestspend.cli serve` if nothing is on `:7420` (expects repo-root `.venv`).  
 Optional: **Settings → Start system tray with app**.
 
 ### Publish / package

@@ -23,12 +23,12 @@
 
 | Path | Responsibility |
 |------|----------------|
-| `src/financial_os/db.py` | `payment_timing` on Account |
-| `src/financial_os/migrations.py` | mig 19 |
-| `src/financial_os/services/statement_cycle.py` | books policy, timing → pay date, project fields |
-| `src/financial_os/services/card_honesty.py` | **New** util/interest/advice helpers |
-| `src/financial_os/services/autopay.py` | POLICIES + books; schedule date from projection |
-| `src/financial_os/api/app.py` | cycle-config timing; honesty on GET cycle |
+| `src/honestspend/db.py` | `payment_timing` on Account |
+| `src/honestspend/migrations.py` | mig 19 |
+| `src/honestspend/services/statement_cycle.py` | books policy, timing → pay date, project fields |
+| `src/honestspend/services/card_honesty.py` | **New** util/interest/advice helpers |
+| `src/honestspend/services/autopay.py` | POLICIES + books; schedule date from projection |
+| `src/honestspend/api/app.py` | cycle-config timing; honesty on GET cycle |
 | `clients/.../CreditPage.*` | policy/timing/honesty UI |
 | `clients/.../LedgerApiClient.cs` | timing field |
 | `docs/STATEMENT_CYCLES.md` | policies + timing + advice |
@@ -41,8 +41,8 @@
 ### Task 1: Schema payment_timing
 
 **Files:**
-- Modify: `src/financial_os/db.py`
-- Modify: `src/financial_os/migrations.py`
+- Modify: `src/honestspend/db.py`
+- Modify: `src/honestspend/migrations.py`
 - Test: `tests/test_pay_timing_schema.py`
 
 **Interfaces:**
@@ -59,7 +59,7 @@
 ### Task 2: Timing + books payment math
 
 **Files:**
-- Modify: `src/financial_os/services/statement_cycle.py`
+- Modify: `src/honestspend/services/statement_cycle.py`
 - Test: `tests/test_pay_timing.py`, extend `tests/test_statement_cycle.py`
 
 **Interfaces:**
@@ -100,7 +100,7 @@ def compute_next_payment(...):  # add policy books → max(0, bal)
 ### Task 3: Honesty helpers
 
 **Files:**
-- Create: `src/financial_os/services/card_honesty.py`
+- Create: `src/honestspend/services/card_honesty.py`
 - Test: `tests/test_card_honesty.py`
 
 **Interfaces:**
@@ -122,7 +122,7 @@ def honesty_payload(account, *, promo_remaining, soft_pct=10, hard_pct=30) -> di
 ### Task 4: Autopay recompute uses timing
 
 **Files:**
-- Modify: `src/financial_os/services/autopay.py`
+- Modify: `src/honestspend/services/autopay.py`
 - Test: `tests/test_autopay_recompute.py` or `tests/test_pay_timing.py`
 
 **Interfaces:**
@@ -141,7 +141,7 @@ def honesty_payload(account, *, promo_remaining, soft_pct=10, hard_pct=30) -> di
 ### Task 5: API cycle-config + honesty block
 
 **Files:**
-- Modify: `src/financial_os/api/app.py`
+- Modify: `src/honestspend/api/app.py`
 - Test: `tests/test_statement_cycle_api.py`
 
 **Interfaces:**

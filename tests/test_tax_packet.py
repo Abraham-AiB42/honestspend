@@ -5,9 +5,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Base, Category, Profile, Transaction
-from financial_os.seed import seed_all
-from financial_os.services.tax_packet import build_tax_packet, packet_to_csv_files
+from honestspend.db import Account, Base, Category, Profile, Transaction
+from honestspend.seed import seed_all
+from honestspend.services.tax_packet import build_tax_packet, packet_to_csv_files
 
 
 def _session(tmp_path: Path):
@@ -21,7 +21,7 @@ def _session(tmp_path: Path):
 
 def test_meals_50_percent_in_packet(tmp_path: Path):
     s = _session(tmp_path)
-    from financial_os.services.profiles import create_profile
+    from honestspend.services.profiles import create_profile
 
     personal = create_profile(s, display_name="Demo Business", entity_type="business")
     s.flush()

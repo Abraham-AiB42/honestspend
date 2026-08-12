@@ -2,7 +2,7 @@
 
 from decimal import Decimal
 
-from financial_os.services.import_amounts import (
+from honestspend.services.import_amounts import (
     looks_like_credit_payment,
     looks_like_credit_refund,
     normalize_credit_import_amount,

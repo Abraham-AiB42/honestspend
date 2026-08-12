@@ -1,8 +1,8 @@
 from datetime import date, timedelta
 from decimal import Decimal
 
-from financial_os.engine.ifpp import CardView
-from financial_os.services.payoff import plan_card_payoff
+from honestspend.engine.ifpp import CardView
+from honestspend.services.payoff import plan_card_payoff
 
 
 def test_promo_min_then_balloon():

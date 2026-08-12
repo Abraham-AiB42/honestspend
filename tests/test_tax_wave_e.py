@@ -8,10 +8,10 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.cpa_pack import build_cpa_pack_zip
-from financial_os.services.tax_packet import build_tax_packet, tax_packet_readiness
+from honestspend.db import Account, Profile, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.cpa_pack import build_cpa_pack_zip
+from honestspend.services.tax_packet import build_tax_packet, tax_packet_readiness
 
 
 def _session(tmp_path: Path):

@@ -10,11 +10,11 @@ from dateutil.relativedelta import relativedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from financial_os.db import Account, Profile, ScheduledItem, Transaction, init_db
-from financial_os.seed import seed_all
-from financial_os.services.autopay import recompute_card_payment_schedule
-from financial_os.services.schedule_mark_paid import mark_schedule_paid
-from financial_os.services.txn_void import void_transaction
+from honestspend.db import Account, Profile, ScheduledItem, Transaction, init_db
+from honestspend.seed import seed_all
+from honestspend.services.autopay import recompute_card_payment_schedule
+from honestspend.services.schedule_mark_paid import mark_schedule_paid
+from honestspend.services.txn_void import void_transaction
 
 
 def _session(tmp_path: Path):

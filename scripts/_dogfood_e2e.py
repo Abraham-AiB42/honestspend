@@ -11,7 +11,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from financial_os.config import settings
+from honestspend.config import settings
 
 td = Path(tempfile.mkdtemp(prefix="lr-dogfood-"))
 object.__setattr__(settings, "data_dir", td)
@@ -19,9 +19,9 @@ object.__setattr__(settings, "host", "127.0.0.1")
 object.__setattr__(settings, "require_api_key", False)
 object.__setattr__(settings, "allow_non_loopback", False)
 
-import financial_os.api.app as app_mod
-from financial_os.db import init_db, make_engine, make_session_factory
-from financial_os.seed import seed_all
+import honestspend.api.app as app_mod
+from honestspend.db import init_db, make_engine, make_session_factory
+from honestspend.seed import seed_all
 
 app_mod.engine = make_engine()
 app_mod.SessionLocal = make_session_factory(app_mod.engine)

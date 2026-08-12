@@ -2,9 +2,9 @@
 
 from decimal import Decimal
 
-from financial_os.config import settings
-from financial_os.db import AppSettings, init_db, make_engine, make_session_factory
-from financial_os.services.debt_service import get_credit_profile, run_credit_health
+from honestspend.config import settings
+from honestspend.db import AppSettings, init_db, make_engine, make_session_factory
+from honestspend.services.debt_service import get_credit_profile, run_credit_health
 
 
 def test_credit_profile_roundtrip(tmp_path, monkeypatch):

@@ -1,11 +1,11 @@
-﻿# Build a SELF-CONTAINED Python engine for end users (no system Python required).
+# Build a SELF-CONTAINED Python engine for end users (no system Python required).
 #
 # Layout written to -Target\engine\ (or a staging folder):
 #   engine\
 #     python\              â† CPython embeddable + pip + site-packages
 #       python.exe
 #       Lib\site-packages\â€¦
-#     src\financial_os\    â† app code (also installed into site-packages)
+#     src\honestspend\    â† app code (also installed into site-packages)
 #     pyproject.toml
 #     README_ENGINE.txt
 #
@@ -131,7 +131,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Smoke: module import without system PYTHONPATH
 Write-Host "  Smoke import..." -ForegroundColor Cyan
-& $pythonExe -c "import financial_os; from financial_os.cli import main; print('ok', getattr(financial_os, '__version__', '?'))"
+& $pythonExe -c "import honestspend; from honestspend.cli import main; print('ok', getattr(honestspend, '__version__', '?'))"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Smoke import failed - engine is not self-contained"
 }
@@ -141,7 +141,7 @@ $readme = @(
     "HonestSpend self-contained engine"
     "Python: $PythonVersion embeddable amd64"
     "Users do NOT need Python installed."
-    "Launch: python\python.exe -m financial_os.cli serve"
+    "Launch: python\python.exe -m honestspend.cli serve"
     "Built:  $(Get-Date -Format o)"
 ) -join "`n"
 Set-Content -Path (Join-Path $Engine "README_ENGINE.txt") -Value $readme -Encoding UTF8
@@ -149,7 +149,7 @@ Set-Content -Path (Join-Path $Engine "README_ENGINE.txt") -Value $readme -Encodi
 $launchPs1 = Join-Path $Engine "serve.ps1"
 $launchBody = @(
     "# HonestSpend engine (self-contained)"
-    '& "$PSScriptRoot\python\python.exe" -m financial_os.cli serve @args'
+    '& "$PSScriptRoot\python\python.exe" -m honestspend.cli serve @args'
 ) -join "`n"
 Set-Content -Path $launchPs1 -Value $launchBody -Encoding UTF8
 
@@ -169,7 +169,7 @@ if (-not $SkipZip) {
 
 Write-Host ""
 Write-Host "Engine ready (self-contained)." -ForegroundColor Green
-Write-Host "  $pythonExe -m financial_os.cli serve"
+Write-Host "  $pythonExe -m honestspend.cli serve"
 Write-Host "  End users: no system Python required."
 Write-Host "  Store: MSIX zip extracts to %LocalAppData%\HonestSpend\engine"
 

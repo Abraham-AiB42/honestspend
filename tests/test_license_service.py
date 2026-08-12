@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from financial_os.services import license_service as ls
+from honestspend.services import license_service as ls
 
 
 @pytest.fixture()

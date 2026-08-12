@@ -606,7 +606,7 @@
       <div class="card">
         <h2>Windows tray</h2>
         <p class="fine">Always-on Spendable number (server must be running):</p>
-        <pre class="mono">python -m financial_os.cli tray</pre>
+        <pre class="mono">python -m honestspend.cli tray</pre>
       </div>
     </section>
 
@@ -686,7 +686,7 @@
       </div>
       <div class="card">
         <h2>Product</h2>
-        <p class="fine">HonestSpend is open-source freeware. Data lives in local SQLite (<code id="data-path-hint">~/.financial-os</code>). Local backup only by default.</p>
+        <p class="fine">HonestSpend is open-source freeware. Data lives in local SQLite (<code id="data-path-hint">~/.HonestSpend</code>). Local backup only by default.</p>
         <button type="button" id="reset-onboard" class="ghost">Show setup wizard again</button>
       </div>
       <div class="card">
@@ -708,7 +708,7 @@
         </form>
         <p id="perm-msg" class="fine"></p>
         <pre id="perm-token-out" class="mono"></pre>
-        <p class="fine">CLI: <code>python -m financial_os.cli token owner</code> · Clients: see docs/CLIENTS.md · Header <code>X-API-Key</code></p>
+        <p class="fine">CLI: <code>python -m honestspend.cli token owner</code> · Clients: see docs/CLIENTS.md · Header <code>X-API-Key</code></p>
         <label class="wide">Store API key in this browser (optional)
           <input id="api-key-store" type="password" placeholder="lr_… paste for multi-client testing" autocomplete="off" />
         </label>

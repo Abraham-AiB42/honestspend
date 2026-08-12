@@ -1,10 +1,10 @@
-# Passoff — HonestSpend / financial-os
+# Passoff â€” HonestSpend
 
 **Date:** 2026-08-11  
 **Active work branch:** `main` (1.0.55 merged from `feature/statement-cycles`)  
-**Version aligned in tree:** **1.0.55** (`financial_os`, `pyproject.toml`, WinUI package)  
+**Version aligned in tree:** **1.0.55** (`honestspend`, `pyproject.toml`, WinUI package)  
 **Remote:** https://github.com/Abraham-AiB42/honestspend.git  
-**`main` tip:** `0c0baca` — soft-until formula docs; full 1.0.55 line on main  
+**`main` tip:** `0c0baca` â€” soft-until formula docs; full 1.0.55 line on main  
 
 Use this file to resume on another PC without re-deriving session context.
 
@@ -12,20 +12,20 @@ Use this file to resume on another PC without re-deriving session context.
 
 ## 1. What this product is
 
-**HonestSpend** — local-first personal/business finance desktop app (WinUI 3 + Python FastAPI/SQLite).
+**HonestSpend** â€” local-first personal/business finance desktop app (WinUI 3 + Python FastAPI/SQLite).
 
-- **Core promise:** one honest **Safe to spend** number (engine cash − bills − dual buffers − discretionary budget reserve ± pending).
-- **Identity:** Agency in Box 42 · MSIX `AgencyinBox42.HonestSpend`
+- **Core promise:** one honest **Safe to spend** number (engine cash âˆ’ bills âˆ’ dual buffers âˆ’ discretionary budget reserve Â± pending).
+- **Identity:** Agency in Box 42 Â· MSIX `AgencyinBox42.HonestSpend`
 - **Not:** cloud ledger, bank-password vault, multi-writer live SQLite on OneDrive
 
 **Repo layout (high level):**
 
 | Path | Role |
 |------|------|
-| `src/financial_os/` | Python engine (API, IFPP, setup, crypto, budgets) |
+| `src/honestspend/` | Python engine (API, IFPP, setup, crypto, budgets) |
 | `clients/HonestSpend.WinUI/` | Windows client (wizard, Home, Buy, lock, settings) |
-| `docs/` | PRODUCT, SETUP_WIZARD, BUDGETS, SIMPLE_MODE, STATEMENT_CYCLES, … |
-| `docs/superpowers/plans/` | Implementation plans (solid-A, statement cycles, …) |
+| `docs/` | PRODUCT, SETUP_WIZARD, BUDGETS, SIMPLE_MODE, STATEMENT_CYCLES, â€¦ |
+| `docs/superpowers/plans/` | Implementation plans (solid-A, statement cycles, â€¦) |
 | `tests/` | pytest (pythonpath=`src`) |
 | `site/` | marketing / privacy HTML |
 | `scripts/` | dogfood / MSIX / store tiles |
@@ -55,7 +55,7 @@ pip install -e ".[dev]"
 
 ```powershell
 honestspend serve
-# Default: http://127.0.0.1:7420  ·  data: %USERPROFILE%\.financial-os
+# Default: http://127.0.0.1:7420  Â·  data: %USERPROFILE%\.HonestSpend
 ```
 
 ### WinUI (unpackaged)
@@ -93,12 +93,12 @@ python -m pytest tests/test_schedule_mark_paid.py tests/test_void_card_payment_s
 
 ## 4. Dogfood checklist (resume here)
 
-1. First-run → cash + bill → Home Safe readable  
-2. CSV import matching bill → Coming up advances; Import success bar  
+1. First-run â†’ cash + bill â†’ Home Safe readable  
+2. CSV import matching bill â†’ Coming up advances; Import success bar  
 3. Show all Coming up uses **same window prefs** as Settings  
 4. Mark paid Home + Bills; warn never-neg dialog  
 5. Soft until: with window bills can be **below** STS (single-count); hide when equal  
-6. Card mark-paid → next date +1 month only; void cash voids transfer pair  
+6. Card mark-paid â†’ next date +1 month only; void cash voids transfer pair  
 7. Credit: Statement & payment open; promo/learn collapsed  
 
 ---
