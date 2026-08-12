@@ -89,6 +89,9 @@ class CsvImportResult:
     schedules_advanced_names: list[str] = field(default_factory=list)
     schedule_advance_hint: str | None = None
     schedule_advance_error: str | None = None
+    promos_found: int = 0
+    promo_conflicts: int = 0
+    txn_mismatches: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _norm(h: str) -> str:
@@ -487,6 +490,10 @@ def import_bank_csv(
                 break
 
     from honestspend.services.import_dedupe import load_dedupe_index
+    from honestspend.services.import_txn_review import (
+        find_existing_by_external_id,
+        txn_mismatch_reviews,
+    )
 
     dedupe = load_dedupe_index(session, account_id)
 
@@ -546,6 +553,28 @@ def import_bank_csv(
             bank_txn_id = ""
             if id_i is not None and id_i < len(row):
                 bank_txn_id = (row[id_i] or "").strip()
+            external_id = dedupe.preferred_external_id(
+                txn_date=d,
+                amount=amount,
+                payee=payee,
+                bank_txn_id=bank_txn_id or None,
+                source="csv",
+            )
+            # D12: bank id / external_id match — never overwrite books fields
+            existing = find_existing_by_external_id(session, account_id, external_id)
+            if existing is None and bank_txn_id:
+                existing = find_existing_by_external_id(
+                    session, account_id, f"csv:{account_id}:id:{bank_txn_id}"[:200]
+                )
+            if existing is not None:
+                mm = txn_mismatch_reviews(
+                    existing=existing,
+                    incoming={"amount": amount, "txn_date": d, "payee": payee},
+                )
+                if mm:
+                    result.txn_mismatches.append(mm)
+                result.skipped_existing += 1
+                continue
             if dedupe.is_duplicate(
                 txn_date=d,
                 amount=amount,
@@ -555,13 +584,6 @@ def import_bank_csv(
                 result.skipped_existing += 1
                 continue
 
-            external_id = dedupe.preferred_external_id(
-                txn_date=d,
-                amount=amount,
-                payee=payee,
-                bank_txn_id=bank_txn_id or None,
-                source="csv",
-            )
             session.add(
                 Transaction(
                     profile_id=acct.profile_id,
@@ -591,6 +613,20 @@ def import_bank_csv(
                 result.errors.append(str(e))
 
     session.flush()
+
+    # Text enrich: promo plan tables / intro periods when present in file footers
+    try:
+        from honestspend.services.import_bootstrap import (
+            apply_statement_promos,
+            enrich_account_from_text,
+        )
+
+        enrich_account_from_text(session, account_id, text, only_if_empty=True)
+        promo_out = apply_statement_promos(session, account_id, text)
+        result.promos_found = int(promo_out.get("promos_found") or 0)
+        result.promo_conflicts = int(promo_out.get("promo_conflicts") or 0)
+    except Exception:
+        pass
 
     # Ending balance → institution_balance (max txn date + amount orientation)
     column_ending = ending_balance_from_pairs(bal_pairs, bal_amounts)
@@ -693,5 +729,8 @@ def import_bank_csv(
         books_balance=result.books_balance,
         institution_balance=result.ending_balance if result.institution_balance_set else None,
         source="CSV",
+        promos_found=result.promos_found,
+        promo_conflicts=result.promo_conflicts,
+        txn_mismatches=result.txn_mismatches,
     )
     return result

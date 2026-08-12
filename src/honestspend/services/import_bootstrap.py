@@ -242,6 +242,93 @@ def enrich_account_from_text(
     )
 
 
+def apply_statement_promos(
+    session: Session,
+    account_id: int,
+    text: str,
+    *,
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """extract_promo_terms → upsert_promo_term(source='statement').
+
+    Then recompute_card_payment_schedule. Returns
+    {created, updated, conflicts, lines, promos_found, promo_conflicts}.
+    """
+    from honestspend.services.promo_statement_parse import extract_promo_terms
+    from honestspend.services.promo_upsert import upsert_promo_term
+
+    as_of = as_of or date.today()
+    created = 0
+    updated = 0
+    conflicts: list[Any] = []
+    lines: list[Any] = []
+
+    terms = extract_promo_terms(text or "")
+    for term in terms:
+        kind = (term.get("kind") or "purchase_plan").strip() or "purchase_plan"
+        name = (term.get("name") or "").strip() or (
+            "Intro 0%" if kind == "card_intro" else "Promo plan"
+        )
+        prin = term.get("principal_remaining")
+        monthly = term.get("monthly_payment")
+        if prin is None:
+            continue
+        if monthly is None:
+            monthly = Decimal("0")
+        end_date = term.get("end_date")
+        start = as_of
+        # months_left → approximate end when parse did not give a date
+        if end_date is None and term.get("months_left") is not None:
+            try:
+                months = int(term["months_left"])
+                y, m = as_of.year, as_of.month + months
+                while m > 12:
+                    y += 1
+                    m -= 12
+                end_date = date(y, min(m, 12), min(as_of.day, 28))
+            except (TypeError, ValueError):
+                end_date = None
+
+        r = upsert_promo_term(
+            session,
+            account_id=account_id,
+            kind=kind,
+            name=name,
+            principal_remaining=Decimal(str(prin)),
+            monthly_payment=Decimal(str(monthly)),
+            start_date=start,
+            end_date=end_date,
+            source="statement",
+            offer_type=term.get("offer_type"),
+            apr=term.get("apr"),
+        )
+        lines.append(r.get("line"))
+        if r.get("created"):
+            created += 1
+        else:
+            updated += 1
+        if r.get("conflict"):
+            conflicts.append(r["conflict"])
+
+    # Always recompute after apply so next payment reflects open promo monthlies
+    try:
+        from honestspend.services.autopay import recompute_card_payment_schedule
+
+        recompute_card_payment_schedule(session, account_id, as_of=as_of)
+    except Exception:
+        pass
+
+    session.flush()
+    return {
+        "created": created,
+        "updated": updated,
+        "conflicts": conflicts,
+        "lines": lines,
+        "promos_found": created + updated,
+        "promo_conflicts": len(conflicts),
+    }
+
+
 def bootstrap_books_after_import(
     session: Session,
     *,

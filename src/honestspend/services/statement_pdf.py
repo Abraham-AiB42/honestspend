@@ -48,6 +48,9 @@ class PdfImportResult:
     ending_balance: str | None = None
     institution_balance_set: bool = False
     books_balance: str | None = None
+    promos_found: int = 0
+    promo_conflicts: int = 0
+    txn_mismatches: list[dict[str, Any]] = field(default_factory=list)
     drift: str | None = None
     balance_source: str | None = None  # new_balance | ending | none
     # High-confidence schedule advances after import (bill already on bank)
@@ -314,6 +317,10 @@ def import_statement_pdf(
     ]
 
     from honestspend.services.import_dedupe import load_dedupe_index
+    from honestspend.services.import_txn_review import (
+        find_existing_by_external_id,
+        txn_mismatch_reviews,
+    )
 
     dedupe = load_dedupe_index(session, account_id)
 
@@ -328,12 +335,23 @@ def import_statement_pdf(
 
             amt = normalize_credit_import_amount(amt, payee)
         d = r["txn_date"]
-        if dedupe.is_duplicate(txn_date=d, amount=amt, payee=payee):
-            result.skipped_existing += 1
-            continue
         ext = dedupe.preferred_external_id(
             txn_date=d, amount=amt, payee=payee, source="pdf"
         )
+        # D12: external_id match — never overwrite books amount/date/payee/category
+        existing = find_existing_by_external_id(session, account_id, ext)
+        if existing is not None:
+            mm = txn_mismatch_reviews(
+                existing=existing,
+                incoming={"amount": amt, "txn_date": d, "payee": payee},
+            )
+            if mm:
+                result.txn_mismatches.append(mm)
+            result.skipped_existing += 1
+            continue
+        if dedupe.is_duplicate(txn_date=d, amount=amt, payee=payee):
+            result.skipped_existing += 1
+            continue
         try:
             session.add(
                 Transaction(
@@ -366,6 +384,16 @@ def import_statement_pdf(
         from honestspend.services.import_bootstrap import enrich_account_from_text
 
         enrich_account_from_text(session, account_id, text, only_if_empty=True)
+    except Exception:
+        pass
+
+    # Apply ISB / intro promo terms from statement text (after enrich)
+    try:
+        from honestspend.services.import_bootstrap import apply_statement_promos
+
+        promo_out = apply_statement_promos(session, account_id, text)
+        result.promos_found = int(promo_out.get("promos_found") or 0)
+        result.promo_conflicts = int(promo_out.get("promo_conflicts") or 0)
     except Exception:
         pass
 
@@ -438,5 +466,8 @@ def import_statement_pdf(
         books_balance=result.books_balance,
         institution_balance=result.ending_balance if result.institution_balance_set else None,
         source="PDF",
+        promos_found=result.promos_found,
+        promo_conflicts=result.promo_conflicts,
+        txn_mismatches=result.txn_mismatches,
     )
     return result

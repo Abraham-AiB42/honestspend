@@ -43,6 +43,9 @@ class OfxImportResult:
     schedules_advanced_names: list[str] = field(default_factory=list)
     schedule_advance_hint: str | None = None
     schedule_advance_error: str | None = None
+    promos_found: int = 0
+    promo_conflicts: int = 0
+    txn_mismatches: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _read_text(file_obj: BinaryIO | TextIO | bytes | str | Path) -> str:
@@ -441,6 +444,10 @@ def import_ofx(
         return result
 
     from honestspend.services.import_dedupe import load_dedupe_index
+    from honestspend.services.import_txn_review import (
+        find_existing_by_external_id,
+        txn_mismatch_reviews,
+    )
 
     dedupe = load_dedupe_index(session, account_id)
 
@@ -456,6 +463,29 @@ def import_ofx(
             amt = normalize_credit_import_amount(amt, payee)
         d = r["txn_date"]
         fitid = (r.get("fitid") or "").strip()
+        external_id = dedupe.preferred_external_id(
+            txn_date=d,
+            amount=amt,
+            payee=payee,
+            fitid=fitid or None,
+            source="ofx",
+        )
+        # D12: FITID/external_id match — never overwrite books; flag amount/date mismatch
+        existing = find_existing_by_external_id(session, account_id, external_id)
+        if existing is None and fitid:
+            # Prefer bank id even when content-key external_id would differ
+            existing = find_existing_by_external_id(
+                session, account_id, f"ofx:{account_id}:{fitid}"[:200]
+            )
+        if existing is not None:
+            mm = txn_mismatch_reviews(
+                existing=existing,
+                incoming={"amount": amt, "txn_date": d, "payee": payee},
+            )
+            if mm:
+                result.txn_mismatches.append(mm)
+            result.skipped_existing += 1
+            continue
         if dedupe.is_duplicate(
             txn_date=d,
             amount=amt,
@@ -464,13 +494,6 @@ def import_ofx(
         ):
             result.skipped_existing += 1
             continue
-        external_id = dedupe.preferred_external_id(
-            txn_date=d,
-            amount=amt,
-            payee=payee,
-            fitid=fitid or None,
-            source="ofx",
-        )
         try:
             session.add(
                 Transaction(
@@ -507,6 +530,16 @@ def import_ofx(
         from honestspend.services.import_bootstrap import enrich_account_from_text
 
         enrich_account_from_text(session, account_id, text, only_if_empty=True)
+    except Exception:
+        pass
+
+    # Promo plan tables / intro periods from OFX text enrich
+    try:
+        from honestspend.services.import_bootstrap import apply_statement_promos
+
+        promo_out = apply_statement_promos(session, account_id, text)
+        result.promos_found = int(promo_out.get("promos_found") or 0)
+        result.promo_conflicts = int(promo_out.get("promo_conflicts") or 0)
     except Exception:
         pass
 
@@ -587,6 +620,9 @@ def import_ofx(
         books_balance=result.books_balance,
         institution_balance=result.ledger_balance if result.institution_balance_set else None,
         source="OFX/QFX",
+        promos_found=result.promos_found,
+        promo_conflicts=result.promo_conflicts,
+        txn_mismatches=result.txn_mismatches,
     )
     return result
 

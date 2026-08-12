@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from honestspend.db import Account, PlaidItem, Transaction
+from honestspend.db import Account, PlaidItem, PromoConflict, PromoInstallmentLine, Transaction
 
 ZERO = Decimal("0")
 
@@ -120,6 +120,41 @@ def build_import_brief(
     drift_count = len(drift_rows)
     top_drift = drift_rows[0] if drift_rows else None
 
+    # Promo terms + unresolved conflicts (statement apply / D10)
+    promo_line_q = session.query(PromoInstallmentLine)
+    profile_acct_ids: list[int] | None = None
+    if profile_id is not None:
+        profile_acct_ids = [
+            int(a.id)
+            for a in session.query(Account.id)
+            .filter(Account.profile_id == profile_id, Account.archived_at.is_(None))
+            .all()
+        ]
+        if profile_acct_ids:
+            promo_line_q = promo_line_q.filter(
+                PromoInstallmentLine.account_id.in_(profile_acct_ids)
+            )
+        else:
+            promo_line_q = promo_line_q.filter(PromoInstallmentLine.id == -1)
+    promos_found = promo_line_q.count()
+    conflict_q = session.query(PromoConflict).filter(PromoConflict.resolved_at.is_(None))
+    if profile_id is not None:
+        line_ids = [
+            int(lid)
+            for (lid,) in session.query(PromoInstallmentLine.id)
+            .filter(
+                PromoInstallmentLine.account_id.in_(profile_acct_ids or [-1])
+            )
+            .all()
+        ]
+        if line_ids:
+            conflict_q = conflict_q.filter(PromoConflict.line_id.in_(line_ids))
+        else:
+            conflict_q = conflict_q.filter(PromoConflict.id == -1)
+    promo_conflicts = conflict_q.count()
+    # Txn mismatches are ephemeral import next_steps (not persisted)
+    txn_mismatches = 0
+
     # Attention: Safe-to-spend honesty before Sort charges (PRODUCT fiscal #1)
     set_books_account_id: int | None = None
     secondary_action: str | None = None
@@ -226,6 +261,9 @@ def build_import_brief(
         "drift_count": drift_count,
         "drift_accounts": drift_rows[:5],
         "needs_attention": attention in ("action", "watch"),
+        "promos_found": promos_found,
+        "promo_conflicts": promo_conflicts,
+        "txn_mismatches": txn_mismatches,
     }
 
 
@@ -241,18 +279,62 @@ def build_post_import_next_steps(
     books_balance: str | None = None,
     institution_balance: str | None = None,
     source: str = "import",
+    promos_found: int = 0,
+    promo_conflicts: int = 0,
+    txn_mismatches: list[dict[str, Any]] | int | None = None,
 ) -> list[dict[str, str]]:
     """Structured CTAs after CSV / OFX / PDF import (open-rarely habit).
 
     Each step: {action, label, detail, account_id?} where action includes
-    review | set_books_from_bank | reconcile | home | hold | bills | enter_ending_bal.
+    review | set_books_from_bank | reconcile | home | hold | bills | enter_ending_bal
+    | review_txn_mismatch | review_promo_conflict.
     """
     steps: list[dict[str, str]] = []
+    mismatch_list: list[dict[str, Any]] = []
+    if isinstance(txn_mismatches, list):
+        mismatch_list = txn_mismatches
+    elif isinstance(txn_mismatches, int) and txn_mismatches > 0:
+        mismatch_list = [{"action": "review_txn_mismatch"}] * int(txn_mismatches)
+
     uncat = (
         session.query(Transaction)
         .filter(Transaction.profile_id == profile_id, Transaction.category_id.is_(None))
         .count()
     )
+
+    # D12: amount/date mismatches before balance CTAs so books honesty is visible
+    for m in mismatch_list:
+        try:
+            from honestspend.services.import_txn_review import review_step_from_mismatch
+
+            steps.append(review_step_from_mismatch(m if isinstance(m, dict) else {}))
+        except Exception:
+            steps.append(
+                {
+                    "action": "review_txn_mismatch",
+                    "label": "Review transaction mismatch",
+                    "detail": "Statement amount/date differs from books — books were kept.",
+                }
+            )
+
+    if promo_conflicts and promo_conflicts > 0:
+        steps.append(
+            {
+                "action": "review_promo_conflict",
+                "label": f"{promo_conflicts} promo conflict{'s' if promo_conflicts != 1 else ''}",
+                "detail": "Statement promo terms differ from what you entered — review before next payment.",
+                "account_id": str(account_id) if account_id else "",
+            }
+        )
+    elif promos_found and promos_found > 0:
+        steps.append(
+            {
+                "action": "hold",
+                "label": f"{promos_found} promo term{'s' if promos_found != 1 else ''} applied",
+                "detail": "Installment / intro terms from statement update next payment.",
+                "account_id": str(account_id) if account_id else "",
+            }
+        )
 
     # Highest priority for honesty: bank ending bal vs books after import
     if (
