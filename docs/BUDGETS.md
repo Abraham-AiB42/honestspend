@@ -24,7 +24,7 @@ Excel **Budget.xlsx** parity: daily (workdays), weekly, and monthly **plans** wi
 - `POST /api/budgets/seed-from-history` — top spend → daily/weekly/monthly plans (`only_if_empty` for onboarding)  
 - Home: `budgets`, `budget_reserve`, `safe_to_spend_before_budgets`, `why_this_number`, `budget_seed_hint`  
 - Glance / tray: same **`safe_to_spend`** as Home (post-reserve)  
-- **Can I buy?** (`POST /api/pre-purchase`): auto prefers **cash** when Safe to spend covers; card capped by Safe to spend; optional `category_id` → `budget_check` / `safe_budget_tight`
+- **Can I buy?** (`POST /api/pre-purchase`): auto uses **smart_charge** ranker (interest-free float, then rewards; safe card can beat cash); optional `category_id` → `budget_check` / `safe_budget_tight`
 
 ## UI
 

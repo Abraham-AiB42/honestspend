@@ -1,4 +1,4 @@
-"""Can I buy auto prefers cash when Safe to spend covers."""
+"""Can I buy auto prefers a safe rewards card when float+rewards beat cash."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from honestspend.config import settings
 from honestspend.db import Account, AppSettings, Profile, init_db
 from honestspend.seed import seed_all
 from honestspend.services.pre_purchase import check_purchase
+from honestspend.services.rewards_pick import set_rewards_rates
 
 
 def _session(tmp_path: Path, monkeypatch):
@@ -27,7 +28,7 @@ def _session(tmp_path: Path, monkeypatch):
     return s
 
 
-def test_auto_prefers_cash_when_both_safe(tmp_path: Path, monkeypatch):
+def test_auto_prefers_safe_card_when_float_and_rewards(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
     row = s.get(AppSettings, 1)
@@ -41,22 +42,24 @@ def test_auto_prefers_cash_when_both_safe(tmp_path: Path, monkeypatch):
             is_cash_for_ifpp=True,
         )
     )
-    s.add(
-        Account(
-            profile_id=p.id,
-            kind="credit",
-            nickname="Rewards",
-            current_balance=Decimal("0"),
-            credit_limit=Decimal("10000"),
-            available_credit=Decimal("10000"),
-            payment_due_day=15,
-            statement_close_day=1,
-            rewards_program="grocery gas dining",
-        )
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Rewards",
+        current_balance=Decimal("0"),
+        credit_limit=Decimal("10000"),
+        available_credit=Decimal("10000"),
+        payment_due_day=15,
+        statement_close_day=1,
+        rewards_program="grocery gas dining",
     )
+    s.add(card)
+    s.flush()
+    set_rewards_rates(s, card.id, {"general": 3, "groceries": 5})
     s.commit()
     res = check_purchase(s, amount=Decimal("100"), prefer="auto", profile_id=p.id)
-    assert res["verdict"] in ("safe", "safe_via_other_method")
-    assert res["recommended"]["method"] == "cash"
+    assert res["verdict"] in ("safe", "safe_via_other_method", "safe_via_other_account")
+    assert res["recommended"]["method"] == "card"
     assert res.get("prefer_applied") == "auto"
+    assert "Auto prefers cash" not in (res.get("principles") or [])
     s.close()

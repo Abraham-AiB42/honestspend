@@ -11,7 +11,7 @@
 | **Home · card pay whisper** | Only when a card **next payment** is due within 14 days: “Next card payments: $X on {date}” (sum same-day). No cycle editor, no day grid |
 | **Add** | Wizards: cash, savings, card, loan, bill, income, business, child (bill: pay from · owner draw · amount steps — see [BUSINESS_ENTITY.md](./BUSINESS_ENTITY.md); payroll day lives on Full books **Bills**) |
 | **Get started** | First-run wizard (~2 min) |
-| **Can I buy?** | Pre-purchase check |
+| **Can I buy?** | Pre-purchase check (auto ranks float then rewards — not cash-first) |
 | **Sort charges** | Plain review queue (accept categories) |
 | **3-minute check** | On Home — open-rarely ritual (safe · charges · fees · promo · bills) |
 | **After import / bank** | `books_brief` — **books≠bank** · uncategorized · pending · stale Plaid |

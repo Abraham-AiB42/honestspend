@@ -2923,11 +2923,14 @@ def tax_vault_adjust(body: TaxVaultAdjustIn, db: Session = Depends(get_db)):
 
 class PrePurchaseIn(BaseModel):
     amount: Decimal
-    prefer: str = "auto"  # auto | cash | card
-    account_id: int | None = None
+    prefer: str = "auto"  # auto=ranker | cash | card
+    proposed_account_id: int | None = None
+    account_id: int | None = None  # legacy alias → proposed_account_id
+    reward_category: str = "general"
+    promo: dict | None = None
     profile_id: int | None = None
     scope: str | None = None
-    category_id: int | None = None
+    category_id: int | None = None  # budget only
     allow_envelope_raid: bool = False
 
 
@@ -2940,6 +2943,9 @@ def pre_purchase(body: PrePurchaseIn, db: Session = Depends(get_db)):
         amount=body.amount,
         prefer=body.prefer,
         account_id=body.account_id,
+        proposed_account_id=body.proposed_account_id,
+        reward_category=body.reward_category,
+        promo=body.promo,
         profile_id=body.profile_id,
         scope=body.scope,
         category_id=body.category_id,

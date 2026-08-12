@@ -92,31 +92,179 @@ def _budget_check(
     }
 
 
+def _default_proposed_account_id(
+    session: Session,
+    *,
+    profile_id: int | None,
+    scope: str | None,
+) -> int | None:
+    """IFPP primary cash (checking first); else first non-archived account."""
+    sc = scope or "entity"
+    q = session.query(Account).filter(Account.archived_at.is_(None))
+    if sc == "entity" and profile_id is not None:
+        q = q.filter(Account.profile_id == profile_id)
+    accounts = q.order_by(Account.id).all()
+    cash = [
+        a
+        for a in accounts
+        if (a.kind or "").lower() in ("checking", "savings", "cash") or a.is_cash_for_ifpp
+    ]
+    primary = [a for a in cash if a.is_cash_for_ifpp and (a.kind or "").lower() == "checking"]
+    if not primary:
+        primary = [a for a in cash if a.is_cash_for_ifpp]
+    if not primary:
+        primary = cash
+    if primary:
+        return primary[0].id
+    return accounts[0].id if accounts else None
+
+
+def _ranked_option_public(o: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not o:
+        return None
+    rem = o.get("remaining_spendable")
+    rate = o.get("rewards_rate")
+    return {
+        "method": o.get("method"),
+        "account_id": o.get("account_id"),
+        "account_name": o.get("account_name"),
+        "safe": bool(o.get("safe")),
+        "reason": o.get("reason") or "No path",
+        "remaining_after": str(rem) if rem is not None else None,
+        "float_days": o.get("float_days"),
+        "rewards_rate": str(rate) if rate is not None else None,
+        "next_payment_after": (
+            str(o["next_payment_after"]) if o.get("next_payment_after") is not None else None
+        ),
+        "promo_used": o.get("promo_used"),
+        "card_plan_summary": None,
+    }
+
+
 def check_purchase(
     session: Session,
     *,
     amount: Decimal,
-    prefer: str = "auto",  # auto | cash | card
-    account_id: int | None = None,
+    prefer: str = "auto",  # auto=ranker | cash | card
+    account_id: int | None = None,  # legacy alias → proposed_account_id; prefer=card filter
+    proposed_account_id: int | None = None,
+    reward_category: str = "general",
+    promo: dict | None = None,
     as_of: date | None = None,
     profile_id: int | None = None,
     scope: str | None = None,
-    category_id: int | None = None,
+    category_id: int | None = None,  # budget only
     allow_envelope_raid: bool = False,
 ) -> dict[str, Any]:
+    """prefer==auto → rank_charge; prefer==cash → cash-only rec (tests)."""
     as_of = as_of or date.today()
     amount = abs(_d(amount))
-    ifpp = run_ifpp(session, as_of=as_of, profile_id=profile_id, scope=scope)
-    options: list[PurchaseOption] = []
+    prefer_n = (prefer or "auto").strip().lower() or "auto"
+    proposed = proposed_account_id if proposed_account_id is not None else account_id
 
-    # Align with Home: Safe to spend = cash_spendable − period budget reserve
     from honestspend.services.budget_service import budget_reserve_total
 
+    ifpp = run_ifpp(session, as_of=as_of, profile_id=profile_id, scope=scope)
     reserve = budget_reserve_total(
         session, profile_id=profile_id, as_of=as_of, scope=scope
     )
     cash_raw = _d(ifpp.cash_spendable)
     safe_to_spend = max(ZERO, cash_raw - reserve)
+
+    principles = [
+        "Never go negative on checking",
+        "Safe to spend subtracts remaining discretionary budgets (reserve)",
+        "Auto ranks interest-free float, then rewards rate",
+        "Explicit envelope raid only when you choose it",
+    ]
+    ifpp_snapshot = {
+        "cash_spendable": str(cash_raw),
+        "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+        "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
+        "card_float_interest_free": str(ifpp.card_float_interest_free),
+        "next_red_day": ifpp.next_red_day.isoformat() if ifpp.next_red_day else None,
+    }
+
+    # prefer=auto → smart_charge ranker (not cash-first)
+    if prefer_n == "auto":
+        from honestspend.services.smart_charge import rank_charge
+
+        if proposed is None:
+            proposed = _default_proposed_account_id(
+                session, profile_id=profile_id, scope=scope
+            )
+        if proposed is None:
+            return {
+                "amount": str(amount),
+                "as_of": as_of.isoformat(),
+                "verdict": "do_not_buy",
+                "prefer_applied": "auto",
+                "allow_envelope_raid": allow_envelope_raid,
+                "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
+                "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+                "envelope_raid": None,
+                "recommended": {
+                    "method": None,
+                    "account_id": None,
+                    "account_name": None,
+                    "safe": False,
+                    "reason": "No accounts to rank",
+                    "remaining_after": None,
+                },
+                "options": [],
+                "ifpp_snapshot": ifpp_snapshot,
+                "budget_check": None,
+                "why": "Do not buy — no account is safe for this amount.",
+                "proposed": None,
+                "principles": principles,
+            }
+        ranked = rank_charge(
+            session,
+            amount=amount,
+            reward_category=reward_category or "general",
+            proposed_account_id=int(proposed),
+            as_of=as_of,
+            profile_id=profile_id,
+            scope=scope,
+            promo=promo,
+            budget_category_id=category_id,
+            allow_envelope_raid=allow_envelope_raid,
+        )
+        rec_pub = _ranked_option_public(ranked.get("recommended"))
+        opts_pub = [
+            o
+            for o in (_ranked_option_public(x) for x in (ranked.get("options") or []))
+            if o is not None
+        ]
+        return {
+            "amount": str(amount),
+            "as_of": as_of.isoformat(),
+            "verdict": ranked.get("verdict") or "do_not_buy",
+            "prefer_applied": "auto",
+            "allow_envelope_raid": allow_envelope_raid,
+            "safe_to_spend": ranked.get("safe_to_spend")
+            or str(safe_to_spend.quantize(Decimal("0.01"))),
+            "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
+            "envelope_raid": ranked.get("envelope_raid"),
+            "recommended": rec_pub
+            or {
+                "method": None,
+                "account_id": None,
+                "account_name": None,
+                "safe": False,
+                "reason": "No path",
+                "remaining_after": None,
+            },
+            "options": opts_pub,
+            "ifpp_snapshot": ifpp_snapshot,
+            "budget_check": ranked.get("budget_check"),
+            "why": ranked.get("why"),
+            "proposed": _ranked_option_public(ranked.get("proposed")),
+            "principles": principles,
+        }
+
+    options: list[PurchaseOption] = []
+
     # Envelope raid: liquidity before budgets covers amount, but Safe to spend does not
     envelope_raid: dict[str, Any] | None = None
     if cash_raw >= amount and safe_to_spend < amount and reserve > ZERO:
@@ -211,8 +359,6 @@ def check_purchase(
     # Category label for rewards matching
     cat_hint = ""
     if category_id:
-        from honestspend.db import Category
-
         cat = session.get(Category, category_id)
         if cat:
             cat_hint = f"{cat.display_name or ''} {cat.budget_group or ''}".lower()
@@ -220,6 +366,7 @@ def check_purchase(
     # Card paths (entity-scoped when IFPP is entity)
     from honestspend.services.promo_installments import effective_promo_balance
 
+    card_filter_id = account_id if prefer_n == "card" else None
     cq = session.query(Account).filter(Account.kind == "credit", Account.archived_at.is_(None))
     if sc == "entity" and pid is not None:
         cq = cq.filter(Account.profile_id == pid)
@@ -227,7 +374,7 @@ def check_purchase(
     card_views: list[CardView] = []
     rewards_by_id: dict[int, int] = {}
     for a in accounts:
-        if account_id and a.id != account_id:
+        if card_filter_id and a.id != card_filter_id:
             continue
         score = 1 if a.rewards_program else 0
         prog = (a.rewards_program or "").lower()
@@ -298,36 +445,23 @@ def check_purchase(
             )
         )
 
-    # Recommendation — auto: cash first when both safe (envelope-honest)
+    # Recommendation — cash / card overrides only (auto handled above)
     rec = None
-    if prefer == "cash":
+    if prefer_n == "cash":
         rec = best_cash if best_cash and best_cash.safe else next(
             (o for o in options if o.method == "cash" and o.account_id is None), None
         )
-    elif prefer == "card" and account_id:
-        rec = next((o for o in options if o.account_id == account_id), None)
-    elif prefer == "card":
+    elif prefer_n == "card" and card_filter_id:
+        rec = next((o for o in options if o.account_id == card_filter_id), None)
+    elif prefer_n == "card":
         safe_cards = [o for o in options if o.method == "card" and o.safe]
         safe_cards.sort(key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True)
         rec = safe_cards[0] if safe_cards else next((o for o in options if o.method == "card"), None)
     else:
-        if best_cash and best_cash.safe:
-            rec = best_cash
-        else:
-            any_cash = next(
-                (o for o in options if o.method == "cash" and o.account_id is None and o.safe),
-                None,
-            )
-            if any_cash:
-                rec = any_cash
-            else:
-                safe_cards = [o for o in options if o.method == "card" and o.safe]
-                safe_cards.sort(
-                    key=lambda o: rewards_by_id.get(o.account_id or 0, 0), reverse=True
-                )
-                rec = safe_cards[0] if safe_cards else next(
-                    (o for o in options if o.method == "cash" and o.account_id is None), None
-                )
+        # Unknown prefer → treat as cash-only for safety
+        rec = best_cash if best_cash and best_cash.safe else next(
+            (o for o in options if o.method == "cash" and o.account_id is None), None
+        )
 
     verdict = "do_not_buy"
     if rec and rec.safe:
@@ -363,7 +497,7 @@ def check_purchase(
         "amount": str(amount),
         "as_of": as_of.isoformat(),
         "verdict": verdict,
-        "prefer_applied": prefer,
+        "prefer_applied": prefer_n,
         "allow_envelope_raid": allow_envelope_raid,
         "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
         "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
@@ -392,18 +526,7 @@ def check_purchase(
             }
             for o in options
         ],
-        "ifpp_snapshot": {
-            "cash_spendable": str(cash_raw),
-            "budget_reserve": str(reserve.quantize(Decimal("0.01"))),
-            "safe_to_spend": str(safe_to_spend.quantize(Decimal("0.01"))),
-            "card_float_interest_free": str(ifpp.card_float_interest_free),
-            "next_red_day": ifpp.next_red_day.isoformat() if ifpp.next_red_day else None,
-        },
+        "ifpp_snapshot": ifpp_snapshot,
         "budget_check": budget_check,
-        "principles": [
-            "Never go negative on checking",
-            "Safe to spend subtracts remaining discretionary budgets (reserve)",
-            "Auto prefers cash when Safe to spend covers",
-            "Explicit envelope raid only when you choose it",
-        ],
+        "principles": principles,
     }
