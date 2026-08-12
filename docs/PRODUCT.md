@@ -41,6 +41,7 @@ Locked decisions from product discovery (2026). This is the source of truth for 
 |---------|----------|
 | Checking | **Never negative** (hard constraint) |
 | 0% card float | **Allowed and encouraged** when fiscally sound (grace/promo path proven) |
+| Can I buy? | **smart_charge** ranker (interest-free float, then rewards). A safe card beats cash. `prefer=auto` is the ranker — not cash. |
 | Statement cycles | Per card: **close day + due day + pay policy** → projected **statement balance** and **next payment**; cash **pay-from** schedule so Safe to spend sees the right outflow (no day grid; multi-entity; promo installment lines) — see [STATEMENT_CYCLES.md](./STATEMENT_CYCLES.md) |
 | Safety buffer | User choice; **default $1,000**; budgeting targets can go “to infinity” |
 | Entity liquidity | **Siloed Spendable per entity (default)** + optional **Combined/group** view (`scope=entity|group` on IFPP; WinUI Home switcher) |

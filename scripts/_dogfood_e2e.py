@@ -22,6 +22,7 @@ object.__setattr__(settings, "allow_non_loopback", False)
 import honestspend.api.app as app_mod
 from honestspend.db import init_db, make_engine, make_session_factory
 from honestspend.seed import seed_all
+from honestspend.services import db_runtime
 
 app_mod.engine = make_engine()
 app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -30,6 +31,8 @@ with app_mod.SessionLocal() as s:
     seed_all(s)
     s.commit()
 
+# HTTP get_db / crypto middleware use db_runtime, not app_mod.engine
+db_runtime.boot()
 c = TestClient(app_mod.app)
 PASS = FAIL = 0
 
@@ -214,9 +217,40 @@ else:
 bsug = must("budget suggestions", c.get("/api/budgets/suggestions"))
 if "suggestions" in bsug or isinstance(bsug, dict):
     ok("budget suggestions")
-buy = must("pre-purchase", c.post("/api/pre-purchase", json={"amount": 80, "prefer": "auto"}))
+card_acct = next(
+    (
+        a
+        for a in (accts if isinstance(accts, list) else [])
+        if a.get("kind") == "credit"
+    ),
+    None,
+)
+if card_acct:
+    rates = must(
+        "card rewards rates",
+        c.put(
+            f"/api/accounts/{card_acct['id']}/rewards-rates",
+            json={"rates": {"general": 3, "groceries": 5}},
+        ),
+    )
+    if rates.get("rates") or rates.get("account_id"):
+        ok("rewards+float fixture", card_acct.get("nickname") or str(card_acct.get("id")))
+else:
+    bad("rewards card", "none after first-run")
+buy = must(
+    "pre-purchase",
+    c.post(
+        "/api/pre-purchase",
+        json={"amount": 80, "prefer": "auto", "reward_category": "general"},
+    ),
+)
 if buy.get("verdict"):
     ok("buy verdict", buy["verdict"])
+rec = buy.get("recommended") or {}
+if rec.get("method") == "card":
+    ok("buy recommends card", rec.get("account_name") or rec.get("method"))
+else:
+    bad("buy recommends card", f"method={rec.get('method')} {rec!r}"[:180])
 snap = buy.get("ifpp_snapshot") or {}
 if "safe_to_spend" in snap or "cash_spendable" in snap:
     ok("buy safe_to_spend snapshot", str(snap.get("safe_to_spend", snap.get("cash_spendable"))))

@@ -27,6 +27,7 @@ object.__setattr__(settings, "allow_non_loopback", False)
 import honestspend.api.app as app_mod
 from honestspend.db import init_db, make_engine, make_session_factory
 from honestspend.seed import seed_all
+from honestspend.services import db_runtime
 
 app_mod.engine = make_engine()
 app_mod.SessionLocal = make_session_factory(app_mod.engine)
@@ -35,6 +36,8 @@ with app_mod.SessionLocal() as s:
     seed_all(s)
     s.commit()
 
+# HTTP get_db / crypto middleware use db_runtime, not app_mod.engine
+db_runtime.boot()
 c = TestClient(app_mod.app)
 
 PASS = 0
@@ -173,6 +176,7 @@ fr = must_json(
             "card_limit": 4000,
             "card_balance": 200,
             "card_due_day": 15,
+            "card_promo_end": "2026-12-01",
             "bill_name": "Rent",
             "bill_amount": 1400,
             "bill_next_date": "2026-09-01",
@@ -321,12 +325,30 @@ else:
 
 # -------------------------------------------------------------------------
 print("\n3. Power under simple surface — buy + float + engine depth")
+accts_early = must_json("accounts for rewards", c.get("/api/accounts"))
+card_acct = None
+if isinstance(accts_early, list):
+    card_acct = next((a for a in accts_early if a.get("kind") == "credit"), None)
+if card_acct:
+    rr = c.put(
+        f"/api/accounts/{card_acct['id']}/rewards-rates",
+        json={"rates": {"general": 3, "groceries": 5}},
+    )
+    if rr.status_code == 200:
+        ok("rewards+float fixture", card_acct.get("nickname") or str(card_acct.get("id")))
+    else:
+        bad("rewards rates", f"HTTP {rr.status_code} {rr.text[:120]}")
+else:
+    bad("rewards card fixture", "no credit account")
 buy = must_json(
     "pre-purchase",
-    c.post("/api/pre-purchase", json={"amount": 80, "prefer": "auto"}),
+    c.post(
+        "/api/pre-purchase",
+        json={"amount": 80, "prefer": "auto", "reward_category": "general"},
+    ),
 )
 verdict = buy.get("verdict")
-if verdict in ("safe", "safe_via_other_method", "unsafe", "do_not_buy"):
+if verdict in ("safe", "safe_via_other_method", "safe_via_other_account", "unsafe", "do_not_buy"):
     ok("Can I buy returns verdict", verdict)
 else:
     # tolerate whatever the API uses
@@ -339,6 +361,10 @@ if rec.get("reason") and (rec.get("account_name") or rec.get("method")):
     ok("buy has named account + reason", rec.get("account_name") or rec.get("method"))
 else:
     bad("buy recommended", str(rec)[:160])
+if rec.get("method") == "card":
+    ok("buy recommends card (rewards+float)", rec.get("account_name") or rec.get("method"))
+else:
+    bad("buy recommends card", f"method={rec.get('method')} {rec!r}"[:180])
 
 ifpp = must_json("ifpp depth", c.get("/api/ifpp"))
 for k in ("cash_spendable", "card_float_interest_free", "combined_purchasing_power"):

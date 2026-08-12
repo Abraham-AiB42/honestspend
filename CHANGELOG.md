@@ -23,6 +23,7 @@
 - **Rewards pick**: category → best card by rates (`GET /api/rewards/pick`); Credit **Best card**
 - **Simple mode**: Home whisper only for soon card payments (within 14 days); full Credit desk stays Full books
 - Docs: soft until post-reserve + Simple language table ([SIMPLE_MODE.md](docs/SIMPLE_MODE.md)); [BUSINESS_ENTITY.md](docs/BUSINESS_ENTITY.md), [STATEMENT_CYCLES.md](docs/STATEMENT_CYCLES.md), PRODUCT contract
+- **Smart charge audit**: `prefer=auto` is the ranker (interest-free float, then rewards). A safe card beats cash. PRODUCT / Simple / Budgets / Buy no longer say auto prefers cash. Dogfood and northstar assert a card rec on the rewards+float fixture.
 
 ## 1.0.55 — Trust bar + Simple mode e2e fixes + Store cert
 
