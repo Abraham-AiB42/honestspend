@@ -87,10 +87,53 @@ def build_home_simple(
         )
     elif det.get("pending_warning"):
         why_lines.append(f"Pending (not held yet): {det.get('pending_warning')}")
-    if det.get("best_card_name"):
+    # Best interest-free card: smart_charge ranker (float then rewards), not max capacity alone
+    whisper_card_name = det.get("best_card_name")
+    whisper_card_float = _d(ifpp.card_float_interest_free)
+    whisper_card_id = det.get("best_card_id")
+    try:
+        from honestspend.services.smart_charge import rank_charge
+
+        cq = session.query(Account).filter(
+            Account.kind == "credit",
+            Account.archived_at.is_(None),
+        )
+        if sc == "entity" and (profile_id is not None or det.get("profile_id") is not None):
+            pid_w = profile_id if profile_id is not None else det.get("profile_id")
+            if pid_w is not None:
+                cq = cq.filter(Account.profile_id == pid_w)
+        credit_cards = cq.order_by(Account.id).all()
+        if credit_cards:
+            ranked = rank_charge(
+                session,
+                amount=Decimal("1.00"),
+                reward_category="general",
+                proposed_account_id=credit_cards[0].id,
+                as_of=as_of,
+                profile_id=profile_id if sc == "entity" else None,
+                scope=sc,
+                promo={"mode": "none"},
+            )
+            rec = ranked.get("recommended") or {}
+            if rec.get("method") == "card" and rec.get("safe") and rec.get("account_id"):
+                whisper_card_name = rec.get("account_name") or whisper_card_name
+                whisper_card_id = rec.get("account_id")
+                # Full interest-free capacity for that card (not dummy $1 remaining)
+                for cv in ifpp.cards or []:
+                    if getattr(cv, "account_id", None) == whisper_card_id:
+                        whisper_card_float = _d(cv.safe_to_charge)
+                        break
+                else:
+                    rem = rec.get("remaining_spendable")
+                    if rem is not None:
+                        whisper_card_float = max(ZERO, _d(rem) + Decimal("1.00"))
+    except Exception:
+        pass
+
+    if whisper_card_name:
         why_lines.append(
-            f"Best interest-free card float: ${ifpp.card_float_interest_free} "
-            f"({det.get('best_card_name')} — not sum of all cards)"
+            f"Best interest-free card float: ${whisper_card_float} "
+            f"({whisper_card_name} — not sum of all cards)"
         )
     skipped_n = det.get("skipped_credit_account_schedules") or det.get(
         "skipped_card_autopay_schedules"
@@ -101,7 +144,9 @@ def build_home_simple(
             f"({skipped_n} schedule(s) — card path owns those charges)"
         )
     for w in (ifpp.warnings or [])[:4]:
-        why_lines.append(w)
+        plain = _plain_ifpp_warning(w)
+        if plain:
+            why_lines.append(plain)
     why_this_number = {
         "safe_to_spend": str(cash.quantize(Decimal("0.01"))),
         "cash_after_bills_buffer": str(cash_raw.quantize(Decimal("0.01"))),
@@ -298,9 +343,11 @@ def build_home_simple(
         "why_this_number": why_this_number,
         "budgets": budgets,
         "budget_seed_hint": budget_seed_hint,
-        "can_charge_no_interest": str(_d(ifpp.card_float_interest_free).quantize(Decimal("0.01"))),
+        "can_charge_no_interest": str(whisper_card_float.quantize(Decimal("0.01"))),
+        "best_card_id": whisper_card_id,
+        "best_card_name": whisper_card_name,
         "total_power": str(
-            (cash + _d(ifpp.card_float_interest_free)).quantize(Decimal("0.01"))
+            (cash + whisper_card_float).quantize(Decimal("0.01"))
         ),
         "status": status,
         "status_label": status_label,
@@ -399,7 +446,7 @@ def _three_minute_check(
             "title": "Sort a few charges" if uncat else "Charges sorted",
             "done": uncat == 0,
             "action": "review",
-            "detail": f"{uncat} waiting in Review." if uncat else "Queue is clear.",
+            "detail": f"{uncat} waiting in Sort charges." if uncat else "Queue is clear.",
             "count": uncat,
         },
         {
@@ -581,9 +628,30 @@ def _setup_flags(session: Session, profile_id: int | None) -> dict[str, bool]:
     }
 
 
+def _plain_ifpp_warning(w: str) -> str | None:
+    """Drop or rewrite engine jargon (IFPP / runway) for Simple Home."""
+    raw = (w or "").strip()
+    if not raw:
+        return None
+    low = raw.lower()
+    if "ifpp" in low:
+        if "no checking" in low:
+            return "No checking account is set for Safe to spend — add one in Add."
+        return None
+    if "runway starts negative" in low:
+        return "Safe to spend starts below $0 after buffer and tax vault."
+    if "cash runway" in low or "in cash runway" in low:
+        return "Bills paid on cards are not taken out of Safe to spend twice."
+    if "runway" in low:
+        return None
+    return raw
+
+
 def _plain_alert(a: dict[str, Any]) -> dict[str, Any]:
+    raw = (a.get("message") or a.get("code") or "Alert")
+    title = _plain_ifpp_warning(str(raw)) or a.get("code") or "Alert"
     return {
-        "title": a.get("message") or a.get("code") or "Alert",
+        "title": title,
         "level": a.get("level") or "info",
         "action": a.get("action") or a.get("code"),
         "code": a.get("code"),

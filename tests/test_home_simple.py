@@ -181,3 +181,128 @@ def test_wealth_suppressed_when_red(tmp_path, monkeypatch):
             has_critical_fiscal=False,
         )
         assert tips == []
+
+
+def test_home_float_whisper_uses_ranker_top_card(tmp_path, monkeypatch):
+    """Home can_charge / best card follows float-then-rewards, not max rewards only."""
+    from datetime import date
+
+    from honestspend.db import Account, AppSettings, Profile
+    from honestspend.services.home_simple import build_home_simple
+    from honestspend.services.rewards_pick import set_rewards_rates
+
+    data = tmp_path / "d"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    eng = make_engine()
+    init_db(eng)
+    SF = make_session_factory(eng)
+    as_of = date(2026, 9, 1)
+    with SF() as s:
+        seed_all(s)
+        row = s.get(AppSettings, 1)
+        row.safety_buffer = Decimal("0")
+        row.budget_reserve_enabled = False
+        p = s.query(Profile).filter(Profile.slug == "personal").one()
+        s.add(
+            Account(
+                profile_id=p.id,
+                kind="checking",
+                nickname="Checking",
+                current_balance=Decimal("5000"),
+                is_cash_for_ifpp=True,
+                safety_buffer=Decimal("0"),
+            )
+        )
+        long_float = Account(
+            profile_id=p.id,
+            kind="credit",
+            nickname="Long float",
+            current_balance=Decimal("0"),
+            credit_limit=Decimal("5000"),
+            available_credit=Decimal("5000"),
+            payment_due_day=30,
+            statement_close_day=1,
+            autopay_policy="statement",
+            min_payment=Decimal("25"),
+        )
+        high_rate = Account(
+            profile_id=p.id,
+            kind="credit",
+            nickname="High rate soon",
+            current_balance=Decimal("0"),
+            credit_limit=Decimal("5000"),
+            available_credit=Decimal("5000"),
+            payment_due_day=11,
+            statement_close_day=1,
+            autopay_policy="statement",
+            min_payment=Decimal("25"),
+        )
+        s.add_all([long_float, high_rate])
+        s.flush()
+        set_rewards_rates(s, long_float.id, {"general": 1})
+        set_rewards_rates(s, high_rate.id, {"general": 5})
+        s.commit()
+
+        home = build_home_simple(s, profile_id=p.id, as_of=as_of)
+        assert home.get("best_card_name") == "Long float"
+        assert Decimal(str(home.get("can_charge_no_interest") or 0)) > 0
+        why = " ".join((home.get("why_this_number") or {}).get("lines") or [])
+        assert "Long float" in why
+
+
+def test_promo_brief_includes_open_conflict_count(tmp_path, monkeypatch):
+    from datetime import date
+
+    from honestspend.db import Account, Profile
+    from honestspend.services.promo_brief import build_promo_brief
+    from honestspend.services.promo_upsert import upsert_promo_term
+
+    data = tmp_path / "d"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    eng = make_engine()
+    init_db(eng)
+    SF = make_session_factory(eng)
+    with SF() as s:
+        seed_all(s)
+        p = s.query(Profile).filter(Profile.slug == "personal").one()
+        card = Account(
+            profile_id=p.id,
+            kind="credit",
+            nickname="PromoCard",
+            current_balance=Decimal("400"),
+            credit_limit=Decimal("5000"),
+            available_credit=Decimal("4600"),
+            promo_apr=Decimal("0"),
+            promo_end_date=date(2026, 9, 20),
+            promo_balance=Decimal("400"),
+        )
+        s.add(card)
+        s.flush()
+        upsert_promo_term(
+            s,
+            account_id=card.id,
+            kind="purchase_plan",
+            name="Amazon Mixmaster",
+            principal_remaining=Decimal("400.00"),
+            monthly_payment=Decimal("29.01"),
+            start_date=date(2026, 8, 1),
+            end_date=None,
+            source="user",
+        )
+        upsert_promo_term(
+            s,
+            account_id=card.id,
+            kind="purchase_plan",
+            name="Amazon Mixmaster",
+            principal_remaining=Decimal("348.12"),
+            monthly_payment=Decimal("29.01"),
+            start_date=date(2026, 8, 1),
+            end_date=None,
+            source="statement",
+        )
+        s.commit()
+        brief = build_promo_brief(s, profile_id=p.id, as_of=date(2026, 9, 1))
+        assert brief.get("open_conflict_count", 0) >= 1
+        assert brief.get("needs_attention") is True
