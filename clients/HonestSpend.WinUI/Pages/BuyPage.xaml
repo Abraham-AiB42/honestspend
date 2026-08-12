@@ -11,22 +11,54 @@
         <StackPanel Spacing="16" MaxWidth="640">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Can I buy this?" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                Text="Protects checking and Safe to spend (after budgets). Auto prefers cash when it fits. Uses Who / money view from the top bar." />
+                Text="Picks the smartest safe account from float, rewards, and promo terms. Uses Who / money view from the top bar." />
 
             <NumberBox x:Name="AmountBox" Header="Amount ($)" Minimum="0.01"
                        SpinButtonPlacementMode="Inline" Value="100" />
+            <ComboBox x:Name="ProposedAccountBox" Header="Proposed account"
+                      PlaceholderText="Cash or card"
+                      HorizontalAlignment="Stretch" />
+            <ComboBox x:Name="RewardCategoryBox" Header="Reward category" SelectedIndex="0"
+                      HorizontalAlignment="Stretch">
+                <ComboBoxItem Content="Everything else" Tag="general" IsSelected="True" />
+                <ComboBoxItem Content="Gas" Tag="gas" />
+                <ComboBoxItem Content="Groceries" Tag="groceries" />
+                <ComboBoxItem Content="Restaurants" Tag="restaurants" />
+                <ComboBoxItem Content="Travel" Tag="travel" />
+                <ComboBoxItem Content="Amazon" Tag="amazon" />
+                <ComboBoxItem Content="Online" Tag="online" />
+                <ComboBoxItem Content="Drugstore" Tag="drugstore" />
+                <ComboBoxItem Content="Home improvement" Tag="home_improvement" />
+                <ComboBoxItem Content="Entertainment" Tag="entertainment" />
+                <ComboBoxItem Content="Utilities" Tag="utilities" />
+                <ComboBoxItem Content="Other" Tag="other" />
+            </ComboBox>
+            <ComboBox x:Name="PromoBox" Header="Promo (optional)" SelectedIndex="0"
+                      HorizontalAlignment="Stretch" SelectionChanged="Promo_SelectionChanged">
+                <ComboBoxItem Content="None" Tag="none" IsSelected="True" />
+                <ComboBoxItem Content="This card's intro 0%" Tag="card_intro" />
+                <ComboBoxItem Content="Purchase plan (months / monthly)" Tag="purchase_plan" />
+                <ComboBoxItem Content="I have a new offer" Tag="new_offer" />
+            </ComboBox>
+            <StackPanel x:Name="PlanPanel" Spacing="8" Visibility="Collapsed">
+                <NumberBox x:Name="PlanMonthsBox" Header="Plan months" Minimum="1" Maximum="60"
+                           SpinButtonPlacementMode="Compact" PlaceholderText="Optional" />
+                <NumberBox x:Name="PlanMonthlyBox" Header="Monthly ($)" Minimum="0"
+                           SpinButtonPlacementMode="Compact" PlaceholderText="Optional" />
+            </StackPanel>
             <ComboBox x:Name="CategoryBox" Header="Budget category (optional)"
                       PlaceholderText="Any / uncategorized"
                       HorizontalAlignment="Stretch" />
-            <ComboBox x:Name="PreferBox" Header="Prefer" SelectedIndex="0" MinWidth="280">
-                <ComboBoxItem Content="Auto (cash if Safe covers, else card)" Tag="auto" IsSelected="True" />
-                <ComboBoxItem Content="Cash first" Tag="cash" />
-                <ComboBoxItem Content="Card first" Tag="card" />
-            </ComboBox>
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button x:Name="CheckBtn" Content="Check purchase" Click="Check_Click" Style="{StaticResource AccentButtonStyle}" />
                 <Button x:Name="SimBtn" Content="What if I buy it?" Click="Simulate_Click" />
                 <Button x:Name="ScenarioBtn" Content="Save as scenario" Click="SaveScenario_Click" />
+            </StackPanel>
+            <StackPanel x:Name="CommitPanel" Spacing="8" Visibility="Collapsed">
+                <Button x:Name="CommitRecBtn" Content="I charged the recommended account"
+                        Click="CommitRec_Click" HorizontalAlignment="Left" />
+                <Button x:Name="CommitOrigBtn" Content="I charged my original pick"
+                        Click="CommitOrig_Click" HorizontalAlignment="Left" Visibility="Collapsed" />
             </StackPanel>
             <TextBlock x:Name="ScenarioMsg" Opacity="0.85" TextWrapping="Wrap" />
 
@@ -52,6 +84,7 @@
                 </StackPanel>
             </Border>
 
+            <InfoBar x:Name="NoticeBar" IsClosable="True" IsOpen="False" Severity="Informational" />
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>

@@ -371,21 +371,30 @@ public sealed class LedgerApiClient : IDisposable
 
     public Task<JsonElement> PrePurchaseAsync(
         decimal amount,
+        int proposedAccountId,
+        string rewardCategory,
+        object? promo = null,
+        int? budgetCategoryId = null,
+        bool allowEnvelopeRaid = false,
         string prefer = "auto",
         int? profileId = null,
         string? scope = null,
-        int? categoryId = null,
-        bool allowEnvelopeRaid = false,
         CancellationToken ct = default)
         => PostJsonAsync("api/pre-purchase", new
         {
             amount,
             prefer,
+            proposed_account_id = proposedAccountId,
+            reward_category = string.IsNullOrWhiteSpace(rewardCategory) ? "general" : rewardCategory,
+            promo,
             profile_id = profileId ?? AppState.SelectedProfileId,
             scope = scope ?? AppState.IfppScope,
-            category_id = categoryId is > 0 ? categoryId : null,
+            category_id = budgetCategoryId is > 0 ? budgetCategoryId : null,
             allow_envelope_raid = allowEnvelopeRaid,
         }, ct);
+
+    public Task<JsonElement> CommitPurchaseAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/pre-purchase/commit", body, ct);
 
     public Task<JsonElement> GetTaxVaultAsync(CancellationToken ct = default)
         => GetJsonAsync("api/tax-vault", ct);

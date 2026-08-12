@@ -240,6 +240,7 @@ public sealed partial class MainWindow : Window
     {
         tag = (tag ?? "").Trim().ToLowerInvariant();
         if (tag is "sort" or "charges" or "sort-charges") tag = "review";
+        if (tag == "offers") tag = "credit";
         if (tag == "settings")
         {
             // Settings is the NavigationView footer item, not a menu tag
