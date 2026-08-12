@@ -727,22 +727,38 @@ public sealed partial class ImportPage : Page
                     streams,
                     sign,
                     AutoCatBox.IsChecked == true);
+                var plain = JsonUi.Str(res, "customer_message");
+                if (string.IsNullOrEmpty(plain) || plain is "?" or "—")
+                    plain = JsonUi.Str(res, "summary");
                 ResultText.Text =
-                    JsonUi.Str(res, "summary") + "\n" +
+                    plain + "\n\n" +
                     JsonUi.Str(res, "hint") + "\n" +
-                    $"New transactions: {JsonUi.Str(res, "transactions_created")}";
+                    $"New: {JsonUi.Str(res, "transactions_created")} · " +
+                    $"Duplicates skipped: {JsonUi.Str(res, "duplicates_skipped", "0")}";
                 if (res.TryGetProperty("results", out var rr) && rr.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var r in rr.EnumerateArray().Take(20))
+                    foreach (var r in rr.EnumerateArray().Take(24))
                     {
                         ResultText.Text += $"\n· {JsonUi.Str(r, "filename")} · " +
-                            $"{JsonUi.Str(r, "format")} · +{JsonUi.Str(r, "transactions_created", "0")}";
+                            $"{JsonUi.Str(r, "format")} · +{JsonUi.Str(r, "transactions_created", "0")}" +
+                            (JsonUi.Str(r, "skipped_existing", "0") is "0" or "?" or "—"
+                                ? ""
+                                : $" · skipped {JsonUi.Str(r, "skipped_existing")}");
                         if (!string.IsNullOrEmpty(JsonUi.Str(r, "error")) && JsonUi.Str(r, "error") is not ("?" or "—"))
                             ResultText.Text += $" · err {JsonUi.Str(r, "error")}";
+                        // multi-account OFX detail
+                        if (r.TryGetProperty("accounts", out var acs) && acs.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var a in acs.EnumerateArray().Take(8))
+                                ResultText.Text +=
+                                    $"\n    · {JsonUi.Str(a, "nickname", JsonUi.Str(a, "acctid"))} " +
+                                    $"+{JsonUi.Str(a, "transactions_created", "0")} " +
+                                    $"(skip {JsonUi.Str(a, "skipped_existing", "0")})";
+                        }
                     }
                 }
                 SuccessBar.Title = "Books updated";
-                SuccessBar.Message = "Smart import finished. Open Home for Safe to spend.";
+                SuccessBar.Message = plain.Length > 120 ? plain[..120] + "…" : plain;
                 SuccessBar.IsOpen = true;
                 await LoadAsync();
             }

@@ -59,7 +59,7 @@
                 <StackPanel Spacing="12">
                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Import bank files" />
                     <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="CSV, OFX, QFX, PDF, or Excel. Multi-account OFX (e.g. Canvas all accounts) creates/matches each account. Drop several files at once." />
+                        Text="Dump everything you grabbed — 24 months of history, statements, multi-account OFX, CSVs. We map personal vs business, create accounts, and skip duplicates when files overlap." />
 
                     <!-- Drag-and-drop for any supported type -->
                     <Border x:Name="DropZone"

@@ -486,16 +486,9 @@ def import_bank_csv(
                 desc_i = i
                 break
 
-    existing = {
-        e
-        for (e,) in session.query(Transaction.external_id)
-        .filter(
-            Transaction.account_id == account_id,
-            Transaction.external_id.isnot(None),
-        )
-        .all()
-        if e
-    }
+    from honestspend.services.import_dedupe import load_dedupe_index
+
+    dedupe = load_dedupe_index(session, account_id)
 
     bal_pairs: list[tuple[date, Decimal]] = []
     bal_amounts: list[Decimal | None] = []
@@ -553,14 +546,22 @@ def import_bank_csv(
             bank_txn_id = ""
             if id_i is not None and id_i < len(row):
                 bank_txn_id = (row[id_i] or "").strip()
-            if bank_txn_id:
-                external_id = f"csv:{account_id}:id:{bank_txn_id}"[:200]
-            else:
-                external_id = f"csv:{account_id}:{d.isoformat()}:{amount}:{payee[:80]}"
-            if external_id in existing:
+            if dedupe.is_duplicate(
+                txn_date=d,
+                amount=amount,
+                payee=payee,
+                bank_txn_id=bank_txn_id or None,
+            ):
                 result.skipped_existing += 1
                 continue
 
+            external_id = dedupe.preferred_external_id(
+                txn_date=d,
+                amount=amount,
+                payee=payee,
+                bank_txn_id=bank_txn_id or None,
+                source="csv",
+            )
             session.add(
                 Transaction(
                     profile_id=acct.profile_id,
@@ -576,7 +577,13 @@ def import_bank_csv(
             from honestspend.services.account_balance import apply_amount_to_account
 
             apply_amount_to_account(acct, amount)
-            existing.add(external_id)
+            dedupe.remember(
+                txn_date=d,
+                amount=amount,
+                payee=payee,
+                bank_txn_id=bank_txn_id or None,
+                external_id=external_id,
+            )
             result.transactions_created += 1
         except Exception as e:
             result.skipped_bad += 1

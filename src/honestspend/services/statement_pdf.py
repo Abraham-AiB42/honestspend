@@ -313,16 +313,9 @@ def import_statement_pdf(
         for r in rows[:8]
     ]
 
-    existing = {
-        e
-        for (e,) in session.query(Transaction.external_id)
-        .filter(
-            Transaction.account_id == account_id,
-            Transaction.external_id.isnot(None),
-        )
-        .all()
-        if e
-    }
+    from honestspend.services.import_dedupe import load_dedupe_index
+
+    dedupe = load_dedupe_index(session, account_id)
 
     for r in rows:
         amt = r["amount"]
@@ -335,11 +328,12 @@ def import_statement_pdf(
 
             amt = normalize_credit_import_amount(amt, payee)
         d = r["txn_date"]
-        ext = f"pdf:{account_id}:{d.isoformat()}:{payee[:48]}:{amt}"
-        ext = ext[:200]
-        if ext in existing:
+        if dedupe.is_duplicate(txn_date=d, amount=amt, payee=payee):
             result.skipped_existing += 1
             continue
+        ext = dedupe.preferred_external_id(
+            txn_date=d, amount=amt, payee=payee, source="pdf"
+        )
         try:
             session.add(
                 Transaction(
@@ -356,7 +350,9 @@ def import_statement_pdf(
             from honestspend.services.account_balance import apply_amount_to_account
 
             apply_amount_to_account(acct, amt)
-            existing.add(ext)
+            dedupe.remember(
+                txn_date=d, amount=amt, payee=payee, external_id=ext
+            )
             result.transactions_created += 1
         except Exception as e:
             result.skipped_bad += 1

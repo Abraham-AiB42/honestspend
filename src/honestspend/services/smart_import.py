@@ -763,11 +763,32 @@ def commit_smart_plan(
                 results.append({"filename": fname, "format": ext, "error": "unsupported"})
 
     session.flush()
+    total_skipped = 0
+    for r in results:
+        total_skipped += int(r.get("skipped_existing") or 0)
+        if isinstance(r.get("accounts"), list):
+            for a in r["accounts"]:
+                if isinstance(a, dict):
+                    total_skipped += int(a.get("skipped_existing") or 0)
+
+    from honestspend.services.import_dedupe import human_dup_summary
+
+    plain = human_dup_summary(
+        created=total_created, skipped=total_skipped, files=len(files)
+    )
     return {
         "ok": True,
         "transactions_created": total_created,
+        "duplicates_skipped": total_skipped,
         "results": results,
         "entities_resolved": key_to_profile,
-        "summary": f"Imported batch · {total_created} new transactions across {len(files)} file(s).",
-        "hint": "Open Home for Safe to spend · Sort charges for anything uncategorized.",
+        "summary": (
+            f"{plain} "
+            f"Processed {len(files)} file(s) · personal/business mapping applied."
+        ),
+        "hint": (
+            "Overlapping history, statements, and re-downloads are fine — we skip duplicates. "
+            "Open Home for Safe to spend · Sort charges for anything left uncategorized."
+        ),
+        "customer_message": plain,
     }
