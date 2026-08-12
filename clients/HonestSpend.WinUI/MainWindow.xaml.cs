@@ -21,7 +21,7 @@ public sealed partial class MainWindow : Window
     /// <summary>Visible in Simple mode; everything else is Full books.</summary>
     private static readonly HashSet<string> SimpleNavTags = new(StringComparer.OrdinalIgnoreCase)
     {
-        "home", "add", "setup", "buy", "review", "about",
+        "home", "add", "setup", "buy", "review", "import", "about",
     };
 
     public MainWindow()

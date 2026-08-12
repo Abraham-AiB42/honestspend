@@ -206,10 +206,23 @@ def _stmttrn_rows_from_block(block: str) -> list[dict[str, Any]]:
 
 def _meta_from_block(block: str) -> dict[str, str]:
     meta: dict[str, str] = {}
-    for key in ("ACCTID", "BANKID", "ORG", "FID", "ACCTTYPE"):
+    for key in ("ACCTID", "BANKID", "ORG", "FID", "ACCTTYPE", "ACCTNAME"):
         m = re.search(rf"<{key}>([^<\r\n]+)", block, re.I)
         if m:
             meta[key.lower()] = m.group(1).strip()
+    # FI / SONRS often carry bank display name when ORG is missing
+    if not meta.get("org"):
+        for pat in (
+            r"<FI>\s*<ORG>([^<\r\n]+)",
+            r"<SONRS>.*?<FI>\s*<ORG>([^<\r\n]+)",
+            r"<NAME>([^<\r\n]+)",
+        ):
+            m = re.search(pat, block, re.I | re.S)
+            if m:
+                val = m.group(1).strip()
+                if val and len(val) < 80 and not val.isdigit():
+                    meta["org"] = val
+                    break
     ledger = parse_ofx_ledger_balance(block)
     if ledger.get("balance") is not None:
         meta["ledger_balance"] = str(ledger["balance"])

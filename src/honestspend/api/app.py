@@ -4231,6 +4231,95 @@ async def import_ofx_preview(file: UploadFile = File(...)):
         raise HTTPException(400, str(e)) from e
 
 
+@app.post("/api/import/qif/preview")
+async def import_qif_preview(file: UploadFile = File(...)):
+    """Preview QIF (Quicken) transactions without writing."""
+    content = await file.read()
+    from honestspend.services.bank_qif import preview_qif
+    from honestspend.services.paths_safe import enforce_upload_size
+
+    try:
+        enforce_upload_size(content)
+        return preview_qif(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/import/qif")
+async def import_qif_upload(
+    account_id: int | None = Form(None),
+    auto_categorize: bool = Form(True),
+    amount_sign: str = Form("bank"),
+    multi: bool = Form(False),
+    auto_create_accounts: bool = Form(True),
+    profile_id: int | None = Form(None),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Import Quicken QIF. multi=true (or omit account_id) maps/creates accounts from !Account blocks."""
+    content = await file.read()
+    from honestspend.services.bank_qif import import_qif, import_qif_multi, preview_qif
+    from honestspend.services.paths_safe import enforce_upload_size, safe_filename
+
+    try:
+        enforce_upload_size(content)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+    fname = safe_filename(file.filename, default="download.qif")
+    try:
+        peek = preview_qif(content)
+    except Exception:
+        peek = {}
+    use_multi = multi or account_id is None or int(peek.get("account_count") or 1) > 1
+
+    if use_multi and (account_id is None or multi or int(peek.get("account_count") or 1) > 1):
+        try:
+            return import_qif_multi(
+                db,
+                file_obj=content,
+                filename=fname,
+                auto_categorize=auto_categorize,
+                amount_sign=amount_sign,
+                auto_create_accounts=auto_create_accounts,
+                profile_id=profile_id,
+            )
+        except Exception as e:
+            raise HTTPException(400, str(e)) from e
+
+    if not account_id or not db.get(Account, account_id):
+        raise HTTPException(404, "Account not found — pick a target account or use multi-account import")
+    try:
+        result = import_qif(
+            db,
+            account_id=account_id,
+            file_obj=content,
+            filename=fname,
+            auto_categorize=auto_categorize,
+            amount_sign=amount_sign,
+        )
+    except Exception as e:
+        raise HTTPException(400, str(e)) from e
+    return {
+        "transactions_found": result.transactions_found,
+        "transactions_created": result.transactions_created,
+        "skipped_existing": result.skipped_existing,
+        "skipped_bad": result.skipped_bad,
+        "categorized": result.categorized,
+        "errors": result.errors,
+        "sample": result.sample,
+        "account_hint": result.account_hint,
+        "books_balance": result.books_balance,
+        "next_steps": result.next_steps,
+        "schedules_advanced": result.schedules_advanced,
+        "schedules_advanced_names": result.schedules_advanced_names,
+        "schedule_advance_hint": result.schedule_advance_hint,
+        "format": "qif",
+    }
+
+
 @app.post("/api/import/ofx")
 async def import_ofx_upload(
     account_id: int | None = Form(None),

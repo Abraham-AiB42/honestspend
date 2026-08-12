@@ -10,89 +10,40 @@
     <ScrollViewer Padding="24">
         <StackPanel Spacing="20" MaxWidth="720">
             <StackPanel Spacing="4">
-                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Import" />
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Import bank files" />
                 <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                    Text="Download CSV from your bank (we never store bank passwords), drop in the inbox or pick a file. Optional bank link lives under More options." />
+                    Text="Drop everything you downloaded — 24 months of history, statements, multi-account OFX, CSVs. We map personal vs business, set balances, pull APR/promo/limits when the file has them, detect bills and cards, skip duplicates, and categorize what we can. We never store bank passwords." />
             </StackPanel>
 
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="16">
-                <StackPanel Spacing="10">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="How to download from your bank" />
-                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                        Text="We never store bank logins. Open your bank, export CSV, then import below or drop into the inbox." />
-                    <ComboBox x:Name="BankGuideBox" Header="Institution" HorizontalAlignment="Stretch"
-                              SelectionChanged="BankGuide_Changed" />
-                    <HyperlinkButton x:Name="BankLoginLink" Content="Open bank login" NavigateUri="https://example.com"
-                                     Visibility="Collapsed" />
-                    <TextBlock x:Name="BankStepsText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                    <TextBlock x:Name="BankNotesText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1" CornerRadius="12" Padding="16">
-                <StackPanel Spacing="10">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Inbox drop folder" />
-                    <TextBlock x:Name="InboxPathText" Opacity="0.75" TextWrapping="Wrap" IsTextSelectionEnabled="True"
-                               Text="…" />
-                    <TextBlock x:Name="InboxFilesText" Opacity="0.85" TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Open inbox folder" Click="OpenInbox_Click" />
-                        <Button Content="Import inbox now" Click="ImportInbox_Click"
-                                Style="{StaticResource AccentButtonStyle}" />
-                        <Button Content="Refresh" Click="RefreshInbox_Click" />
-                    </StackPanel>
-                    <CheckBox x:Name="InboxUseSelectedAccountBox"
-                              Content="Unmatched files → use Target account below (off = refuse unmatched)"
-                              IsChecked="False" />
-                    <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                        Text="Name files with account nicknames (e.g. Primary-checking.csv). Unmatched files are refused unless you opt in above." />
-                </StackPanel>
-            </Border>
-
+            <!-- Primary: drag-and-drop first paint -->
             <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="12">
-                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Import bank files" />
-                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
-                        Text="Dump everything — 24 months of history, statements, multi-account OFX, CSVs. We map personal vs business, set balances, pull APR/promo/limits when the file has them, detect recurring bills and cards, skip duplicates, and categorize what we can." />
-
-                    <!-- Drag-and-drop for any supported type -->
                     <Border x:Name="DropZone"
                             AllowDrop="True"
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                             BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-                            BorderThickness="2" CornerRadius="12" Padding="28"
+                            BorderThickness="2" CornerRadius="12" Padding="36"
                             DragOver="DropZone_DragOver"
                             Drop="DropZone_Drop"
-                            Tapped="DropZone_Tapped">
-                        <StackPanel Spacing="6" HorizontalAlignment="Center">
+                            Tapped="DropZone_Tapped"
+                            MinHeight="160">
+                        <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
                             <TextBlock Text="Drop bank files here" FontWeight="SemiBold"
-                                       HorizontalAlignment="Center" FontSize="16" />
+                                       HorizontalAlignment="Center" FontSize="18" />
                             <TextBlock Opacity="0.75" HorizontalAlignment="Center" TextWrapping="Wrap"
-                                       Text="CSV · OFX · QFX · PDF · XLSX — one file or many" />
+                                       Text="CSV · OFX · QFX · QIF · PDF · XLSX — one file or many" />
                             <TextBlock x:Name="DropZoneHint" Opacity="0.55" FontSize="12"
                                        HorizontalAlignment="Center" Text="or tap to browse" />
                         </StackPanel>
                     </Border>
 
-                    <ComboBox x:Name="AccountBox" Header="Target account (CSV / single-account files)"
-                              HorizontalAlignment="Stretch" />
-                    <CheckBox x:Name="AutoCatBox" Content="Auto-categorize after import" IsChecked="True" />
-                    <CheckBox x:Name="MultiOfxAutoCreateBox"
-                              Content="Multi-account OFX: auto-create missing accounts (match by bank ACCTID when known)"
-                              IsChecked="True" />
-                    <TextBox x:Name="EndingBalanceBox" Header="Bank ending balance (optional — CSV single-account)"
-                             PlaceholderText="From CSV Balance column, or type statement balance"
-                             HorizontalAlignment="Stretch" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Pick file(s)…" Click="PickAny_Click" Style="{StaticResource AccentButtonStyle}" />
                         <Button Content="Pick CSV…" Click="PickCsv_Click" />
                         <Button Content="Pick OFX/QFX…" Click="PickOfx_Click" />
+                        <Button Content="Pick QIF…" Click="PickQif_Click" />
                         <Button Content="Pick PDF…" Click="PickPdf_Click" />
                     </StackPanel>
                     <TextBlock x:Name="CsvPathText" Opacity="0.85" TextWrapping="Wrap" Text="No file selected" />
@@ -104,18 +55,27 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1" CornerRadius="10" Padding="14">
                         <StackPanel Spacing="10">
-                            <TextBlock FontWeight="SemiBold" Text="Smart setup — map your books" />
-                            <TextBlock x:Name="SmartPlanSummary" Opacity="0.85" TextWrapping="Wrap" />
-                            <TextBlock x:Name="SmartPlanHint" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
-                            <TextBlock FontWeight="SemiBold" Text="Who owns this money?" Margin="0,4,0,0" />
+                            <TextBlock FontWeight="SemiBold" Text="We read your files — confirm once" />
+                            <TextBlock x:Name="SmartPlanSummary" Opacity="0.9" TextWrapping="Wrap" />
+                            <TextBlock x:Name="SmartPlanHint" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                                <Button Content="Looks good — import everything"
+                                        Click="SmartImportCommit_Click"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                <Button Content="Re-analyze files" Click="SmartImportPlan_Click" />
+                            </StackPanel>
+                            <TextBlock x:Name="SmartEntitiesHeader" FontWeight="SemiBold"
+                                       Text="Who owns this money? (only change if wrong)" Margin="0,8,0,0" />
                             <StackPanel x:Name="SmartEntitiesPanel" Spacing="8" />
-                            <TextBlock FontWeight="SemiBold" Text="Accounts found in your downloads" Margin="0,8,0,0" />
-                            <StackPanel x:Name="SmartAccountsPanel" Spacing="8" />
+                            <TextBlock FontWeight="SemiBold" Text="What we found in each file" Margin="0,8,0,0" />
+                            <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                                Text="Each card is one account we detected. Names come from the bank, last 4 digits, balances, and payees inside the file — not from you guessing filenames." />
+                            <StackPanel x:Name="SmartAccountsPanel" Spacing="10" />
                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                                 <Button Content="Looks good — import everything"
                                         Click="SmartImportCommit_Click"
                                         Style="{StaticResource AccentButtonStyle}" />
-                                <Button Content="Re-analyze" Click="SmartImportPlan_Click" />
+                                <Button Content="Re-analyze files" Click="SmartImportPlan_Click" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -154,10 +114,59 @@
                             <TextBlock x:Name="FreezeMsg" Opacity="0.85" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
+                </StackPanel>
+            </Border>
+
+            <Expander Header="Target account &amp; options" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12" Margin="0,12,0,0">
+                    <ComboBox x:Name="AccountBox" Header="Target account (CSV / single-account files)"
+                              HorizontalAlignment="Stretch" />
+                    <CheckBox x:Name="AutoCatBox" Content="Auto-categorize after import" IsChecked="True" />
+                    <CheckBox x:Name="MultiOfxAutoCreateBox"
+                              Content="Multi-account OFX: auto-create missing accounts (match by bank ACCTID when known)"
+                              IsChecked="True" />
+                    <TextBox x:Name="EndingBalanceBox" Header="Bank ending balance (optional — CSV single-account)"
+                             PlaceholderText="From CSV Balance column, or type statement balance"
+                             HorizontalAlignment="Stretch" />
                     <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
                         Text="Best: CSV or OFX/QFX. Ending balance → Match bank. One-tap Set Safe to spend from bank when bank bal differs." />
                 </StackPanel>
-            </Border>
+            </Expander>
+
+            <Expander Header="How to download from your bank" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="We never store bank logins. Open your bank, export CSV/OFX, then drop the files above." />
+                    <ComboBox x:Name="BankGuideBox" Header="Institution" HorizontalAlignment="Stretch"
+                              SelectionChanged="BankGuide_Changed" />
+                    <HyperlinkButton x:Name="BankLoginLink" Content="Open bank login" NavigateUri="https://example.com"
+                                     Visibility="Collapsed" />
+                    <TextBlock x:Name="BankStepsText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                    <TextBlock x:Name="BankNotesText" Opacity="0.65" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </Expander>
+
+            <Expander Header="Inbox drop folder" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <TextBlock x:Name="InboxPathText" Opacity="0.75" TextWrapping="Wrap" IsTextSelectionEnabled="True"
+                               Text="…" />
+                    <TextBlock x:Name="InboxFilesText" Opacity="0.85" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Open inbox folder" Click="OpenInbox_Click" />
+                        <Button Content="Import inbox now" Click="ImportInbox_Click"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Refresh" Click="RefreshInbox_Click" />
+                    </StackPanel>
+                    <CheckBox x:Name="InboxUseSelectedAccountBox"
+                              Content="Unmatched files → use Target account below (off = refuse unmatched)"
+                              IsChecked="False" />
+                    <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
+                        Text="Name files with account nicknames (e.g. Primary-checking.csv). Unmatched files are refused unless you opt in above." />
+                </StackPanel>
+            </Expander>
 
             <Expander Header="More options (xlsx, amount sign, bank link)" HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Stretch">

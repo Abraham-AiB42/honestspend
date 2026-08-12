@@ -375,11 +375,11 @@ public sealed partial class FirstRunPage : Page
                 Fields.Children.Add(btn);
             }
 
-            // Primary: real import path (multi-account ready)
+            // Primary: real import path → opens Import drag-and-drop immediately
             addPath(
                 "csv",
                 "Import bank files (recommended)",
-                "CSV, OFX, QFX, PDF — including multi-account downloads (e.g. Canvas Credit Union all accounts). Drag-and-drop on Import. Free forever.",
+                "Drop all your downloads next — 24 months of history, statements, multi-account OFX. We map personal vs business, skip duplicates, and set up what we can.",
                 accent: true);
             addPath(
                 "plaid",
@@ -397,8 +397,9 @@ public sealed partial class FirstRunPage : Page
                 "manual",
                 "Type balances only (limited)",
                 "Skips real history. Fine for a smoke test — not for running the household. Prefer Import.");
-            NextBtn.IsEnabled = false;
-            NextBtn.Content = "Pick a path above";
+            // Bottom button always continues the recommended import path (was a dead disabled control)
+            NextBtn.IsEnabled = true;
+            NextBtn.Content = "Continue with Import bank files";
             return;
         }
 
@@ -1775,6 +1776,18 @@ public sealed partial class FirstRunPage : Page
             var st = await api.SetupAdvanceAsync("set_path", path: path);
             ApplyState(st);
             _manualStep = 0;
+
+            // Average customer: import path = go straight to drag-and-drop Import
+            // (not the old one-account-at-a-time tunnel).
+            if (path is "csv" or "import")
+            {
+                if (App.MainWindowInstance is MainWindow mw)
+                {
+                    mw.NavigatePublic("import");
+                    return;
+                }
+            }
+
             Render();
         }
         catch (Exception ex)
@@ -1912,7 +1925,12 @@ public sealed partial class FirstRunPage : Page
             }
 
             if (_phase == "path")
-                return; // must pick a button
+            {
+                // Default recommended path — same as tapping "Import bank files"
+                SetWizardBusy(false);
+                await ChoosePathAsync("csv");
+                return;
+            }
 
             if (_phase == "manual")
             {

@@ -9,8 +9,8 @@ HonestSpend
 
 SHORT DESCRIPTION  (aim ≤200 characters)
 ----------------------------------------
-Local-first money app: Safe to spend you can trust. Import bank CSV/OFX, match
-books to bank, sort charges, close the month. No bank passwords. One-time purchase.
+Local-first money app: Safe to spend you can trust. Drop bank CSV/OFX/QIF files,
+match books to bank, sort charges, close the month. No bank passwords.
 
 
 DESCRIPTION  (long — plain text for Store field)
@@ -19,7 +19,7 @@ HonestSpend is a local-first money app for people who want one number they can
 trust—Safe to spend—without handing a cloud company their bank password.
 
 What you do (open rarely)
-1. Import a bank CSV, OFX/QFX, or PDF statement (or optional bank link with your own Plaid keys).
+1. Drop bank CSV, OFX/QFX, QIF, or PDF exports (or optional bank link with your own Plaid keys).
 2. When books don’t match the bank, one tap sets Safe to spend from the ending balance you trust.
 3. Sort a short list of charges so categories, fees, and reports stay clean.
 4. Close the month when the checklist is clear—then get back to life.
@@ -46,7 +46,7 @@ FEATURE LIST  (use as bullets / features in Partner Center)
 -----------------------------------------------------------
 • Safe to spend you can trust
 • Books ≠ bank honesty after import
-• Import CSV, OFX/QFX, and PDF statements
+• Drag-and-drop CSV, OFX/QFX, QIF, and PDF statements
 • Sort charges and fee checks
 • Month-close checklist
 • Local-first data on your PC
@@ -56,7 +56,7 @@ FEATURE LIST  (use as bullets / features in Partner Center)
 
 KEYWORDS
 --------
-safe to spend, budget, personal finance, bank import, csv, ofx, local finance,
+safe to spend, budget, personal finance, bank import, csv, ofx, qif, local finance,
 reconcile, month close, cash flow, household budget
 
 

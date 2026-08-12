@@ -321,7 +321,7 @@ public sealed partial class ImportPage : Page
     }
 
     private static readonly string[] AllImportExt =
-        { ".csv", ".txt", ".ofx", ".qfx", ".pdf", ".xlsx" };
+        { ".csv", ".txt", ".ofx", ".qfx", ".qif", ".pdf", ".xlsx" };
 
     private void ClearPrimaryFileSlots()
     {
@@ -339,6 +339,7 @@ public sealed partial class ImportPage : Page
         {
             case ".ofx":
             case ".qfx":
+            case ".qif":
                 _ofxFile = file;
                 break;
             case ".pdf":
@@ -485,10 +486,12 @@ public sealed partial class ImportPage : Page
         _smartEntityRows.Clear();
         _smartAccountRows.Clear();
 
+        var entityCount = 0;
         if (plan.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
         {
             foreach (var e in ents.EnumerateArray())
             {
+                entityCount++;
                 var key = JsonUi.Str(e, "key", "personal");
                 var et = JsonUi.Str(e, "entity_type", "personal");
                 var name = JsonUi.Str(e, "display_name", et == "business" ? "Business" : "Personal");
@@ -502,8 +505,8 @@ public sealed partial class ImportPage : Page
                     CornerRadius = new CornerRadius(8),
                     Padding = new Thickness(10),
                 };
-                var typeBox = new ComboBox { Header = "Entity type", MinWidth = 140 };
-                typeBox.Items.Add(new ComboBoxItem { Content = "Personal", Tag = "personal", IsSelected = et is "personal" or "individual" });
+                var typeBox = new ComboBox { Header = "Personal or business?", MinWidth = 160 };
+                typeBox.Items.Add(new ComboBoxItem { Content = "Personal / household", Tag = "personal", IsSelected = et is "personal" or "individual" });
                 typeBox.Items.Add(new ComboBoxItem { Content = "Business", Tag = "business", IsSelected = et == "business" });
                 if (typeBox.SelectedIndex < 0) typeBox.SelectedIndex = 0;
                 var nameBox = new TextBox
@@ -515,7 +518,7 @@ public sealed partial class ImportPage : Page
                 var stack = new StackPanel { Spacing = 6 };
                 stack.Children.Add(new TextBlock
                 {
-                    Text = $"Who · confidence {conf}",
+                    Text = string.IsNullOrEmpty(conf) ? "Books owner" : $"Books owner · confidence {conf}",
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 });
                 stack.Children.Add(typeBox);
@@ -526,8 +529,31 @@ public sealed partial class ImportPage : Page
             }
         }
 
+        // Single personal entity: don't force the user to stare at "who owns" first
+        var onlySimplePersonal = false;
+        if (entityCount <= 1
+            && _smartEntityRows.Count > 0
+            && plan.TryGetProperty("entities", out var entsHdr)
+            && entsHdr.ValueKind == JsonValueKind.Array
+            && entsHdr.GetArrayLength() > 0)
+        {
+            var et0 = JsonUi.Str(entsHdr[0], "entity_type", "personal");
+            onlySimplePersonal = et0 is "personal" or "individual";
+        }
+        if (onlySimplePersonal)
+        {
+            SmartEntitiesHeader.Text = "Books owner (we assumed Personal — change only if business money)";
+            SmartEntitiesHeader.Opacity = 0.75;
+        }
+        else
+        {
+            SmartEntitiesHeader.Text = "Who owns this money? (only change if wrong)";
+            SmartEntitiesHeader.Opacity = 1;
+        }
+
         if (plan.TryGetProperty("sources", out var sources) && sources.ValueKind == JsonValueKind.Array)
         {
+            var cardNum = 0;
             foreach (var src in sources.EnumerateArray())
             {
                 var fi = JsonUi.Int(src, "file_index", 0);
@@ -536,24 +562,54 @@ public sealed partial class ImportPage : Page
                     continue;
                 foreach (var a in accs.EnumerateArray())
                 {
+                    cardNum++;
                     var sk = JsonUi.Str(a, "source_key");
                     var ekey = JsonUi.Str(a, "entity_key", "personal");
                     var action = JsonUi.Str(a, "action", "create");
                     var nick = JsonUi.Str(a, "suggested_nickname", fname);
+                    var title = JsonUi.Str(a, "human_title", nick);
+                    var willDo = JsonUi.Str(a, "what_we_will_do", "We will create this account");
+                    var bank = JsonUi.Str(a, "bank_label");
+                    var last4 = JsonUi.Str(a, "last4");
                     var kind = JsonUi.Str(a, "kind", "checking");
-                    var reasons = "";
-                    if (a.TryGetProperty("reasons", out var rs) && rs.ValueKind == JsonValueKind.Array)
-                        reasons = string.Join(" · ", rs.EnumerateArray().Select(x => x.GetString()).Where(x => !string.IsNullOrEmpty(x)).Take(3));
+
+                    var reviewBits = new List<string>();
+                    if (a.TryGetProperty("review_lines", out var rlines) && rlines.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var line in rlines.EnumerateArray())
+                        {
+                            var s = line.GetString();
+                            if (!string.IsNullOrWhiteSpace(s))
+                                reviewBits.Add(s!);
+                        }
+                    }
+                    if (reviewBits.Count == 0)
+                    {
+                        reviewBits.Add($"File: {fname}");
+                        if (!string.IsNullOrEmpty(bank)) reviewBits.Add($"Bank: {bank}");
+                        if (!string.IsNullOrEmpty(last4)) reviewBits.Add($"Ending …{last4}");
+                        reviewBits.Add($"Type: {kind} · {JsonUi.Str(a, "transactions_found")} transactions");
+                        if (!string.IsNullOrEmpty(JsonUi.Str(a, "ledger_balance")))
+                            reviewBits.Add($"Balance: ${JsonUi.Str(a, "ledger_balance")}");
+                        if (!string.IsNullOrEmpty(JsonUi.Str(a, "date_from")))
+                            reviewBits.Add($"Dates: {JsonUi.Str(a, "date_from")} → {JsonUi.Str(a, "date_to")}");
+                    }
 
                     var row = new Border
                     {
                         Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-                        BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                        BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
                         BorderThickness = new Thickness(1),
-                        CornerRadius = new CornerRadius(8),
-                        Padding = new Thickness(10),
+                        CornerRadius = new CornerRadius(10),
+                        Padding = new Thickness(12),
                     };
-                    var entityBox = new ComboBox { Header = "Belongs to", MinWidth = 160, HorizontalAlignment = HorizontalAlignment.Stretch };
+
+                    var entityBox = new ComboBox
+                    {
+                        Header = "Belongs to",
+                        MinWidth = 160,
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                    };
                     foreach (var (ek, _, nameBox) in _smartEntityRows)
                     {
                         var label = string.IsNullOrWhiteSpace(nameBox.Text) ? ek : nameBox.Text;
@@ -567,39 +623,89 @@ public sealed partial class ImportPage : Page
                     if (entityBox.Items.Count > 0 && entityBox.SelectedIndex < 0)
                         entityBox.SelectedIndex = 0;
 
-                    var actionBox = new ComboBox { Header = "Account", MinWidth = 160 };
-                    actionBox.Items.Add(new ComboBoxItem { Content = "Create new account", Tag = "create", IsSelected = action != "match" });
-                    var matchLabel = "Match existing";
-                    if (!string.IsNullOrEmpty(JsonUi.Str(a, "matched_nickname")))
-                        matchLabel = "Match: " + JsonUi.Str(a, "matched_nickname");
+                    var actionBox = new ComboBox { Header = "What to do", MinWidth = 180 };
+                    actionBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = "Create new account (recommended)",
+                        Tag = "create",
+                        IsSelected = action != "match",
+                    });
+                    var canMatch = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number;
+                    var matchLabel = !string.IsNullOrEmpty(JsonUi.Str(a, "matched_nickname"))
+                        ? "Match existing: " + JsonUi.Str(a, "matched_nickname")
+                        : "Match an existing account";
                     actionBox.Items.Add(new ComboBoxItem
                     {
                         Content = matchLabel,
                         Tag = "match",
-                        IsSelected = action == "match",
-                        IsEnabled = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number,
+                        IsSelected = action == "match" && canMatch,
+                        IsEnabled = canMatch,
                     });
                     if (actionBox.SelectedIndex < 0) actionBox.SelectedIndex = 0;
 
-                    var nickBox = new TextBox { Header = "Account nickname", Text = nick };
+                    var nickBox = new TextBox
+                    {
+                        Header = "Account name we will use",
+                        Text = nick,
+                        PlaceholderText = "e.g. Chase checking …4521",
+                    };
+
                     var stack = new StackPanel { Spacing = 6 };
                     stack.Children.Add(new TextBlock
                     {
-                        Text = $"{fname} · {kind} · {JsonUi.Str(a, "transactions_found")} txns" +
-                               (string.IsNullOrEmpty(JsonUi.Str(a, "ledger_balance")) ? "" : $" · bal ${JsonUi.Str(a, "ledger_balance")}"),
+                        Text = $"{cardNum}. {title}",
                         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        FontSize = 15,
                         TextWrapping = TextWrapping.Wrap,
                     });
-                    if (!string.IsNullOrEmpty(reasons))
-                        stack.Children.Add(new TextBlock { Text = reasons, Opacity = 0.65, FontSize = 12, TextWrapping = TextWrapping.Wrap });
-                    stack.Children.Add(entityBox);
-                    stack.Children.Add(actionBox);
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = willDo,
+                        Opacity = 0.9,
+                        TextWrapping = TextWrapping.Wrap,
+                        FontSize = 13,
+                    });
+                    stack.Children.Add(new TextBlock
+                    {
+                        Text = string.Join("\n", reviewBits.Select(x => "• " + x)),
+                        Opacity = 0.75,
+                        FontSize = 12,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 2, 0, 4),
+                    });
+
+                    // Advanced-ish controls: still available but secondary
+                    if (_smartEntityRows.Count > 1)
+                        stack.Children.Add(entityBox);
+                    else
+                    {
+                        // Keep entityBox in tree for BuildPlanJsonFromUi but hide it
+                        entityBox.Visibility = Visibility.Collapsed;
+                        stack.Children.Add(entityBox);
+                    }
+                    if (canMatch)
+                        stack.Children.Add(actionBox);
+                    else
+                    {
+                        actionBox.Visibility = Visibility.Collapsed;
+                        stack.Children.Add(actionBox);
+                    }
                     stack.Children.Add(nickBox);
                     row.Child = stack;
                     SmartAccountsPanel.Children.Add(row);
                     _smartAccountRows.Add((fi, sk, entityBox, actionBox, nickBox));
                 }
             }
+        }
+
+        if (SmartAccountsPanel.Children.Count == 0)
+        {
+            SmartAccountsPanel.Children.Add(new TextBlock
+            {
+                Text = "No accounts detected in these files. Try different downloads (CSV/OFX/QIF) or Import without mapping for a single file.",
+                Opacity = 0.8,
+                TextWrapping = TextWrapping.Wrap,
+            });
         }
     }
 
@@ -786,6 +892,14 @@ public sealed partial class ImportPage : Page
     private async void PickOfx_Click(object sender, RoutedEventArgs e)
     {
         var file = await PickFileAsync(new[] { ".ofx", ".qfx" });
+        if (file is null) return;
+        _pendingFiles.Clear();
+        QueueFiles(new[] { file });
+    }
+
+    private async void PickQif_Click(object sender, RoutedEventArgs e)
+    {
+        var file = await PickFileAsync(new[] { ".qif" });
         if (file is null) return;
         _pendingFiles.Clear();
         QueueFiles(new[] { file });
@@ -1433,7 +1547,7 @@ public sealed partial class ImportPage : Page
                 else if (_xlsxFile is not null) files.Add(_xlsxFile);
             }
             if (files.Count == 0)
-                throw new InvalidOperationException("Drop or pick bank file(s) first (CSV, OFX, QFX, PDF, XLSX).");
+                throw new InvalidOperationException("Drop or pick bank file(s) first (CSV, OFX, QFX, QIF, PDF, XLSX).");
 
             var allLines = new List<string>();
             JsonElement? lastRes = null;
@@ -1444,26 +1558,36 @@ public sealed partial class ImportPage : Page
                 var ext = (Path.GetExtension(file.Name) ?? "").ToLowerInvariant();
                 allLines.Add($"—— {file.Name} ——");
 
-                if (ext is ".ofx" or ".qfx")
+                if (ext is ".ofx" or ".qfx" or ".qif")
                 {
                     using var stream = await file.OpenStreamForReadAsync();
-                    // Multi-account OFX: omit account_id so engine maps/creates each ACCTID
-                    var ofxRes = await api.ImportOfxAsync(
-                        stream,
-                        file.Name,
-                        accountId: null,
-                        amountSign: sign,
-                        autoCategorize: AutoCatBox.IsChecked == true,
-                        multi: true,
-                        autoCreateAccounts: MultiOfxAutoCreateBox.IsChecked == true);
+                    // Multi-account OFX/QIF: omit account_id so engine maps/creates accounts
+                    var ofxRes = ext == ".qif"
+                        ? await api.ImportQifAsync(
+                            stream,
+                            file.Name,
+                            accountId: null,
+                            amountSign: sign,
+                            autoCategorize: AutoCatBox.IsChecked == true,
+                            multi: true,
+                            autoCreateAccounts: MultiOfxAutoCreateBox.IsChecked == true)
+                        : await api.ImportOfxAsync(
+                            stream,
+                            file.Name,
+                            accountId: null,
+                            amountSign: sign,
+                            autoCategorize: AutoCatBox.IsChecked == true,
+                            multi: true,
+                            autoCreateAccounts: MultiOfxAutoCreateBox.IsChecked == true);
                     lastRes = ofxRes;
+                    var label = ext == ".qif" ? "QIF" : "OFX/QFX";
                     if (ofxRes.TryGetProperty("accounts", out var accts) && accts.ValueKind == JsonValueKind.Array)
                     {
-                        allLines.Add(JsonUi.Str(ofxRes, "hint", "Multi-account OFX import done."));
+                        allLines.Add(JsonUi.Str(ofxRes, "hint", $"Multi-account {label} import done."));
                         foreach (var a in accts.EnumerateArray())
                         {
                             allLines.Add(
-                                $"  · {JsonUi.Str(a, "nickname", JsonUi.Str(a, "acctid"))} · " +
+                                $"  · {JsonUi.Str(a, "nickname", JsonUi.Str(a, "acctid", JsonUi.Str(a, "name")))} · " +
                                 $"+{Prop(a, "transactions_created")} new · found {Prop(a, "transactions_found")}" +
                                 (string.IsNullOrEmpty(Prop(a, "ledger_balance")) ? "" : $" · ledger ${Prop(a, "ledger_balance")}"));
                             if (a.TryGetProperty("account_id", out var aidEl) && aidEl.TryGetInt32(out var aid))
@@ -1487,7 +1611,7 @@ public sealed partial class ImportPage : Page
                         else
                             throw new InvalidOperationException("Pick a target account for single-account import.");
                         allLines.Add(
-                            $"OFX/QFX · found {Prop(ofxRes, "transactions_found")} · created {Prop(ofxRes, "transactions_created")} · " +
+                            $"{label} · found {Prop(ofxRes, "transactions_found")} · created {Prop(ofxRes, "transactions_created")} · " +
                             $"skipped {Prop(ofxRes, "skipped_existing")}");
                         var trusted = await CompleteBankHonestyAfterImportAsync(api, accountId, ofxRes, allLines);
                         ApplyScheduleAdvanceFeedback(ofxRes, allLines);

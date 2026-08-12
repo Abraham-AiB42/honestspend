@@ -40,11 +40,12 @@ def ensure_inbox_layout() -> dict[str, str]:
             "HonestSpend inbox\n"
             "================\n"
             "Drop bank exports here:\n"
-            "  .csv  .ofx  .qfx  (best)\n"
+            "  .csv  .ofx  .qfx  .qif  (best)\n"
             "  .pdf  text statements (best-effort)\n"
-            "  e.g. chase.ofx, Everyday-card.csv, Primary-checking.qfx\n"
+            "  e.g. chase.ofx, Everyday-card.csv, Primary-checking.qif\n"
             "Name files with account nicknames when you can.\n"
             "OFX/QFX: after the first import, ACCTID is remembered for auto-match.\n"
+            "QIF: Quicken export — multi-account files map by account name.\n"
             "\n"
             "Run:  honestspend import-inbox\n"
             "Or:   Import → Import inbox now · tray → Import inbox now\n"
@@ -214,7 +215,7 @@ def list_inbox_files() -> list[dict[str, Any]]:
             continue
         if p.name.upper() == "README.TXT":
             continue
-        if p.suffix.lower() not in (".csv", ".txt", ".pdf", ".ofx", ".qfx"):
+        if p.suffix.lower() not in (".csv", ".txt", ".pdf", ".ofx", ".qfx", ".qif"):
             continue
         out.append(
             {
@@ -336,6 +337,21 @@ def process_inbox(
                 if res.ledger_balance:
                     entry["ledger_balance"] = res.ledger_balance
                     entry["drift"] = res.drift
+            elif suffix == ".qif":
+                from honestspend.services.bank_qif import import_qif
+
+                with path.open("rb") as fh:
+                    res = import_qif(
+                        session,
+                        account_id=acct.id,
+                        file_obj=fh,
+                        filename=path.name,
+                        auto_categorize=auto_categorize,
+                        amount_sign=amount_sign,
+                    )
+                entry["format"] = "qif"
+                entry["rows_scanned"] = res.transactions_found
+                entry["account_hint"] = res.account_hint
             else:
                 with path.open("rb") as fh:
                     res = import_bank_csv(

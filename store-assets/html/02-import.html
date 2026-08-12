@@ -4,6 +4,31 @@
   <meta charset="utf-8" />
   <link rel="stylesheet" href="_shot-base.css" />
   <title>Import</title>
+  <style>
+    .drop {
+      border: 2px dashed rgba(61,156,240,0.75);
+      background: rgba(61,156,240,0.08);
+      border-radius: 12px;
+      padding: 36px 20px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .drop h2 { font-size: 18px; font-weight: 650; margin-bottom: 6px; }
+    .files {
+      margin-top: 10px;
+      text-align: left;
+      max-width: 420px;
+      margin-left: auto;
+      margin-right: auto;
+      background: rgba(0,0,0,0.25);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: #9aa8b8;
+    }
+    .files div { padding: 3px 0; }
+    .files strong { color: #f0f4f8; font-weight: 600; }
+  </style>
 </head>
 <body>
   <div class="desktop">
@@ -16,27 +41,33 @@
           <div class="nav-item">Sort charges</div>
         </aside>
         <div class="main">
-          <h1>Import</h1>
-          <p class="muted" style="margin-bottom:12px;">Freeware path: download CSV from your bank (no passwords here). Plaid is optional BYOK.</p>
-          <div class="card">
-            <div class="label">Bank CSV (pick file)</div>
-            <p class="muted"><strong>Target account</strong> · Primary checking</p>
-            <p class="muted">File: Primary-checking-2026-07.csv</p>
-            <p class="muted">Ending balance entered: <strong style="color:#f0f4f8;">$4,287.50</strong></p>
+          <h1>Import bank files</h1>
+          <p class="muted" style="margin-bottom:12px;">Drop everything you downloaded. No bank passwords. We map accounts, skip duplicates, set balances when the file has them.</p>
+          <div class="card" style="margin-bottom:10px;">
+            <div class="drop">
+              <h2>Drop bank files here</h2>
+              <p class="muted" style="margin-top:0;">CSV · OFX · QFX · QIF · PDF · XLSX — one file or many</p>
+              <p class="muted" style="opacity:0.7;font-size:12px;">or tap to browse</p>
+              <div class="files">
+                <div><strong>Primary-checking-24mo.qif</strong> · Quicken export</div>
+                <div><strong>Canvas-all-accounts.ofx</strong> · multi-account</div>
+                <div><strong>Chase-Sapphire-2026-07.csv</strong></div>
+                <div style="color:#3d9cf0;margin-top:4px;">3 files ready · drop more or Import</div>
+              </div>
+            </div>
             <div class="btn-row">
-              <span class="btn">Import file</span>
-              <span class="btn ghost">Pick OFX/QFX…</span>
-              <span class="btn ghost">Pick PDF…</span>
+              <span class="btn">Analyze &amp; map (recommended)</span>
+              <span class="btn ghost">Pick file(s)…</span>
+              <span class="btn ghost">Pick QIF…</span>
             </div>
           </div>
-          <div class="card" style="margin-bottom:0;border-color:rgba(240,180,41,0.35);">
-            <div class="label">After import</div>
-            <div style="font-weight:650;margin-top:2px;">42 rows · 3 duplicates skipped</div>
-            <p class="muted">Books $4,120.00 ≠ bank $4,287.50. Set Safe to spend from bank ending balance?</p>
+          <div class="card" style="margin-bottom:0;border-color:rgba(61,156,240,0.35);">
+            <div class="label">Smart setup</div>
+            <div style="font-weight:650;margin-top:2px;">3 files · 2 personal accounts · 1 card</div>
+            <p class="muted">Personal books · Primary checking · Everyday card. Looks good — import everything.</p>
             <div class="btn-row">
-              <span class="btn">Set Safe to spend from bank</span>
+              <span class="btn">Looks good — import everything</span>
               <span class="btn ghost">Sort charges</span>
-              <span class="btn ghost">Home</span>
             </div>
           </div>
         </div>
