@@ -204,8 +204,14 @@ public sealed partial class FirstRunPage : Page
             if (!string.IsNullOrWhiteSpace(sk) && sk is not "—" and not "?")
                 _storageKind = sk.Trim();
         }
+        // Do not restore the old ~/.financial-os path as the setup default selection
         if (string.IsNullOrWhiteSpace(_storagePath) && !string.IsNullOrWhiteSpace(AppConfig.DataDir))
-            _storagePath = AppConfig.DataDir!.Trim();
+        {
+            var configured = AppConfig.DataDir!.Trim();
+            var legacy = WinUiPaths.LegacyLocalDataDir();
+            if (!string.Equals(configured, legacy, StringComparison.OrdinalIgnoreCase))
+                _storagePath = configured;
+        }
         if (_phase == "done")
         {
             AppState.ShowSetupNav = false;

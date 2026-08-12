@@ -4,14 +4,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def default_data_dir() -> Path:
-    """Prefer ~/.HonestSpend; keep using legacy ~/.financial-os if that already has books."""
-    preferred = Path.home() / ".HonestSpend"
-    legacy = Path.home() / ".financial-os"
-    if preferred.exists():
-        return preferred
-    if legacy.exists():
-        return legacy
-    return preferred
+    """Always the HonestSpend default folder (never the old financial-os path)."""
+    return Path.home() / ".HonestSpend"
+
+
+def legacy_data_dir() -> Path:
+    """Pre-1.0.56 location — still readable if books live there."""
+    return Path.home() / ".financial-os"
 
 
 class Settings(BaseSettings):

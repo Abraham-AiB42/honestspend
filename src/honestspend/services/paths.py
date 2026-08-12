@@ -83,7 +83,7 @@ def _icloud_roots() -> list[Path]:
 
 
 def data_path_info() -> dict[str, Any]:
-    from honestspend.config import default_data_dir
+    from honestspend.config import default_data_dir, legacy_data_dir
 
     default = default_data_dir()
     current = Path(settings.data_dir)
@@ -94,6 +94,25 @@ def data_path_info() -> dict[str, Any]:
             "kind": "local",
         }
     ]
+    # Offer old books location separately — never as the default label
+    legacy = legacy_data_dir()
+    if legacy.is_dir() and legacy.resolve() != default.resolve():
+        has_books = any(
+            (legacy / name).is_file()
+            for name in (
+                "honestspend.db",
+                "honestspend.db.sealed",
+                "financial_os.db",
+                "financial_os.db.sealed",
+            )
+        )
+        candidates.append(
+            {
+                "label": "Previous books (old folder)" if has_books else "Previous folder (empty)",
+                "path": str(legacy),
+                "kind": "legacy",
+            }
+        )
     for od in _onedrive_roots():
         cand = od / "HonestSpend" / "data"
         candidates.append(

@@ -9,19 +9,21 @@ public static class WinUiPaths
     public const string LegacyDataDirName = ".financial-os";
 
     /// <summary>
-    /// Default on-disk data folder: prefer ~/.HonestSpend; keep using legacy
-    /// ~/.financial-os when that folder already exists (existing books).
+    /// Default on-disk data folder — always ~/.HonestSpend (never the old financial-os path).
+    /// Legacy books appear as a separate setup choice when that folder still exists.
     /// </summary>
     public static string DefaultLocalDataDir()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var preferred = Path.Combine(home, PreferredDataDirName);
-        var legacy = Path.Combine(home, LegacyDataDirName);
-        if (Directory.Exists(preferred))
-            return preferred;
-        if (Directory.Exists(legacy))
-            return legacy;
-        return preferred;
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            PreferredDataDirName);
+    }
+
+    public static string LegacyLocalDataDir()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            LegacyDataDirName);
     }
 
     /// <summary>Default data folder used when AppConfig.DataDir is unset.</summary>
