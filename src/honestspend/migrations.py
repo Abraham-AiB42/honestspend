@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -420,6 +420,89 @@ def _mig_22_schedule_agency_steals(conn) -> None:
     )
 
 
+def _mig_23_promo_terms(conn) -> None:
+    """Promo term fields on installment lines + promo_conflicts review table.
+
+    Recreates promo_installment_lines so account_id can be NULL (SQLite cannot
+    drop NOT NULL via ALTER). Existing rows become kind=purchase_plan with
+    status open/inactive from active. Fresh create_all tables already match
+    and are left alone.
+    """
+    info = conn.execute(text("PRAGMA table_info(promo_installment_lines)")).fetchall()
+    # row: cid, name, type, notnull, dflt_value, pk
+    colmap = {row[1]: row for row in info} if info else {}
+    acct = colmap.get("account_id")
+    account_not_null = acct is not None and int(acct[3]) == 1
+    missing_new = "kind" not in colmap
+    needs_rebuild = (not info) or missing_new or account_not_null
+    if needs_rebuild:
+        conn.execute(text("DROP TABLE IF EXISTS promo_installment_lines_new"))
+        conn.execute(
+            text(
+                "CREATE TABLE promo_installment_lines_new ("
+                "id INTEGER PRIMARY KEY,"
+                "account_id INTEGER,"
+                "name VARCHAR(128) NOT NULL,"
+                "principal_remaining NUMERIC(14,2) NOT NULL DEFAULT 0,"
+                "monthly_payment NUMERIC(14,2) NOT NULL DEFAULT 0,"
+                "start_date DATE NOT NULL,"
+                "end_date DATE,"
+                "active BOOLEAN NOT NULL DEFAULT 1,"
+                "source VARCHAR(32) DEFAULT 'user',"
+                "kind VARCHAR(32) NOT NULL DEFAULT 'purchase_plan',"
+                "offer_type VARCHAR(32),"
+                "fingerprint VARCHAR(256),"
+                "linked_txn_id INTEGER,"
+                "status VARCHAR(16) NOT NULL DEFAULT 'open',"
+                "apr NUMERIC(7,4))"
+            )
+        )
+        if info:
+            # v18/v22 shape: no kind/status/etc. Map active -> status.
+            conn.execute(
+                text(
+                    "INSERT INTO promo_installment_lines_new ("
+                    "id, account_id, name, principal_remaining, monthly_payment,"
+                    "start_date, end_date, active, source, kind, offer_type,"
+                    "fingerprint, linked_txn_id, status, apr) "
+                    "SELECT id, account_id, name, principal_remaining, monthly_payment,"
+                    "start_date, end_date, active, source,"
+                    "'purchase_plan', NULL, NULL, NULL,"
+                    "CASE WHEN active THEN 'open' ELSE 'inactive' END,"
+                    "NULL "
+                    "FROM promo_installment_lines"
+                )
+            )
+            conn.execute(text("DROP TABLE promo_installment_lines"))
+        else:
+            conn.execute(text("DROP TABLE IF EXISTS promo_installment_lines"))
+        conn.execute(
+            text("ALTER TABLE promo_installment_lines_new RENAME TO promo_installment_lines")
+        )
+        _exec_ignore(
+            conn,
+            "CREATE INDEX IF NOT EXISTS ix_promo_installment_lines_account "
+            "ON promo_installment_lines(account_id)",
+        )
+
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS promo_conflicts ("
+            "id INTEGER PRIMARY KEY,"
+            "line_id INTEGER NOT NULL,"
+            "incoming_source VARCHAR(32) NOT NULL,"
+            "field_diffs_json TEXT,"
+            "incoming_values_json TEXT,"
+            "user_values_json TEXT,"
+            "resolved_at DATETIME)"
+        )
+    )
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_promo_conflicts_line_id ON promo_conflicts(line_id)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -444,6 +527,7 @@ MIGRATIONS: dict[int, Callable] = {
     20: _mig_20_rewards_rates,
     21: _mig_21_coming_up_settings,
     22: _mig_22_schedule_agency_steals,
+    23: _mig_23_promo_terms,
 }
 
 

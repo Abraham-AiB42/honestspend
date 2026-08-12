@@ -198,24 +198,53 @@ class StatementCycle(Base):
 
 
 class PromoInstallmentLine(Base):
-    """ISB-class promo / installment plan carve-out on a credit account.
+    """Promo term / installment carve-out (purchase plan, card intro, offer).
 
-    principal_remaining + monthly_payment feed statement payment math:
-    statement pay = max(0, balance - sum(principal)) + sum(monthly_due).
-    source: user | import | statement | isb
+    principal_remaining + monthly_payment feed statement payment math when
+    status=open: statement pay = max(0, balance - sum(principal)) + sum(monthly_due).
+    kind: purchase_plan | card_intro | offer
+    status: open | inactive | pending | declined
+    source: user | import | statement | isb | plaid
+    account_id nullable for kind=offer + offer_type=new_card (no card yet).
     """
 
     __tablename__ = "promo_installment_lines"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    account_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("accounts.id"), index=True, nullable=True
+    )
     name: Mapped[str] = mapped_column(String(128))
     principal_remaining: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
     monthly_payment: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0"))
     start_date: Mapped[date] = mapped_column(Date)
     end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
-    source: Mapped[str] = mapped_column(String(32), default="user")  # user|import|statement|isb
+    source: Mapped[str] = mapped_column(String(32), default="user")  # user|import|statement|isb|plaid
+    kind: Mapped[str] = mapped_column(String(32), default="purchase_plan")
+    offer_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    fingerprint: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    linked_txn_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="open")
+    apr: Mapped[Optional[Decimal]] = mapped_column(Numeric(7, 4), nullable=True)
+
+
+class PromoConflict(Base):
+    """User-vs-incoming promo term conflict awaiting review.
+
+    line_id points at the existing user line; incoming_* hold statement/import values.
+    resolved_at set when the user keeps or accepts the incoming side.
+    """
+
+    __tablename__ = "promo_conflicts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    line_id: Mapped[int] = mapped_column(ForeignKey("promo_installment_lines.id"), index=True)
+    incoming_source: Mapped[str] = mapped_column(String(32))
+    field_diffs_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    incoming_values_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    user_values_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class Transaction(Base):
