@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session
 from honestspend.config import settings
 from honestspend.db import Account, PlaidItem, Transaction
 from honestspend.services.categorizer import categorize_uncategorized
+
+ZERO = Decimal("0")
+CENT = Decimal("0.01")
 
 
 class PlaidError(RuntimeError):
@@ -260,6 +263,143 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
     return out, missing_current
 
 
+def _plaid_apr_rate(pct: Any) -> Decimal | None:
+    """Plaid apr_percentage is display points (0, 15.24); store 0 or fraction."""
+    if pct is None:
+        return None
+    d = Decimal(str(pct))
+    if d == ZERO:
+        return ZERO
+    if d > 1:
+        return (d / Decimal("100")).quantize(Decimal("0.0001"))
+    return d.quantize(Decimal("0.0001"))
+
+
+def _is_promo_apr_bucket(apr: dict[str, Any]) -> bool:
+    """special bucket, or 0% with balance_subject_to_apr > 0."""
+    bal_raw = apr.get("balance_subject_to_apr")
+    try:
+        bal = Decimal(str(bal_raw)) if bal_raw is not None else ZERO
+    except Exception:
+        bal = ZERO
+    if bal <= ZERO:
+        return False
+    apr_type = (apr.get("apr_type") or "").strip().lower()
+    if apr_type == "special":
+        return True
+    pct = apr.get("apr_percentage")
+    if pct is None:
+        return False
+    try:
+        return Decimal(str(pct)) == ZERO
+    except Exception:
+        return False
+
+
+def apply_plaid_promo_aprs(session: Session, account_id: int, aprs: list[dict]) -> dict:
+    """If any apr_type in (special,) or apr_percentage==0 with balance_subject_to_apr>0:
+    upsert_promo_term kind=card_intro source=plaid. Never create purchase_plan rows."""
+    from honestspend.services.promo_upsert import upsert_promo_term
+
+    created = 0
+    updated = 0
+    conflicts: list[Any] = []
+    lines: list[Any] = []
+    as_of = date.today()
+
+    for apr in aprs or []:
+        if not isinstance(apr, dict):
+            continue
+        if not _is_promo_apr_bucket(apr):
+            continue
+        bal = Decimal(str(apr.get("balance_subject_to_apr") or 0)).quantize(CENT)
+        rate = _plaid_apr_rate(apr.get("apr_percentage"))
+        name = "Intro 0%" if rate is None or rate == ZERO else f"Intro {apr.get('apr_percentage')}%"
+        r = upsert_promo_term(
+            session,
+            account_id=int(account_id),
+            kind="card_intro",
+            name=name,
+            principal_remaining=bal,
+            monthly_payment=ZERO,
+            start_date=as_of,
+            end_date=None,
+            source="plaid",
+            apr=rate if rate is not None else ZERO,
+        )
+        lines.append(r.get("line"))
+        if r.get("created"):
+            created += 1
+        else:
+            updated += 1
+        if r.get("conflict"):
+            conflicts.append(r["conflict"])
+
+    session.flush()
+    return {
+        "created": created,
+        "updated": updated,
+        "conflicts": conflicts,
+        "lines": lines,
+        "promos_found": created + updated,
+        "promo_conflicts": len(conflicts),
+    }
+
+
+def _sync_liabilities(session: Session, item: PlaidItem) -> dict[str, Any]:
+    """Best-effort /liabilities/get — special/0% APR buckets → card_intro.
+
+    Soft-fails when Liabilities product is not on the Item (transactions-only).
+    Never invents purchase_plan rows from Plaid.
+    """
+    try:
+        data = _post("/liabilities/get", _body({"access_token": item.access_token}))
+    except Exception:
+        return {"ok": False, "created": 0, "updated": 0, "conflicts": 0}
+
+    by_plaid: dict[str, Account] = {
+        a.plaid_account_id: a
+        for a in session.query(Account).filter(Account.plaid_item_pk == item.id).all()
+        if a.plaid_account_id
+    }
+    created = updated = conflict_n = 0
+    liabilities = data.get("liabilities") or {}
+    for credit in liabilities.get("credit") or []:
+        if not isinstance(credit, dict):
+            continue
+        plaid_aid = credit.get("account_id")
+        acct = by_plaid.get(plaid_aid) if plaid_aid else None
+        if acct is None or acct.id is None:
+            continue
+        # Refresh min payment when present and account empty
+        min_pay = credit.get("minimum_payment_amount")
+        if min_pay is not None and getattr(acct, "min_payment", None) in (None, ZERO):
+            try:
+                acct.min_payment = Decimal(str(min_pay))
+            except Exception:
+                pass
+        due = credit.get("next_payment_due_date")
+        if due and not getattr(acct, "payment_due_day", None):
+            try:
+                if isinstance(due, str) and len(due) >= 10:
+                    acct.payment_due_day = int(due[8:10])
+                    if not getattr(acct, "cycle_config_source", None):
+                        acct.cycle_config_source = "plaid"
+            except Exception:
+                pass
+        r = apply_plaid_promo_aprs(session, int(acct.id), credit.get("aprs") or [])
+        created += int(r.get("created") or 0)
+        updated += int(r.get("updated") or 0)
+        conflict_n += int(r.get("promo_conflicts") or len(r.get("conflicts") or []))
+    session.flush()
+    return {
+        "ok": True,
+        "created": created,
+        "updated": updated,
+        "conflicts": conflict_n,
+    }
+
+
 def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: bool = True) -> dict[str, Any]:
     """Use /transactions/sync cursor API."""
     added = modified = removed = 0
@@ -268,6 +408,8 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
     # Always refresh balances from bank (Safe to spend honesty for BYOK path)
     acct_map: dict[str, Account] = {}
     synced, balances_missing_current = _sync_accounts(session, item)
+    # Best-effort liabilities (APR / special 0% → card_intro)
+    liabilities_promo = _sync_liabilities(session, item)
     for a in synced:
         if a.plaid_account_id:
             acct_map[a.plaid_account_id] = a
@@ -372,6 +514,7 @@ def sync_transactions(session: Session, item: PlaidItem, *, auto_categorize: boo
         "schedules_advanced_names": schedules_advanced_names,
         "schedule_advance_hint": schedule_advance_hint,
         "schedule_advance_error": schedule_advance_error,
+        "liabilities_promo": liabilities_promo,
     }
 
 
