@@ -280,6 +280,7 @@ public sealed partial class ImportPage : Page
             ResultText.Text = string.Join("\n", lines);
             ShowNextSteps(res);
             MaybeOfferFreezeFromInbox(res);
+            await ReviewPromosAfterImportAsync(api, res);
             await RefreshInboxAsync(api);
         }
         catch (Exception ex)
@@ -866,6 +867,7 @@ public sealed partial class ImportPage : Page
                 SuccessBar.Title = "Books updated";
                 SuccessBar.Message = plain.Length > 120 ? plain[..120] + "…" : plain;
                 SuccessBar.IsOpen = true;
+                await ReviewPromosAfterImportAsync(api, res);
                 await LoadAsync();
             }
             finally
@@ -1156,6 +1158,7 @@ public sealed partial class ImportPage : Page
         _enterEndingQueue.Clear();
         _setBooksQueue.Clear();
         HideFreezeStatement();
+        HidePromosFound();
     }
 
     private void HideFreezeStatement()
@@ -1678,6 +1681,9 @@ public sealed partial class ImportPage : Page
                 ShowNextSteps(lr, skipEnterEndingBal: true, skipSetBooksFromBank: true);
                 if (lastAccountId is int la)
                     MaybeOfferFreezeStatement(la, lr);
+                using var promoApi = new LedgerApiClient();
+                await promoApi.EnsureBackendAsync();
+                await ReviewPromosAfterImportAsync(promoApi, lr, lastAccountId);
             }
             SuccessBar.Title = "Import finished";
             SuccessBar.Message = $"{files.Count} file(s) processed.";
@@ -1743,6 +1749,7 @@ public sealed partial class ImportPage : Page
             ResultText.Text = string.Join("\n", pdfLines);
             ShowNextSteps(res, skipEnterEndingBal: trusted, skipSetBooksFromBank: trusted);
             MaybeOfferFreezeStatement(accountId, res);
+            await ReviewPromosAfterImportAsync(api, res, accountId);
         }
         catch (Exception ex)
         {
@@ -1852,6 +1859,315 @@ public sealed partial class ImportPage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+    }
+
+    private void HidePromosFound()
+    {
+        PromosFoundPanel.Visibility = Visibility.Collapsed;
+        PromosFoundText.Text = "";
+        ReviewPromoConflictsBtn.Visibility = Visibility.Collapsed;
+    }
+
+    private async void ReviewPromoConflicts_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var conflicts = await api.GetPromoConflictsAsync();
+            await PromptPromoConflictsAsync(api, conflicts);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async Task ReviewPromosAfterImportAsync(
+        LedgerApiClient api,
+        JsonElement res,
+        int? accountId = null)
+    {
+        var hints = new List<string>();
+        var found = 0;
+        var conflictHint = 0;
+        CollectPromoHints(res, hints, ref found, ref conflictHint);
+
+        if (accountId is int aid && aid > 0)
+        {
+            try
+            {
+                var lines = await api.GetPromoLinesAsync(aid);
+                if (lines.TryGetProperty("items", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var ln in arr.EnumerateArray())
+                    {
+                        if (string.Equals(JsonUi.Str(ln, "kind"), "offer", StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        var end = JsonUi.Str(ln, "end_date", "");
+                        hints.Add(
+                            $"{JsonUi.Str(ln, "name")} · monthly {JsonUi.Money(ln, "monthly_payment")} · " +
+                            $"remaining {JsonUi.Money(ln, "principal_remaining")}" +
+                            (string.IsNullOrEmpty(end) || end is "—" or "null"
+                                ? ""
+                                : $" · end {PlainDateUi.FormatPlainWeekdayDate(end)}"));
+                    }
+                    if (found == 0)
+                        found = hints.Count;
+                }
+            }
+            catch
+            {
+                /* promo-line list is optional after import */
+            }
+        }
+
+        JsonElement conflicts = default;
+        var conflictItems = 0;
+        try
+        {
+            conflicts = await api.GetPromoConflictsAsync();
+            if (conflicts.TryGetProperty("items", out var cArr) && cArr.ValueKind == JsonValueKind.Array)
+                conflictItems = cArr.GetArrayLength();
+            else
+                conflictItems = JsonUi.Int(conflicts, "count");
+        }
+        catch
+        {
+            conflictItems = conflictHint;
+        }
+
+        if (found == 0 && conflictItems == 0 && conflictHint == 0 && hints.Count == 0)
+        {
+            HidePromosFound();
+            return;
+        }
+
+        if (found == 0)
+            found = hints.Count;
+        var shown = Math.Max(found, hints.Count);
+        var linesOut = new List<string>
+        {
+            $"Promos found: {shown}" +
+            (conflictItems > 0 ? $" · {conflictItems} conflict{(conflictItems == 1 ? "" : "s")}" : ""),
+        };
+        foreach (var h in hints.Distinct().Take(12))
+            linesOut.Add("• " + h);
+        if (conflictItems > 0)
+            linesOut.Add("This statement doesn’t match the promo you entered.");
+
+        PromosFoundText.Text = string.Join("\n", linesOut);
+        PromosFoundPanel.Visibility = Visibility.Visible;
+        ReviewPromoConflictsBtn.Visibility = conflictItems > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        if (conflictItems > 0 && conflicts.ValueKind == JsonValueKind.Object)
+            await PromptPromoConflictsAsync(api, conflicts);
+    }
+
+    private static void CollectPromoHints(
+        JsonElement res,
+        List<string> hints,
+        ref int found,
+        ref int conflicts)
+    {
+        found += JsonUi.Int(res, "promos_found");
+        conflicts += JsonUi.Int(res, "promo_conflicts");
+
+        if (res.TryGetProperty("next_steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var st in steps.EnumerateArray())
+            {
+                var action = JsonUi.Str(st, "action");
+                var label = JsonUi.Str(st, "label", "");
+                var detail = JsonUi.Str(st, "detail", "");
+                var isConflict = action == "review_promo_conflict"
+                    || label.Contains("promo conflict", StringComparison.OrdinalIgnoreCase);
+                var isPromo = isConflict
+                    || action == "hold" && label.Contains("promo", StringComparison.OrdinalIgnoreCase)
+                    || label.Contains("promo term", StringComparison.OrdinalIgnoreCase);
+                if (!isPromo) continue;
+                var line = string.IsNullOrEmpty(detail) || detail is "—"
+                    ? label
+                    : label + " — " + detail;
+                if (!string.IsNullOrWhiteSpace(line) && line is not "—")
+                    hints.Add(line);
+                var n = LeadingInt(label);
+                if (isConflict && conflicts == 0)
+                    conflicts = n ?? 1;
+                else if (!isConflict && found == 0)
+                    found = n ?? 1;
+            }
+        }
+
+        if (res.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var r in results.EnumerateArray())
+                CollectPromoHints(r, hints, ref found, ref conflicts);
+        }
+    }
+
+    private static int? LeadingInt(string label)
+    {
+        if (string.IsNullOrWhiteSpace(label)) return null;
+        var i = 0;
+        while (i < label.Length && char.IsDigit(label[i])) i++;
+        if (i == 0) return null;
+        return int.TryParse(label[..i], out var n) ? n : null;
+    }
+
+    private async Task PromptPromoConflictsAsync(LedgerApiClient api, JsonElement payload)
+    {
+        if (!payload.TryGetProperty("items", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return;
+        foreach (var item in arr.EnumerateArray())
+            await PromptOnePromoConflictAsync(api, item.Clone());
+    }
+
+    private async Task PromptOnePromoConflictAsync(LedgerApiClient api, JsonElement item)
+    {
+        var id = JsonUi.Int(item, "id");
+        if (id <= 0) return;
+        var incomingSrc = JsonUi.Str(item, "incoming_source", "statement");
+        var takeLabel = string.Equals(incomingSrc, "plaid", StringComparison.OrdinalIgnoreCase)
+            ? "Take Plaid"
+            : "Take statement";
+        var incoming = item.TryGetProperty("incoming_values", out var iv) && iv.ValueKind == JsonValueKind.Object
+            ? iv
+            : default;
+        var mine = item.TryGetProperty("user_values", out var uv) && uv.ValueKind == JsonValueKind.Object
+            ? uv
+            : default;
+        var diffs = new List<string>();
+        if (item.TryGetProperty("field_diffs", out var d) && d.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var f in d.EnumerateArray())
+            {
+                var s = f.ValueKind == JsonValueKind.String ? f.GetString() : f.GetRawText();
+                if (!string.IsNullOrWhiteSpace(s))
+                    diffs.Add(s!);
+            }
+        }
+
+        var body = new StackPanel { Spacing = 8, MaxWidth = 420 };
+        body.Children.Add(new TextBlock
+        {
+            Text = "This statement doesn’t match the promo you entered.",
+            TextWrapping = TextWrapping.Wrap,
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = "Yours: remaining " + SafeMoney(mine, "principal_remaining") +
+                   " · monthly " + SafeMoney(mine, "monthly_payment") +
+                   SnapEnd(mine),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = "Incoming: remaining " + SafeMoney(incoming, "principal_remaining") +
+                   " · monthly " + SafeMoney(incoming, "monthly_payment") +
+                   SnapEnd(incoming),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        if (diffs.Count > 0)
+        {
+            body.Children.Add(new TextBlock
+            {
+                Text = "Differs: " + string.Join(", ", diffs),
+                Opacity = 0.75,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        var dlg = new ContentDialog
+        {
+            Title = "Promo conflict",
+            Content = body,
+            PrimaryButtonText = "Keep mine",
+            SecondaryButtonText = takeLabel,
+            CloseButtonText = "Edit",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        var choice = await dlg.ShowAsync();
+        if (choice == ContentDialogResult.Primary)
+        {
+            await api.ResolvePromoConflictAsync(id, new { action = "keep_user" });
+            return;
+        }
+        if (choice == ContentDialogResult.Secondary)
+        {
+            await api.ResolvePromoConflictAsync(id, new { action = "take_incoming" });
+            return;
+        }
+
+        var remBox = new NumberBox
+        {
+            Header = "Remaining ($)",
+            Minimum = 0,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Value = ParsePromoAmount(incoming, "principal_remaining", ParsePromoAmount(mine, "principal_remaining", 0)),
+        };
+        var monBox = new NumberBox
+        {
+            Header = "Monthly ($)",
+            Minimum = 0,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Value = ParsePromoAmount(incoming, "monthly_payment", ParsePromoAmount(mine, "monthly_payment", 0)),
+        };
+        var endBox = new TextBox
+        {
+            Header = "End date",
+            PlaceholderText = "yyyy-MM-dd",
+            Text = JsonUi.Str(incoming, "end_date", JsonUi.Str(mine, "end_date", "")),
+        };
+        var editPanel = new StackPanel { Spacing = 8, MinWidth = 280 };
+        editPanel.Children.Add(remBox);
+        editPanel.Children.Add(monBox);
+        editPanel.Children.Add(endBox);
+        var editDlg = new ContentDialog
+        {
+            Title = "Edit promo (saved as yours)",
+            Content = editPanel,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        if (await editDlg.ShowAsync() != ContentDialogResult.Primary)
+            return;
+        var edits = new Dictionary<string, object?>
+        {
+            ["action"] = "edit",
+            ["principal_remaining"] = double.IsNaN(remBox.Value) ? 0m : (decimal)remBox.Value,
+            ["monthly_payment"] = double.IsNaN(monBox.Value) ? 0m : (decimal)monBox.Value,
+        };
+        var end = endBox.Text?.Trim();
+        if (!string.IsNullOrEmpty(end) && end is not ("—" or "?"))
+            edits["end_date"] = end;
+        await api.ResolvePromoConflictAsync(id, edits);
+    }
+
+    private static string SafeMoney(JsonElement el, string prop)
+        => el.ValueKind == JsonValueKind.Object ? JsonUi.Money(el, prop) : "—";
+
+    private static string SnapEnd(JsonElement snap)
+    {
+        if (snap.ValueKind != JsonValueKind.Object) return "";
+        var end = JsonUi.Str(snap, "end_date", "");
+        return string.IsNullOrEmpty(end) || end is "—" or "null" ? "" : " · end " + end;
+    }
+
+    private static double ParsePromoAmount(JsonElement el, string name, double fallback)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return fallback;
+        if (!el.TryGetProperty(name, out var p) || p.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return fallback;
+        var raw = p.ValueKind == JsonValueKind.String ? p.GetString() : p.GetRawText();
+        return double.TryParse(raw, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var d)
+            ? d
+            : fallback;
     }
 
     private static string Prop(JsonElement el, string name)

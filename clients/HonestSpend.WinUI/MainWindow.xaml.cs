@@ -14,7 +14,7 @@ public sealed partial class MainWindow : Window
     private static readonly HashSet<string> WriteNavTags = new(StringComparer.OrdinalIgnoreCase)
     {
         "setup", "add", "entities", "accounts", "ledger", "review", "rules", "import",
-        "plaid", "reconcile", "data", "users", "bills", "credit", "buy",
+        "plaid", "reconcile", "data", "users", "bills", "credit", "offers", "buy",
         "taxvault", "intermix",
     };
 
@@ -240,7 +240,6 @@ public sealed partial class MainWindow : Window
     {
         tag = (tag ?? "").Trim().ToLowerInvariant();
         if (tag is "sort" or "charges" or "sort-charges") tag = "review";
-        if (tag == "offers") tag = "credit";
         if (tag == "settings")
         {
             // Settings is the NavigationView footer item, not a menu tag
@@ -603,6 +602,7 @@ public sealed partial class MainWindow : Window
                 case "audit": NavFrame.Navigate(typeof(AuditPage)); break;
                 case "bills": NavFrame.Navigate(typeof(BillsPage)); break;
                 case "credit": NavFrame.Navigate(typeof(CreditPage)); break;
+                case "offers": NavFrame.Navigate(typeof(CreditOffersPage)); break;
                 case "buy": NavFrame.Navigate(typeof(BuyPage)); break;
                 case "scenarios": NavFrame.Navigate(typeof(ScenariosPage)); break;
                 case "taxvault": NavFrame.Navigate(typeof(TaxVaultPage)); break;

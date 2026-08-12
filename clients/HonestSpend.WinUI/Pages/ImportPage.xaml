@@ -114,6 +114,18 @@
                             <TextBlock x:Name="FreezeMsg" Opacity="0.85" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
+                    <Border x:Name="PromosFoundPanel" Visibility="Collapsed"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1" CornerRadius="8" Padding="12">
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="SemiBold" Text="Promos found" />
+                            <TextBlock x:Name="PromosFoundText" Opacity="0.9" TextWrapping="Wrap"
+                                       IsTextSelectionEnabled="True" />
+                            <Button x:Name="ReviewPromoConflictsBtn" Content="Review conflicts"
+                                    Click="ReviewPromoConflicts_Click" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 

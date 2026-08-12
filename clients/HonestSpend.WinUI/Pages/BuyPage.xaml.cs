@@ -194,12 +194,11 @@ public sealed partial class BuyPage : Page
 
     private void OpenOffersDesk()
     {
-        NoticeBar.Message = "Opens Offers in Full books";
-        NoticeBar.IsOpen = true;
+        NoticeBar.IsOpen = false;
         if (App.MainWindowInstance is MainWindow mw)
             mw.NavigatePublic("offers");
         else
-            Frame?.Navigate(typeof(CreditPage), "offers");
+            Frame?.Navigate(typeof(CreditOffersPage));
     }
 
     private string SelectedPromoMode()

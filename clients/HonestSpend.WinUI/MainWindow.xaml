@@ -156,6 +156,11 @@
                         <FontIcon Glyph="&#xE8C8;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Offers &amp; promos" Tag="offers">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE734;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Can I buy?" Tag="buy">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE719;" />

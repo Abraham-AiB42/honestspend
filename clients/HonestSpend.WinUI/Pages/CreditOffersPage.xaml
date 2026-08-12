@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="HonestSpend_WinUI.Pages.CreditOffersPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer Padding="24">
+        <StackPanel Spacing="16" MaxWidth="960">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Offers &amp; promos" />
+                    <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                        Text="Mailers, 0% transfers, and store plans. Verdict first — then Take, Take with a plan, or Skip. Existing card lines stay editable here." />
+                </StackPanel>
+                <Button Grid.Column="1" Content="Refresh" Click="Refresh_Click" />
+            </Grid>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Pending offers" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Take it when the 0% path is real and Safe still fits. Take with a plan if paying current balance would kill the promo. Skip if the fee or squeeze is worse than staying put." />
+                    <StackPanel x:Name="PendingOfferPanel" Spacing="10" />
+                    <TextBlock x:Name="PendingEmptyText" Opacity="0.7"
+                               Text="No pending offers. Add one below, or tap I have a new offer on Can I buy?" />
+                </StackPanel>
+            </Border>
+
+            <Border x:Name="ConflictCard" Visibility="Collapsed"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Statement vs yours" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="This statement doesn’t match the promo you entered. Keep yours, take the statement, or edit." />
+                    <StackPanel x:Name="ConflictPanel" Spacing="10" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Add an offer" />
+                    <ComboBox x:Name="OfferTypeBox" Header="Type" SelectedIndex="0"
+                              HorizontalAlignment="Stretch" SelectionChanged="OfferType_Changed">
+                        <ComboBoxItem Content="New card" Tag="new_card" IsSelected="True" />
+                        <ComboBoxItem Content="Balance transfer" Tag="balance_transfer" />
+                        <ComboBoxItem Content="Purchase plan" Tag="purchase_plan" />
+                    </ComboBox>
+                    <TextBox x:Name="OfferNameBox" Header="Name" PlaceholderText="Mailer Visa · Amazon fridge"
+                             HorizontalAlignment="Stretch" />
+
+                    <StackPanel x:Name="NewCardPanel" Spacing="8">
+                        <Grid ColumnSpacing="12" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <NumberBox x:Name="LimitBox" Header="Credit limit ($)" Minimum="0"
+                                       SpinButtonPlacementMode="Compact" Grid.Row="0" Grid.Column="0" />
+                            <NumberBox x:Name="AnnualFeeBox" Header="Annual fee ($)" Minimum="0"
+                                       SpinButtonPlacementMode="Compact" Grid.Row="0" Grid.Column="1" />
+                            <NumberBox x:Name="CloseDayBox" Header="Close day (1–31)" Minimum="1" Maximum="31"
+                                       Value="1" Grid.Row="1" Grid.Column="0" />
+                            <NumberBox x:Name="DueDayBox" Header="Due day (1–31)" Minimum="1" Maximum="31"
+                                       Value="25" Grid.Row="1" Grid.Column="1" />
+                            <NumberBox x:Name="IntroAprBox" Header="Intro APR (%)" Minimum="0" Maximum="99"
+                                       Value="0" Grid.Row="2" Grid.Column="0" />
+                            <NumberBox x:Name="IntroMonthsBox" Header="Intro months" Minimum="0" Maximum="60"
+                                       Value="15" Grid.Row="2" Grid.Column="1" />
+                        </Grid>
+                        <TextBox x:Name="RewardsBox" Header="Rewards (optional)" PlaceholderText="2% general · 5% groceries" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="BtPanel" Spacing="8" Visibility="Collapsed">
+                        <ComboBox x:Name="FromCardBox" Header="From card" HorizontalAlignment="Stretch"
+                                  PlaceholderText="Card you are transferring off" />
+                        <ComboBox x:Name="DestCardBox" Header="Destination" HorizontalAlignment="Stretch"
+                                  PlaceholderText="Existing card or new" />
+                        <Grid ColumnSpacing="12" RowSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <NumberBox x:Name="BtAmountBox" Header="Amount ($)" Minimum="0"
+                                       SpinButtonPlacementMode="Compact" Grid.Row="0" Grid.Column="0" />
+                            <NumberBox x:Name="BtMonthsBox" Header="0% months" Minimum="0" Maximum="60"
+                                       Value="12" Grid.Row="0" Grid.Column="1" />
+                            <NumberBox x:Name="BtFeeAmtBox" Header="Fee ($)" Minimum="0"
+                                       SpinButtonPlacementMode="Compact" Grid.Row="1" Grid.Column="0" />
+                            <NumberBox x:Name="BtFeePctBox" Header="Fee (%)" Minimum="0" Maximum="100"
+                                       SpinButtonPlacementMode="Compact" Grid.Row="1" Grid.Column="1" />
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel x:Name="PlanOfferPanel" Spacing="8" Visibility="Collapsed">
+                        <ComboBox x:Name="PlanCardBox" Header="Card" HorizontalAlignment="Stretch"
+                                  PlaceholderText="Store or card for this plan" />
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <NumberBox x:Name="PlanAmountBox" Header="Amount ($)" Minimum="0"
+                                       SpinButtonPlacementMode="Compact" Grid.Column="0" />
+                            <NumberBox x:Name="PlanMonthsBox" Header="Months" Minimum="0" Maximum="84"
+                                       SpinButtonPlacementMode="Compact" Grid.Column="1" />
+                            <NumberBox x:Name="PlanMonthlyBox" Header="Monthly ($)" Minimum="0"
+                                       SpinButtonPlacementMode="Compact" Grid.Column="2" />
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Save as pending" Click="CreateOffer_Click"
+                                Style="{StaticResource AccentButtonStyle}" />
+                    </StackPanel>
+                    <Border Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            CornerRadius="8" Padding="12">
+                        <StackPanel Spacing="4">
+                            <TextBlock x:Name="VerdictTitle" FontWeight="SemiBold" Text="Verdict: —" />
+                            <TextBlock x:Name="VerdictWhy" Opacity="0.85" TextWrapping="Wrap"
+                                       Text="Save an offer to see Take / Take with a plan / Skip and why." />
+                        </StackPanel>
+                    </Border>
+                    <TextBlock x:Name="OfferMsg" Opacity="0.85" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1" CornerRadius="12" Padding="16">
+                <StackPanel Spacing="10">
+                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Card promo lines" />
+                    <TextBlock Opacity="0.75" TextWrapping="Wrap"
+                        Text="Add, edit, or end purchase plans and card intros. Source shows who last wrote the line — your edits save as yours." />
+                    <ComboBox x:Name="EditorCardBox" Header="Card" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a card" SelectionChanged="EditorCard_Changed" />
+                    <ItemsControl x:Name="EditorLineList" />
+                    <ComboBox x:Name="EditorPickBox" Header="Plan to edit" HorizontalAlignment="Stretch"
+                              PlaceholderText="Pick a plan" SelectionChanged="EditorPick_Changed" />
+                    <Grid ColumnSpacing="12" RowSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBox x:Name="EditorNameBox" Header="Plan name" PlaceholderText="Amazon 0% · Apple Card"
+                                 Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" />
+                        <NumberBox x:Name="EditorRemainingBox" Header="Principal remaining ($)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="0" />
+                        <NumberBox x:Name="EditorMonthlyBox" Header="Monthly payment ($)" Minimum="0" Value="0"
+                                   Grid.Row="1" Grid.Column="1" />
+                    </Grid>
+                    <TextBox x:Name="EditorEndBox" Header="End date (optional)" PlaceholderText="yyyy-MM-dd" />
+                    <TextBlock x:Name="EditorSourceText" Opacity="0.7" FontSize="12" Text="Source: —" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Add promo line" Click="EditorAdd_Click" />
+                        <Button Content="Save as mine" Click="EditorSave_Click"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="End plan" Click="EditorEnd_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="EditorMsg" Opacity="0.85" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

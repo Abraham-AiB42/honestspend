@@ -504,6 +504,36 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> RollPromoLineAsync(int accountId, int lineId, CancellationToken ct = default)
         => PostJsonAsync($"api/accounts/{accountId}/promo-lines/{lineId}/roll", new { }, ct);
 
+    public Task<JsonElement> GetOffersAsync(string? status = "pending", CancellationToken ct = default)
+    {
+        var q = string.IsNullOrWhiteSpace(status)
+            ? "api/offers"
+            : $"api/offers?status={Uri.EscapeDataString(status)}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> CreateOfferAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/offers", body, ct);
+
+    public Task<JsonElement> DecideOfferAsync(
+        int offerId,
+        string decision,
+        bool confirmSkip = false,
+        CancellationToken ct = default)
+        => PostJsonAsync($"api/offers/{offerId}/decide", new
+        {
+            decision,
+            confirm_skip = confirmSkip,
+        }, ct);
+
+    public Task<JsonElement> GetPromoConflictsAsync(int? accountId = null, CancellationToken ct = default)
+        => GetJsonAsync(
+            accountId is int id ? $"api/promos/conflicts?account_id={id}" : "api/promos/conflicts",
+            ct);
+
+    public Task<JsonElement> ResolvePromoConflictAsync(int conflictId, object body, CancellationToken ct = default)
+        => PostJsonAsync($"api/promos/conflicts/{conflictId}/resolve", body, ct);
+
     public Task<JsonElement> GetScheduledAsync(bool activeOnly = true, CancellationToken ct = default)
         => GetJsonAsync($"api/scheduled?active_only={activeOnly.ToString().ToLowerInvariant()}", ct);
 
