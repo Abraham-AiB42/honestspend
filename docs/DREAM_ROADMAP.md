@@ -1,6 +1,6 @@
 # Plan: Realize the Dream
 
-**Product:** HonestSpend (financial-os)  
+**Product:** HonestSpend (HonestSpend)  
 **Baseline:** **v1.0.x** feature tags · product maturity still **~70% dream** (liquidity OS shippable; not full H3) — see [`VERSIONING.md`](./VERSIONING.md)  
 **Schema:** **v12** (month-close markers · import reminders earlier)  
 **1.0:** Shipped after [`RC_1.0.md`](./RC_1.0.md); 1.0.x polishes money-in honesty and Simple open-rarely.  

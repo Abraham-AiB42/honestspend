@@ -12,7 +12,7 @@
 
 ## 1. Product summary
 
-A local multi-entity financial OS for small business owners: books + liquidity cockpit.
+A local multi-entity HonestSpend for small business owners: books + liquidity cockpit.
 
 | Profile | Role |
 |---------|------|

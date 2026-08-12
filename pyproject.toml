@@ -41,10 +41,6 @@ dev = [
 
 [project.scripts]
 honestspend = "honestspend.cli:main"
-# Legacy CLI entry points (old product names) -> same app
-financial-os = "honestspend.cli:main"
-floatpile = "honestspend.cli:main"
-ledgerring = "honestspend.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

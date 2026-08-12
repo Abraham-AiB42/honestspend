@@ -38,21 +38,21 @@ if ($Uninstall) {
   Remove-LrTask $TaskDigest
   Remove-LrTask $TaskInbox
   # legacy brand task names
-  Remove-LrTask "Floatpile-AutoBackup"
-  Remove-LrTask "Floatpile-Digest"
-  Remove-LrTask "Floatpile-ImportInbox"
-  Remove-LrTask "LedgerRing-AutoBackup"
-  Remove-LrTask "LedgerRing-Digest"
+  Remove-LrTask "HonestSpend-AutoBackup"
+  Remove-LrTask "HonestSpend-Digest"
+  Remove-LrTask "HonestSpend-ImportInbox"
+  Remove-LrTask "HonestSpend-AutoBackup"
+  Remove-LrTask "HonestSpend-Digest"
   Write-Host "Done (uninstalled)."
   exit 0
 }
 
 # Drop prior brand task names when re-registering under HonestSpend
-Remove-LrTask "Floatpile-AutoBackup"
-Remove-LrTask "Floatpile-Digest"
-Remove-LrTask "Floatpile-ImportInbox"
-Remove-LrTask "LedgerRing-AutoBackup"
-Remove-LrTask "LedgerRing-Digest"
+Remove-LrTask "HonestSpend-AutoBackup"
+Remove-LrTask "HonestSpend-Digest"
+Remove-LrTask "HonestSpend-ImportInbox"
+Remove-LrTask "HonestSpend-AutoBackup"
+Remove-LrTask "HonestSpend-Digest"
 
 if (-not (Test-Path $BackupScript)) { throw "Missing $BackupScript" }
 if (-not (Test-Path $DigestScript)) { throw "Missing $DigestScript" }

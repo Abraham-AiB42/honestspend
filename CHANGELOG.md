@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Full HonestSpend rename**: Python package `honestspend` (was `financial_os`); data dir `~/.HonestSpend` (legacy `~/.financial-os` still opens); DB `honestspend.db` (legacy `financial_os.db` still opens); user-facing Floatpile/financial-os strings removed
+- **Full HonestSpend rename**: Python package `honestspend` (was `honestspend`); data dir `~/.HonestSpend` (legacy `~/.HonestSpend` still opens); DB `honestspend.db` (legacy `honestspend.db` still opens); user-facing HonestSpend/HonestSpend strings removed
 - **Setup storage freeze fix**: engine `Stop()` no longer deadlocks WinUI via sync seal; progress status + indeterminate bar while moving books; 45s restart timeout
 
 - **Trust bar (full review follow-through)**:
@@ -422,7 +422,7 @@
 - **Product name:** **HonestSpend**
 - Full rename: docs, CLI (`honestspend`), WinUI `HonestSpend.WinUI`, packaging, tray/tasks
 - Python import path stays `honestspend`; data dir stays `~/.HonestSpend` (FOS_*)
-- Legacy CLI aliases: `HonestSpend`, `ledgerring`, `financial-os`
+- Legacy CLI aliases: `HonestSpend`, `honestspend`, `HonestSpend`
 - See [`docs/BRAND.md`](docs/BRAND.md)
 
 ## 1.0.10 — OFX ledger balance + post-import next steps
@@ -452,12 +452,12 @@
 - Scheduled task **HonestSpend-ImportInbox** (daily 09:00) via register-tasks
 - Filename → account nickname matching; processed CSVs archived
 
-## 1.0.6 — Rename: LedgerRing → HonestSpend (working alpha)
+## 1.0.6 — Rename: HonestSpend → HonestSpend (working alpha)
 
 - **Product name:** **HonestSpend** (working alpha at the time)
 - Full rename: docs, CLI (`HonestSpend`), WinUI project `HonestSpend.WinUI`, packaging, tray/tasks
 - Python import path stays `honestspend`; data dir stays `~/.HonestSpend`
-- Legacy CLI alias `ledgerring` still points at the same entry point
+- Legacy CLI alias `honestspend` still points at the same entry point
 - See [`docs/BRAND.md`](docs/BRAND.md)
 
 ## 1.0.5 — Freeware money-in + customizable import reminders

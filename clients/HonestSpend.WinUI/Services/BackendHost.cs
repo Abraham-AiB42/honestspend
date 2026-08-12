@@ -269,12 +269,16 @@ public sealed class BackendHost : IDisposable
         }
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        foreach (var repo in new[] { "honestspend", "financial-os", "HonestSpend" })
+        foreach (var repo in new[] { "honestspend", "HonestSpend" })
         {
             var known = Path.Combine(home, "source", "repos", repo);
             if (LooksLikeEngine(known))
                 return known;
         }
+        // Also detect current clone path if still named HonestSpend on disk
+        var clone = Path.Combine(home, "source", "repos", "HonestSpend");
+        if (LooksLikeEngine(clone))
+            return clone;
 
         return null;
     }
@@ -287,12 +291,9 @@ public sealed class BackendHost : IDisposable
         var embedPy = Path.Combine(root, "python", "python.exe");
         if (File.Exists(embedPy))
             return true;
-        foreach (var pkg in new[] { "honestspend", "financial_os" })
-        {
-            var src = Path.Combine(root, "src", pkg);
-            if (Directory.Exists(src))
-                return true;
-        }
+        var src = Path.Combine(root, "src", "honestspend");
+        if (Directory.Exists(src))
+            return true;
         // Dev clone with venv
         var venvPy = Path.Combine(root, ".venv", "Scripts", "python.exe");
         return File.Exists(venvPy);

@@ -6,24 +6,13 @@ namespace HonestSpend_WinUI.Services;
 public static class WinUiPaths
 {
     public const string PreferredDataDirName = ".HonestSpend";
-    public const string LegacyDataDirName = ".financial-os";
 
-    /// <summary>
-    /// Default on-disk data folder — always ~/.HonestSpend (never the old financial-os path).
-    /// Legacy books appear as a separate setup choice when that folder still exists.
-    /// </summary>
+    /// <summary>Default on-disk data folder — always ~/.HonestSpend.</summary>
     public static string DefaultLocalDataDir()
     {
         return Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             PreferredDataDirName);
-    }
-
-    public static string LegacyLocalDataDir()
-    {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            LegacyDataDirName);
     }
 
     /// <summary>Default data folder used when AppConfig.DataDir is unset.</summary>
@@ -53,7 +42,6 @@ public static class WinUiPaths
             var pointer = Path.Combine(data, "winui.path");
             File.WriteAllText(pointer, exe);
 
-            // Also next to engine so package layout is self-describing
             var root = BackendHost.ResolveBackendRoot();
             if (root is not null)
             {
@@ -80,7 +68,6 @@ public static class WinUiPaths
         {
             var tag = (pageTag ?? "").Trim().ToLowerInvariant();
             if (string.IsNullOrEmpty(tag)) return;
-            // normalize aliases
             tag = tag switch
             {
                 "sort" or "charges" or "sort-charges" => "review",

@@ -50,8 +50,8 @@ public static class StartupLaunch
             ?? Registry.CurrentUser.CreateSubKey(RunKey);
         key.SetValue(ValueName, cmd);
         // drop prior brand logon keys so only HonestSpend starts
-        key.DeleteValue("Floatpile", throwOnMissingValue: false);
-        key.DeleteValue("LedgerRing", throwOnMissingValue: false);
+        key.DeleteValue("HonestSpend", throwOnMissingValue: false);
+        key.DeleteValue("HonestSpend", throwOnMissingValue: false);
     }
 
     public static void Disable()
@@ -61,8 +61,8 @@ public static class StartupLaunch
             using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
             key?.DeleteValue(ValueName, throwOnMissingValue: false);
             // prior brand logon keys
-            key?.DeleteValue("Floatpile", throwOnMissingValue: false);
-            key?.DeleteValue("LedgerRing", throwOnMissingValue: false);
+            key?.DeleteValue("HonestSpend", throwOnMissingValue: false);
+            key?.DeleteValue("HonestSpend", throwOnMissingValue: false);
         }
         catch
         {

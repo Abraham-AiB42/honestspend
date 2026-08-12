@@ -204,7 +204,7 @@ def suggest_from_llm(
 
     prompt = _build_categorize_prompt(txn, candidates)
     system = (
-        "You categorize bank transactions for a multi-entity financial OS. "
+        "You categorize bank transactions for a multi-entity HonestSpend app. "
         "Reply with JSON only."
     )
     user = json.dumps(prompt)

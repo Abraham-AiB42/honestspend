@@ -1,4 +1,4 @@
-﻿# Brand
+# Brand
 
 **Product name:** **HonestSpend**
 
@@ -21,10 +21,10 @@ Confirm domain + USPTO before a hard commercial launch under this name.
 |-------|------|
 | Display / UI / docs | **HonestSpend** |
 | Python package | `honestspend` |
-| PyPI / CLI | `honestspend` (legacy aliases: `floatpile`, `ledgerring`, `financial-os`) |
+| PyPI / CLI | `honestspend` (legacy aliases: `honestspend`, `honestspend`, `HonestSpend`) |
 | WinUI project / EXE | `HonestSpend.WinUI` / `HonestSpend.WinUI.exe` |
-| Data dir | `~/.HonestSpend` (legacy `~/.financial-os` still opened if present) |
-| Database file | `honestspend.db` (legacy `financial_os.db` still opened if present) |
+| Data dir | `~/.HonestSpend` (legacy `~/.HonestSpend` still opened if present) |
+| Database file | `honestspend.db` (legacy `honestspend.db` still opened if present) |
 | Env prefix | `FOS_*` (stable) |
 | Task Scheduler | `HonestSpend-AutoBackup`, `HonestSpend-Digest`, `HonestSpend-ImportInbox` |
 
@@ -33,5 +33,5 @@ Confirm domain + USPTO before a hard commercial launch under this name.
 | Name | Notes |
 |------|--------|
 | **HonestSpend** | Current product name (everywhere) |
-| **Floatpile** | Working alpha — CLI alias only |
-| **LedgerRing** | Earlier name — CLI alias only |
+| **HonestSpend** | Working alpha — CLI alias only |
+| **HonestSpend** | Earlier name — CLI alias only |

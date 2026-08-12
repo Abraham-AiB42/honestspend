@@ -5,17 +5,12 @@ namespace HonestSpend_WinUI.Services;
 /// <summary>Apply data-folder choice, books-bundle copy, restart engine with FOS_DATA_DIR.</summary>
 public static class StorageLocationService
 {
-    /// <summary>Modern + legacy book file names (copy both so old vaults migrate).</summary>
     private static readonly string[] BundleNames =
     {
         "honestspend.db.sealed",
         "honestspend.db",
         "honestspend.db-wal",
         "honestspend.db-shm",
-        "financial_os.db.sealed",
-        "financial_os.db",
-        "financial_os.db-wal",
-        "financial_os.db-shm",
         "crypto.json",
         "license.json",
     };

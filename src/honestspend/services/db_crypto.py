@@ -54,14 +54,7 @@ def crypto_meta_path() -> Path:
 
 
 def sealed_db_path() -> Path:
-    """Prefer honestspend.db.sealed; open legacy financial_os.db.sealed if that is the vault."""
-    modern = settings.data_dir / "honestspend.db.sealed"
-    legacy = settings.data_dir / "financial_os.db.sealed"
-    if modern.is_file():
-        return modern
-    if legacy.is_file():
-        return legacy
-    return modern
+    return settings.data_dir / "honestspend.db.sealed"
 
 
 def plaintext_db_path() -> Path:

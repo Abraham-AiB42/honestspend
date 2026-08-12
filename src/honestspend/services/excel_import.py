@@ -1,4 +1,4 @@
-"""Import historical Budget.xlsx daily ledger into Financial OS."""
+"""Import historical Budget.xlsx daily ledger into HonestSpend."""
 
 from __future__ import annotations
 
