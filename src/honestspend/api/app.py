@@ -2953,6 +2953,49 @@ def pre_purchase(body: PrePurchaseIn, db: Session = Depends(get_db)):
     )
 
 
+class PrePurchaseCommitIn(BaseModel):
+    amount: Decimal
+    post_account_id: int
+    proposed_account_id: int
+    recommended_account_id: int
+    reward_category: str = "general"
+    promo: dict | None = None
+    category_id: int | None = None
+    payee: str | None = None
+    confirm_unsafe: bool = False
+    commit_key: str | None = None
+    profile_id: int | None = None
+
+
+@app.post("/api/pre-purchase/commit")
+def pre_purchase_commit(body: PrePurchaseCommitIn, db: Session = Depends(get_db)):
+    """I charged it — write charge (+ optional purchase-plan line)."""
+    from honestspend.services.never_neg import WouldGoNegative
+    from honestspend.services.pre_purchase_commit import UnsafePurchase, commit_purchase
+
+    try:
+        return commit_purchase(
+            db,
+            amount=body.amount,
+            post_account_id=body.post_account_id,
+            proposed_account_id=body.proposed_account_id,
+            recommended_account_id=body.recommended_account_id,
+            reward_category=body.reward_category,
+            promo=body.promo,
+            category_id=body.category_id,
+            payee=body.payee,
+            confirm_unsafe=bool(body.confirm_unsafe),
+            commit_key=body.commit_key,
+            profile_id=body.profile_id,
+        )
+    except UnsafePurchase as e:
+        raise HTTPException(status_code=409, detail=e.payload) from e
+    except WouldGoNegative as e:
+        raise HTTPException(status_code=409, detail=e.payload) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 class RescueIn(BaseModel):
     shortfall: Decimal | None = None
     amount: Decimal | None = None
