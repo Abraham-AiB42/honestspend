@@ -65,15 +65,20 @@ def open_promo_totals(
     *,
     as_of: date,
 ) -> tuple[Decimal, Decimal]:
-    """Sum open promo lines: (principal_remaining, monthly_due).
+    """Sum principal_remaining, monthly_due for lines with status=='open' and _line_open(...).
 
+    Pending/declined/inactive never enter next payment.
     monthly_due per line is min(principal_remaining, monthly_payment) so a
     partial final installment is not overstated.
+    NULL status is treated as open (legacy rows).
     """
     lines = list_promo_lines(session, account_id, active_only=True)
     principal = ZERO
     monthly = ZERO
     for line in lines:
+        st = getattr(line, "status", None)
+        if st is not None and st != "open":
+            continue
         if not _line_open(line, as_of):
             continue
         rem = _d(line.principal_remaining)
@@ -216,7 +221,7 @@ def roll_line(
 
 def create_promo_line(
     session: Session,
-    account_id: int,
+    account_id: int | None,
     *,
     name: str,
     principal_remaining: Decimal,
@@ -225,8 +230,21 @@ def create_promo_line(
     end_date: date | None = None,
     source: str = "user",
     active: bool = True,
+    kind: str = "purchase_plan",
+    status: str | None = None,
+    offer_type: str | None = None,
+    fingerprint: str | None = None,
+    linked_txn_id: int | None = None,
+    apr: Decimal | None = None,
 ) -> PromoInstallmentLine:
-    """Insert a promo installment line on a credit account."""
+    """Insert a promo installment line (or pending offer).
+
+    status default: 'pending' if kind=='offer' else 'open'.
+    account_id may be None for kind=offer + offer_type=new_card.
+    """
+    kind_s = (kind or "purchase_plan").strip() or "purchase_plan"
+    if status is None:
+        status = "pending" if kind_s == "offer" else "open"
     row = PromoInstallmentLine(
         account_id=account_id,
         name=(name or "").strip() or "Promo plan",
@@ -236,10 +254,17 @@ def create_promo_line(
         end_date=end_date,
         active=bool(active),
         source=(source or "user").strip() or "user",
+        kind=kind_s,
+        status=status,
+        offer_type=offer_type,
+        fingerprint=fingerprint,
+        linked_txn_id=linked_txn_id,
+        apr=_d(apr) if apr is not None else None,
     )
     session.add(row)
     session.flush()
-    sync_account_promo_balance_from_lines(session, account_id, as_of=start_date)
+    if account_id is not None:
+        sync_account_promo_balance_from_lines(session, account_id, as_of=start_date)
     return row
 
 
@@ -283,6 +308,7 @@ def update_promo_line(
 
 
 def line_to_dict(line: PromoInstallmentLine) -> dict[str, Any]:
+    apr = getattr(line, "apr", None)
     return {
         "id": line.id,
         "account_id": line.account_id,
@@ -293,6 +319,12 @@ def line_to_dict(line: PromoInstallmentLine) -> dict[str, Any]:
         "end_date": line.end_date.isoformat() if line.end_date else None,
         "active": bool(line.active),
         "source": line.source or "user",
+        "kind": getattr(line, "kind", None) or "purchase_plan",
+        "status": getattr(line, "status", None) or "open",
+        "fingerprint": getattr(line, "fingerprint", None),
+        "offer_type": getattr(line, "offer_type", None),
+        "apr": str(apr) if apr is not None else None,
+        "linked_txn_id": getattr(line, "linked_txn_id", None),
     }
 
 

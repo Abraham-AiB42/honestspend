@@ -36,6 +36,35 @@ def _session(tmp_path: Path, monkeypatch):
     return s
 
 
+def _credit(s, *, nickname: str = "Card", balance: str = "1000") -> Account:
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname=nickname,
+        current_balance=Decimal(balance),
+        credit_limit=Decimal("10000"),
+        autopay_policy="statement",
+    )
+    s.add(card)
+    s.flush()
+    return card
+
+
+def test_pending_offer_excluded_from_totals(tmp_path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    create_promo_line(s, card.id, name="Amazon", principal_remaining=Decimal("600"),
+                      monthly_payment=Decimal("50"), start_date=date(2026, 8, 1),
+                      kind="purchase_plan", status="open")
+    create_promo_line(s, card.id, name="Mailer", principal_remaining=Decimal("0"),
+                      monthly_payment=Decimal("0"), start_date=date(2026, 8, 1),
+                      kind="offer", status="pending")
+    prin, monthly = open_promo_totals(s, card.id, as_of=date(2026, 8, 12))
+    assert prin == Decimal("600.00")
+    assert monthly == Decimal("50.00")
+
+
 def test_schema_promo_installment_lines(tmp_path: Path):
     eng = create_engine(f"sqlite:///{(tmp_path / 's.db').as_posix()}")
     init_db(eng)
