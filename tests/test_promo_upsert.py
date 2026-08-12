@@ -1,0 +1,266 @@
+"""Fingerprint upsert + D10 user-vs-incoming promo conflicts."""
+
+from __future__ import annotations
+
+from datetime import date
+from decimal import Decimal
+from pathlib import Path
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from honestspend.config import settings
+from honestspend.db import Account, Profile, PromoConflict, PromoInstallmentLine, init_db
+from honestspend.seed import seed_all
+from honestspend.services.promo_upsert import (
+    list_open_conflicts,
+    promo_fingerprint,
+    resolve_promo_conflict,
+    upsert_promo_term,
+)
+
+
+def _session(tmp_path: Path, monkeypatch):
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    engine = create_engine(f"sqlite:///{(data / 't.db').as_posix()}")
+    init_db(engine)
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    seed_all(s)
+    s.commit()
+    return s
+
+
+def _credit(s, *, nickname: str = "Card", balance: str = "1000") -> Account:
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname=nickname,
+        current_balance=Decimal(balance),
+        credit_limit=Decimal("10000"),
+        autopay_policy="statement",
+    )
+    s.add(card)
+    s.flush()
+    return card
+
+
+def test_promo_fingerprint_purchase_plan_uses_monthly():
+    fp = promo_fingerprint(
+        account_id=7,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        monthly=Decimal("29.01"),
+        end_date=None,
+    )
+    assert fp == "7|purchase_plan|amazon mixmaster|29.01"
+
+
+def test_promo_fingerprint_card_intro_uses_end_and_fallback_name():
+    fp = promo_fingerprint(
+        account_id=3,
+        kind="card_intro",
+        name="",
+        monthly=None,
+        end_date=date(2027, 3, 15),
+    )
+    assert fp == "3|card_intro|__intro__|2027-03-15"
+
+
+def test_statement_creates_new_amazon_line(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    r = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("348.12"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="statement",
+    )
+    s.commit()
+    assert r["created"] is True
+    assert r["conflict"] is None
+    line = r["line"]
+    assert isinstance(line, PromoInstallmentLine)
+    assert line.name == "Amazon Mixmaster"
+    assert line.principal_remaining == Decimal("348.12")
+    assert line.monthly_payment == Decimal("29.01")
+    assert line.source == "statement"
+    assert line.kind == "purchase_plan"
+    assert line.fingerprint == promo_fingerprint(
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        monthly=Decimal("29.01"),
+        end_date=None,
+    )
+    assert s.query(PromoInstallmentLine).count() == 1
+
+
+def test_second_scrape_updates_remaining(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    first = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("348.12"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="statement",
+    )
+    s.flush()
+    line_id = first["line"].id
+    second = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("319.11"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="statement",
+    )
+    s.commit()
+    assert second["created"] is False
+    assert second["conflict"] is None
+    assert second["line"].id == line_id
+    assert second["line"].principal_remaining == Decimal("319.11")
+    assert s.query(PromoInstallmentLine).count() == 1
+    assert s.query(PromoConflict).count() == 0
+
+
+def test_user_line_plus_different_statement_creates_conflict(
+    tmp_path: Path, monkeypatch
+):
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    user = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("400.00"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="user",
+    )
+    s.flush()
+    user_remaining = user["line"].principal_remaining
+    line_id = user["line"].id
+
+    r = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("348.12"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="statement",
+    )
+    s.commit()
+
+    assert r["created"] is False
+    assert r["conflict"] is not None
+    assert r["line"].id == line_id
+    assert r["line"].principal_remaining == user_remaining
+    assert r["line"].principal_remaining == Decimal("400.00")
+    assert s.query(PromoConflict).filter(PromoConflict.resolved_at.is_(None)).count() == 1
+
+    open_c = list_open_conflicts(s, account_id=card.id)
+    assert len(open_c) == 1
+    assert open_c[0]["line_id"] == line_id
+    assert open_c[0]["incoming_source"] == "statement"
+
+
+def test_take_incoming_updates_remaining(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("400.00"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="user",
+    )
+    r = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="purchase_plan",
+        name="Amazon Mixmaster",
+        principal_remaining=Decimal("348.12"),
+        monthly_payment=Decimal("29.01"),
+        start_date=date(2026, 8, 1),
+        end_date=None,
+        source="statement",
+    )
+    s.flush()
+    conflict_id = r["conflict"]["id"]
+
+    line = resolve_promo_conflict(s, conflict_id, action="take_incoming")
+    s.commit()
+
+    assert line.principal_remaining == Decimal("348.12")
+    assert line.source == "statement"
+    conf = s.get(PromoConflict, conflict_id)
+    assert conf is not None
+    assert conf.resolved_at is not None
+    assert list_open_conflicts(s, account_id=card.id) == []
+
+
+def test_plaid_cannot_silent_update_source_statement(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    card = _credit(s)
+    first = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="card_intro",
+        name="Intro 0%",
+        principal_remaining=Decimal("2100.00"),
+        monthly_payment=Decimal("0"),
+        start_date=date(2026, 1, 1),
+        end_date=date(2027, 3, 15),
+        source="statement",
+        apr=Decimal("0"),
+    )
+    s.flush()
+    line_id = first["line"].id
+    remaining_before = first["line"].principal_remaining
+
+    r = upsert_promo_term(
+        s,
+        account_id=card.id,
+        kind="card_intro",
+        name="Intro 0%",
+        principal_remaining=Decimal("1900.00"),
+        monthly_payment=Decimal("0"),
+        start_date=date(2026, 1, 1),
+        end_date=date(2027, 3, 15),
+        source="plaid",
+        apr=Decimal("0"),
+    )
+    s.commit()
+
+    assert r["created"] is False
+    assert r["conflict"] is not None
+    assert r["line"].id == line_id
+    assert r["line"].principal_remaining == remaining_before
+    assert r["line"].source == "statement"
+    assert s.query(PromoConflict).filter(PromoConflict.resolved_at.is_(None)).count() == 1
