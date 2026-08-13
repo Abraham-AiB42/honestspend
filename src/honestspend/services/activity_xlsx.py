@@ -95,38 +95,170 @@ def _header_indexes(row: tuple[Any, ...]) -> dict[str, int] | None:
     return None
 
 
+def _load_openpyxl_sheets(content: bytes) -> list[tuple[str, list[tuple[Any, ...]]]]:
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        out: list[tuple[str, list[tuple[Any, ...]]]] = []
+        for name in wb.sheetnames:
+            rows: list[tuple[Any, ...]] = []
+            for row in wb[name].iter_rows(values_only=True):
+                rows.append(tuple(row))
+                if len(rows) > 8000:
+                    break
+            out.append((name, rows))
+        return out
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+
+def _load_xlrd_sheets(content: bytes) -> list[tuple[str, list[tuple[Any, ...]]]]:
+    import xlrd
+
+    book = xlrd.open_workbook(file_contents=content)
+    out: list[tuple[str, list[tuple[Any, ...]]]] = []
+    for name in book.sheet_names():
+        sh = book.sheet_by_name(name)
+        rows: list[tuple[Any, ...]] = []
+        for r in range(min(sh.nrows, 8000)):
+            cells: list[Any] = []
+            for c in range(sh.ncols):
+                cell = sh.cell(r, c)
+                val: Any = cell.value
+                if cell.ctype == getattr(xlrd, "XL_CELL_DATE", 3):
+                    try:
+                        val = xlrd.xldate_as_datetime(cell.value, book.datemode).date()
+                    except Exception:
+                        pass
+                cells.append(val)
+            rows.append(tuple(cells))
+        out.append((name, rows))
+    return out
+
+
+def _load_html_tables(content: bytes) -> list[tuple[str, list[tuple[Any, ...]]]]:
+    from html.parser import HTMLParser
+
+    class _Tables(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__(convert_charrefs=True)
+            self.tables: list[list[list[str]]] = []
+            self._table: list[list[str]] | None = None
+            self._row: list[str] | None = None
+            self._cell: list[str] | None = None
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            t = tag.lower()
+            if t == "table":
+                self._table = []
+            elif t == "tr" and self._table is not None:
+                self._row = []
+            elif t in ("td", "th") and self._row is not None:
+                self._cell = []
+
+        def handle_endtag(self, tag: str) -> None:
+            t = tag.lower()
+            if t in ("td", "th") and self._cell is not None and self._row is not None:
+                self._row.append("".join(self._cell).strip())
+                self._cell = None
+            elif t == "tr" and self._row is not None and self._table is not None:
+                self._table.append(self._row)
+                self._row = None
+            elif t == "table" and self._table is not None:
+                if any(any(c for c in row) for row in self._table):
+                    self.tables.append(self._table)
+                self._table = None
+
+        def handle_data(self, data: str) -> None:
+            if self._cell is not None:
+                self._cell.append(data)
+
+    raw = content
+    if raw[:2] == b"\xff\xfe":
+        text = raw.decode("utf-16-le", errors="ignore")
+    elif raw[:2] == b"\xfe\xff":
+        text = raw.decode("utf-16-be", errors="ignore")
+    else:
+        text = raw.decode("utf-8", errors="ignore")
+        if "\x00" in text[:200]:
+            text = raw.decode("utf-16-le", errors="ignore")
+    if "<table" not in text.lower() and "<td" not in text.lower():
+        return []
+    parser = _Tables()
+    try:
+        parser.feed(text)
+        parser.close()
+    except Exception:
+        return []
+    out: list[tuple[str, list[tuple[Any, ...]]]] = []
+    for i, table in enumerate(parser.tables):
+        rows = [tuple(r) for r in table[:8000]]
+        name = "Transaction Details" if i == 0 else f"Sheet{i + 1}"
+        blob = " ".join(_cell_str(c) for r in rows[:8] for c in r).lower()
+        if "summary" in blob and "details" not in blob:
+            name = "Transaction Summary"
+        out.append((name, rows))
+    return out
+
+
+def load_workbook_sheets(content: bytes) -> list[tuple[str, list[tuple[Any, ...]]]]:
+    """Load .xlsx, real .xls (BIFF), or HTML-saved-as-xls into named row lists."""
+    if not content:
+        return []
+    # ZIP / xlsx
+    if content[:2] == b"PK":
+        try:
+            return _load_openpyxl_sheets(content)
+        except Exception:
+            pass
+    # OLE compound document (Excel 97–2003)
+    if content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
+        try:
+            return _load_xlrd_sheets(content)
+        except Exception:
+            pass
+    html = _load_html_tables(content)
+    if html:
+        return html
+    try:
+        return _load_openpyxl_sheets(content)
+    except Exception:
+        pass
+    try:
+        return _load_xlrd_sheets(content)
+    except Exception:
+        return []
+
+
 def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict[str, Any] | None:
     """Return one account + rows, or None if this is not an issuer activity book."""
-    try:
-        from openpyxl import load_workbook
-    except ImportError:
-        return None
-    try:
-        wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-    except Exception:
+    sheets = load_workbook_sheets(content)
+    if not sheets:
         return None
 
     try:
-        sheet_names = list(wb.sheetnames)
-        details = None
-        summary = None
-        for name in sheet_names:
+        sheet_names = [n for n, _ in sheets]
+        details_rows: list[tuple[Any, ...]] | None = None
+        summary_rows: list[tuple[Any, ...]] | None = None
+        for name, rows in sheets:
             low = name.lower()
-            if low == "transaction details" or (details is None and "details" in low):
-                details = wb[name]
-            if low == "transaction summary" or (summary is None and "summary" in low):
-                summary = wb[name]
-        if details is None:
-            details = wb[sheet_names[0]]
+            if low == "transaction details" or (details_rows is None and "details" in low):
+                details_rows = rows
+            if low == "transaction summary" or (summary_rows is None and "summary" in low):
+                summary_rows = rows
+        if details_rows is None:
+            details_rows = sheets[0][1]
 
-        raw_rows: list[tuple[Any, ...]] = []
-        for row in details.iter_rows(values_only=True):
-            raw_rows.append(tuple(row))
-            if len(raw_rows) > 8000:
-                break
+        raw_rows = details_rows[:8000]
 
         if not looks_like_activity_xlsx(raw_rows, sheet_names):
-            return None
+            # HTML-as-xls often has no sheet name; header row is enough
+            if not any(_header_indexes(r) for r in raw_rows[:40]):
+                return None
 
         product = ""
         cardholder = ""
@@ -156,12 +288,8 @@ def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict
 
         # Summary sheet: product / mask / ending balance
         ending = None
-        if summary is not None:
-            srows: list[tuple[Any, ...]] = []
-            for row in summary.iter_rows(values_only=True):
-                srows.append(tuple(row))
-                if len(srows) > 40:
-                    break
+        if summary_rows:
+            srows = summary_rows[:40]
             for i, row in enumerate(srows):
                 cells = [_cell_str(c) for c in row]
                 if not product and len(cells) > 1 and "card" in cells[1].lower():
@@ -222,9 +350,10 @@ def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict
                 prod_l,
             )
         )
+        ext = (filename.rsplit(".", 1)[-1] if "." in filename else "xlsx").lower()
         return {
             "ok": True,
-            "file_format": "xlsx",
+            "file_format": "xls" if ext == "xls" else "xlsx",
             "kind": "credit",
             "org": "American Express",
             "product": product or None,
@@ -242,11 +371,8 @@ def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict
             "rows": rows,
             "filename": filename,
         }
-    finally:
-        try:
-            wb.close()
-        except Exception:
-            pass
+    except Exception:
+        return None
 
 
 @dataclass

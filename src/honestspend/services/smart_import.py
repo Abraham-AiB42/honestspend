@@ -1250,7 +1250,7 @@ def analyze_upload(filename: str, content: bytes) -> list[dict[str, Any]]:
         return _analyze_csv_bytes(content, filename)
     if ext == "pdf":
         return _analyze_pdf_bytes(content, filename)
-    if ext == "xlsx":
+    if ext in ("xlsx", "xls"):
         from honestspend.services.activity_xlsx import parse_activity_xlsx
 
         parsed = parse_activity_xlsx(content, filename)
@@ -1276,8 +1276,8 @@ def analyze_upload(filename: str, content: bytes) -> list[dict[str, Any]]:
                 if last4 and last4 not in nick:
                     nick = f"{nick} · …{last4}"[:80]
             rec = {
-                "source_key": f"xlsx:{filename}",
-                "file_format": "xlsx",
+                "source_key": f"{ext}:{filename}",
+                "file_format": ext,
                 "kind": kind,
                 "org": org,
                 "acctid": parsed.get("acctid") or last4,
@@ -1298,8 +1298,8 @@ def analyze_upload(filename: str, content: bytes) -> list[dict[str, Any]]:
             return [enrich_review_fields(rec, filename=filename, raw_text=blob)]
         return [
             {
-                "source_key": f"xlsx:{filename}",
-                "file_format": "xlsx",
+                "source_key": f"{ext}:{filename}",
+                "file_format": ext,
                 "kind": "checking",
                 "suggested_nickname": filename[:50],
                 "suggested_entity_type": "personal",
@@ -1452,7 +1452,7 @@ def _primary_keys(acc: dict[str, Any]) -> set[str]:
 
 def _primary_rank(acc: dict[str, Any]) -> tuple[int, int, int]:
     fmt = (acc.get("file_format") or "").lower()
-    order = {"ofx": 0, "qfx": 0, "csv": 1, "xlsx": 2, "qif": 3, "pdf": 5}
+    order = {"ofx": 0, "qfx": 0, "csv": 1, "xlsx": 2, "xls": 2, "qif": 3, "pdf": 5}
     stmt = 1 if acc.get("is_statement") or fmt == "pdf" else 0
     return (stmt, order.get(fmt, 4), -int(acc.get("transactions_found") or 0))
 
@@ -2044,7 +2044,7 @@ def commit_smart_plan(
             results.append({"filename": fname, "format": "qif", **multi_res})
             continue
 
-        # CSV / PDF / xlsx — single account source per file typically
+        # CSV / PDF / xlsx / xls — single account source per file typically
         for acc in analyzed:
             sk = acc.get("source_key") or f"file:{fname}"
             dec = decisions.get((idx, sk)) or acc
@@ -2193,7 +2193,7 @@ def commit_smart_plan(
                     )
                 except Exception as e:
                     results.append({"filename": fname, "format": "pdf", "error": str(e)[:300]})
-            elif ext == "xlsx":
+            elif ext in ("xlsx", "xls"):
                 try:
                     from honestspend.services.activity_xlsx import (
                         import_activity_xlsx,

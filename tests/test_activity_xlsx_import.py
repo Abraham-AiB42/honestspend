@@ -3,6 +3,7 @@
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from openpyxl import Workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -73,6 +74,73 @@ def test_parse_amex_personal_hilton():
     assert parsed is not None
     assert parsed["suggested_entity_type"] == "personal"
     assert parsed["last4"] == "5223"
+
+
+def _amex_html_xls(*, product: str, mask: str, payees: list[tuple[str, float, str]]) -> bytes:
+    rows = [
+        f"<tr><td>Transaction Details</td><td>{product} / Jul 23, 2026 to Aug 21, 2026</td></tr>",
+        "<tr><td>Prepared for</td></tr>",
+        "<tr><td>JANE SAMPLE</td></tr>",
+        "<tr><td>Account Number</td></tr>",
+        f"<tr><td>{mask}</td></tr>",
+        "<tr><td>Date</td><td>Description</td><td>Amount</td><td>Category</td></tr>",
+    ]
+    for payee, amt, cat in payees:
+        rows.append(f"<tr><td>08/09/2026</td><td>{payee}</td><td>{amt}</td><td>{cat}</td></tr>")
+    html = (
+        "<html><body><table>" + "".join(rows) + "</table></body></html>"
+    )
+    return html.encode("utf-8")
+
+
+def test_parse_amex_html_saved_as_xls():
+    """Bank sites often download Excel as an HTML table with a .xls name."""
+    raw = _amex_html_xls(
+        product="Blue Business Plus Card",
+        mask="XXXX-XXXXXX-44112",
+        payees=[("OFFICE HOSTING CO", 11.86, "Other-Miscellaneous")],
+    )
+    parsed = parse_activity_xlsx(raw, "activity.xls")
+    assert parsed is not None
+    assert parsed["kind"] == "credit"
+    assert parsed["last4"] == "4112"
+    assert parsed["transactions_found"] == 1
+    assert parsed["suggested_entity_type"] == "business"
+
+
+def test_analyze_upload_xls_extension():
+    raw = _amex_html_xls(
+        product="Hilton Honors Surpass Card",
+        mask="XXXX-XXXXXX-55223",
+        payees=[("SAMPLE CAFE", 55.0, "Restaurant-Bar & Café")],
+    )
+    accs = analyze_upload("ofxdownload.xls", raw)
+    assert len(accs) == 1
+    assert accs[0]["kind"] == "credit"
+    assert accs[0].get("last4") == "5223"
+
+
+def test_parse_real_biff_xls_if_xlwt_available():
+    xlwt = pytest.importorskip("xlwt")
+    wb = xlwt.Workbook()
+    details = wb.add_sheet("Transaction Details")
+    details.write(0, 0, "Transaction Details")
+    details.write(0, 1, "Amazon Business Prime Card / Aug 2026")
+    details.write(3, 0, "Account Number")
+    details.write(4, 0, "XXXX-XXXXXX-77889")
+    details.write(6, 0, "Date")
+    details.write(6, 1, "Description")
+    details.write(6, 2, "Amount")
+    details.write(7, 0, "08/09/2026")
+    details.write(7, 1, "AWS HOSTING")
+    details.write(7, 2, 42.5)
+    buf = BytesIO()
+    wb.save(buf)
+    parsed = parse_activity_xlsx(buf.getvalue(), "activity.xls")
+    assert parsed is not None
+    assert parsed["last4"] == "7889"
+    assert parsed["transactions_found"] == 1
+    assert parsed["suggested_entity_type"] == "business"
 
 
 def test_analyze_upload_xlsx_names_card():

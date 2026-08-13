@@ -1028,6 +1028,8 @@ public sealed partial class FirstRunPage : Page
         picker.FileTypeFilter.Add(".ofx");
         picker.FileTypeFilter.Add(".qfx");
         picker.FileTypeFilter.Add(".txt");
+        picker.FileTypeFilter.Add(".xlsx");
+        picker.FileTypeFilter.Add(".xls");
         picker.SuggestedStartLocation = PickerLocationId.Downloads;
         picker.ViewMode = PickerViewMode.List;
         var window = App.MainWindowInstance

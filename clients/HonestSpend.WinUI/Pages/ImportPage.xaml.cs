@@ -329,7 +329,7 @@ public sealed partial class ImportPage : Page
     }
 
     private static readonly string[] AllImportExt =
-        { ".csv", ".txt", ".ofx", ".qfx", ".qif", ".pdf", ".xlsx" };
+        { ".csv", ".txt", ".ofx", ".qfx", ".qif", ".pdf", ".xlsx", ".xls" };
 
     private void ClearPrimaryFileSlots()
     {
@@ -354,6 +354,7 @@ public sealed partial class ImportPage : Page
                 _pdfFile = file;
                 break;
             case ".xlsx":
+            case ".xls":
                 _xlsxFile = file;
                 break;
             default:
@@ -1346,6 +1347,7 @@ public sealed partial class ImportPage : Page
             "ofx" or "qfx" => 0,
             "csv" or "txt" => 1,
             "xlsx" => 2,
+            "xls" => 2,
             "qif" => 3,
             "pdf" => 5,
             _ => 4,
@@ -1676,7 +1678,7 @@ public sealed partial class ImportPage : Page
 
     private async void PickXlsx_Click(object sender, RoutedEventArgs e)
     {
-        var file = await PickFileAsync(new[] { ".xlsx" });
+        var file = await PickFileAsync(new[] { ".xlsx", ".xls" });
         if (file is null) return;
         _xlsxFile = file;
         XlsxPathText.Text = file.Name;
@@ -2265,7 +2267,7 @@ public sealed partial class ImportPage : Page
                 else if (_xlsxFile is not null) files.Add(_xlsxFile);
             }
             if (files.Count == 0)
-                throw new InvalidOperationException("Drop or pick bank file(s) first (CSV, OFX, QFX, QIF, PDF, XLSX).");
+                throw new InvalidOperationException("Drop or pick bank file(s) first (CSV, OFX, QFX, QIF, PDF, XLSX, XLS).");
 
             var allLines = new List<string>();
             JsonElement? lastRes = null;
@@ -2354,7 +2356,7 @@ public sealed partial class ImportPage : Page
                     continue;
                 }
 
-                if (ext is ".xlsx")
+                if (ext is ".xlsx" or ".xls")
                 {
                     using var xStream = await file.OpenStreamForReadAsync();
                     var slug = "personal";

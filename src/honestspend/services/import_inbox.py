@@ -215,7 +215,7 @@ def list_inbox_files() -> list[dict[str, Any]]:
             continue
         if p.name.upper() == "README.TXT":
             continue
-        if p.suffix.lower() not in (".csv", ".txt", ".pdf", ".ofx", ".qfx", ".qif"):
+        if p.suffix.lower() not in (".csv", ".txt", ".pdf", ".ofx", ".qfx", ".qif", ".xlsx", ".xls"):
             continue
         out.append(
             {
