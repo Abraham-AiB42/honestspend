@@ -25,7 +25,8 @@ public sealed partial class ImportPage : Page
     /// <summary>Last smart-import plan JSON (user can tweak combos then commit).</summary>
     private string? _smartPlanJson;
     private readonly List<(string EntityKey, ComboBox TypeBox, TextBox NameBox, Border Card)> _smartEntityRows = new();
-    private readonly List<(int FileIndex, string SourceKey, ComboBox KindBox, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox, Border Card)> _smartAccountRows = new();
+    private readonly List<(int FileIndex, string SourceKey, ComboBox KindBox, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox, Border Card, TextBlock TitleBlock, int CardNum)> _smartAccountRows = new();
+    private readonly Dictionary<int, string> _booksNames = new();
     private readonly List<(int FileIndex, string SourceKey, ComboBox LinkBox)> _statementLinks = new();
     private int _addedBizSeq;
 
@@ -619,6 +620,7 @@ public sealed partial class ImportPage : Page
                 }
                 var plan = await api.SmartImportPlanAsync(streams);
                 _smartPlanJson = plan.GetRawText();
+                await RefreshBooksNamesAsync(api, plan);
                 RenderSmartPlan(plan);
                 SmartPlanPanel.Visibility = Visibility.Visible;
                 PreviewText.Text = JsonUi.Str(plan, "summary") + "\n" + JsonUi.Str(plan, "hint");
@@ -674,6 +676,185 @@ public sealed partial class ImportPage : Page
         {
             var cur = (acc.EntityBox.SelectedItem as ComboBoxItem)?.Tag as string;
             FillEntityBox(acc.EntityBox, cur);
+        }
+    }
+
+    private async Task RefreshBooksNamesAsync(LedgerApiClient api, JsonElement plan)
+    {
+        _booksNames.Clear();
+        if (plan.TryGetProperty("existing_accounts", out var books) && books.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in books.EnumerateArray())
+            {
+                var id = JsonUi.Int(b, "id", 0);
+                if (id > 0)
+                    _booksNames[id] = JsonUi.Str(b, "nickname", $"Account {id}");
+            }
+        }
+        try
+        {
+            var live = await api.GetAccountsAsync();
+            if (live.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var a in live.EnumerateArray())
+            {
+                var id = JsonUi.Int(a, "id", 0);
+                if (id <= 0)
+                    continue;
+                var nick = JsonUi.Str(a, "nickname");
+                if (!string.IsNullOrWhiteSpace(nick))
+                    _booksNames[id] = nick;
+            }
+        }
+        catch
+        {
+            /* plan snapshot is enough */
+        }
+    }
+
+    private void RefreshLiveAccountNames()
+    {
+        foreach (var row in _smartAccountRows)
+        {
+            var name = row.NickBox.Text?.Trim();
+            if (string.IsNullOrEmpty(name))
+                continue;
+            row.TitleBlock.Text = $"{row.CardNum}. {name}";
+            if (row.ActionBox.SelectedItem is ComboBoxItem { Tag: BooksMatchChoice bm })
+                _booksNames[bm.AccountId] = name;
+        }
+
+        foreach (var row in _smartAccountRows)
+        {
+            foreach (var item in row.ActionBox.Items.OfType<ComboBoxItem>())
+            {
+                if (item.Tag is StmtLinkChoice ch && ch.Mode == "attach")
+                {
+                    var tgt = _smartAccountRows.FirstOrDefault(r =>
+                        r.FileIndex == ch.FileIndex && r.SourceKey == ch.SourceKey);
+                    if (tgt.NickBox is null)
+                        continue;
+                    var nm = tgt.NickBox.Text?.Trim();
+                    if (string.IsNullOrEmpty(nm))
+                        continue;
+                    var line = $"Same account as {tgt.CardNum}. {nm}";
+                    if (item.Content is TextBlock tb)
+                        tb.Text = line;
+                    else
+                        item.Content = line;
+                }
+                else if (item.Tag is BooksMatchChoice bm
+                         && _booksNames.TryGetValue(bm.AccountId, out var bname)
+                         && !string.IsNullOrWhiteSpace(bname))
+                {
+                    item.Content = $"Use books: {bname}";
+                    item.Tag = bm with { Nickname = bname };
+                }
+            }
+        }
+    }
+
+    private const string SmartDragPrefix = "hs-smart:";
+
+    private void WireCardDragDrop(Border row, int fi, string sk)
+    {
+        row.CanDrag = true;
+        row.AllowDrop = true;
+        row.DragStarting += (_, e) =>
+        {
+            e.Data.SetText($"{SmartDragPrefix}{fi}\t{sk}");
+            e.Data.RequestedOperation = DataPackageOperation.Move;
+        };
+        row.DragOver += (s, e) =>
+        {
+            if (e.DataView.Contains(StandardDataFormats.StorageItems))
+            {
+                e.AcceptedOperation = DataPackageOperation.Copy;
+                if (e.DragUIOverride is not null)
+                    e.DragUIOverride.Caption = "Add bank file(s)";
+            }
+            else if (e.DataView.Contains(StandardDataFormats.Text))
+            {
+                e.AcceptedOperation = DataPackageOperation.Move;
+                if (e.DragUIOverride is not null)
+                {
+                    e.DragUIOverride.Caption = "Drop to use this account";
+                    e.DragUIOverride.IsCaptionVisible = true;
+                }
+                row.BorderThickness = new Thickness(2);
+            }
+            e.Handled = true;
+        };
+        row.DragLeave += (_, _) => row.BorderThickness = new Thickness(1);
+        row.Drop += async (_, e) =>
+        {
+            row.BorderThickness = new Thickness(1);
+            e.Handled = true;
+            if (e.DataView.Contains(StandardDataFormats.StorageItems))
+            {
+                try
+                {
+                    var items = await e.DataView.GetStorageItemsAsync();
+                    var files = await CollectImportFilesAsync(items);
+                    if (files.Count > 0)
+                    {
+                        QueueFiles(files);
+                        await RunSmartPlanAsync();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ErrorBar.Message = ex.Message;
+                    ErrorBar.IsOpen = true;
+                }
+                return;
+            }
+            if (!e.DataView.Contains(StandardDataFormats.Text))
+                return;
+            var text = await e.DataView.GetTextAsync();
+            if (string.IsNullOrEmpty(text) || !text.StartsWith(SmartDragPrefix, StringComparison.Ordinal))
+                return;
+            var rest = text[SmartDragPrefix.Length..];
+            var parts = rest.Split('\t', 2);
+            if (parts.Length != 2)
+                return;
+            if (!int.TryParse(parts[0], out var srcFi))
+                return;
+            MapCardOnto(srcFi, parts[1], fi, sk);
+        };
+    }
+
+    private void MapCardOnto(int srcFi, string srcSk, int tgtFi, string tgtSk)
+    {
+        if (srcFi == tgtFi && srcSk == tgtSk)
+            return;
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == srcFi && r.SourceKey == srcSk);
+        var tgt = _smartAccountRows.FirstOrDefault(r => r.FileIndex == tgtFi && r.SourceKey == tgtSk);
+        if (src.ActionBox is null || tgt.ActionBox is null)
+            return;
+
+        if (tgt.ActionBox.SelectedItem is ComboBoxItem { Tag: BooksMatchChoice books })
+        {
+            foreach (var item in src.ActionBox.Items.OfType<ComboBoxItem>())
+            {
+                if (item.Tag is BooksMatchChoice bm && bm.AccountId == books.AccountId)
+                {
+                    src.ActionBox.SelectedItem = item;
+                    return;
+                }
+            }
+        }
+
+        foreach (var item in src.ActionBox.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is StmtLinkChoice ch
+                && ch.Mode == "attach"
+                && ch.FileIndex == tgtFi
+                && ch.SourceKey == tgtSk)
+            {
+                src.ActionBox.SelectedItem = item;
+                return;
+            }
         }
     }
 
@@ -739,7 +920,10 @@ public sealed partial class ImportPage : Page
     private void RenderSmartPlan(JsonElement plan)
     {
         SmartPlanSummary.Text = JsonUi.Str(plan, "summary");
-        SmartPlanHint.Text = JsonUi.Str(plan, "hint");
+        var hint = JsonUi.Str(plan, "hint");
+        SmartPlanHint.Text = string.IsNullOrWhiteSpace(hint)
+            ? "Drag one card onto another to map them. Rename an account and the lists update."
+            : hint + " Drag a card onto another to map it. Renames update the lists live.";
         SmartEntitiesPanel.Children.Clear();
         SmartAccountsPanel.Children.Clear();
         _smartEntityRows.Clear();
@@ -944,20 +1128,34 @@ public sealed partial class ImportPage : Page
                     }
                     var canMatch = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number;
                     var matchedId = canMatch ? JsonUi.Int(a, "account_id", 0) : 0;
+                    var listedBooks = new HashSet<int>();
                     if (plan.TryGetProperty("existing_accounts", out var books) && books.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var b in books.EnumerateArray())
                         {
                             var bid = JsonUi.Int(b, "id", 0);
                             if (bid <= 0) continue;
-                            var bnick = JsonUi.Str(b, "nickname", $"Account {bid}");
+                            var bnick = _booksNames.TryGetValue(bid, out var liveNick) && !string.IsNullOrWhiteSpace(liveNick)
+                                ? liveNick
+                                : JsonUi.Str(b, "nickname", $"Account {bid}");
                             var bkind = JsonUi.Str(b, "kind", "");
                             actionBox.Items.Add(new ComboBoxItem
                             {
                                 Content = $"Use books: {bnick}" + (string.IsNullOrEmpty(bkind) ? "" : $" ({bkind})"),
                                 Tag = new BooksMatchChoice(bid, bnick),
                             });
+                            listedBooks.Add(bid);
                         }
+                    }
+                    foreach (var kv in _booksNames)
+                    {
+                        if (listedBooks.Contains(kv.Key) || kv.Key <= 0)
+                            continue;
+                        actionBox.Items.Add(new ComboBoxItem
+                        {
+                            Content = $"Use books: {kv.Value}",
+                            Tag = new BooksMatchChoice(kv.Key, kv.Value),
+                        });
                     }
                     actionBox.Items.Add(new ComboBoxItem
                     {
@@ -987,6 +1185,7 @@ public sealed partial class ImportPage : Page
                         PlaceholderText = "e.g. Chase credit …4521",
                         FontSize = 15,
                     };
+                    nickBox.TextChanged += (_, _) => RefreshLiveAccountNames();
 
                     var stack = new StackPanel { Spacing = 8 };
                     var titleRow = new Grid();
@@ -1031,10 +1230,10 @@ public sealed partial class ImportPage : Page
                     if (LooksLikeStatement(a))
                     {
                         var stmtHint = kind == "loan"
-                            ? "This looks like a loan statement. Use What to do → Same account as… if it belongs with a numbered download."
+                            ? "This looks like a loan statement. Drag it onto the loan card, or pick Use books / Same account as…"
                             : linkTargets.Count > 1
-                                ? "We could not pair this statement automatically. Use What to do → Same account as… and pick the QIF/CSV/OFX card it belongs to."
-                                : "This looks like a statement. Keep it as its own account, or skip it.";
+                                ? "Drag this card onto the matching account, or use What to do → Same account as…"
+                                : "This looks like a statement. Drag it onto the matching account, or skip it.";
                         stack.Children.Add(new TextBlock
                         {
                             Text = stmtHint,
@@ -1169,8 +1368,9 @@ public sealed partial class ImportPage : Page
                         }
                     }
                     row.Child = stack;
+                    WireCardDragDrop(row, fi, sk);
                     SmartAccountsPanel.Children.Add(row);
-                    _smartAccountRows.Add((fi, sk, kindBox, entityBox, actionBox, nickBox, row));
+                    _smartAccountRows.Add((fi, sk, kindBox, entityBox, actionBox, nickBox, row, titleBlock, cardNum));
                 }
             }
         }
