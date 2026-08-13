@@ -62,7 +62,7 @@ def test_apply_statement_promos_amazon_increases_next_payment_by_monthly(
     before = project_card_payment(s, card.id, as_of=as_of)
     assert Decimal(str(before["next_payment"])) == bal
 
-    out = apply_statement_promos(s, card.id, AMAZON_ISB)
+    out = apply_statement_promos(s, card.id, AMAZON_ISB, as_of=as_of)
     s.commit()
 
     assert out["created"] >= 1

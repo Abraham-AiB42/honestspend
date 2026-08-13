@@ -684,7 +684,9 @@ def import_bank_csv(
         try:
             from honestspend.services.cycle_config import apply_credit_cycle_defaults
 
-            apply_credit_cycle_defaults(session, acct, source="import")
+            apply_credit_cycle_defaults(
+                session, acct, source="import", invent_calendar=False
+            )
         except Exception:
             pass
 

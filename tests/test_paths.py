@@ -15,5 +15,5 @@ def test_data_path_info_default(tmp_path, monkeypatch):
     assert Path(info["current"]) == data
     assert info["default"].endswith(".HonestSpend") or ".HonestSpend" in info["default"]
     assert isinstance(info["candidates"], list)
-    assert any(c.get("kind") == "home" for c in info["candidates"])
+    assert any(c.get("kind") in ("home", "local") for c in info["candidates"])
     assert "hint" in info

@@ -211,7 +211,9 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
                 # Fill missing cycle config only; never overwrite cycle_config_source=user
                 from honestspend.services.cycle_config import apply_credit_cycle_defaults
 
-                apply_credit_cycle_defaults(session, existing, source="plaid")
+                apply_credit_cycle_defaults(
+                    session, existing, source="plaid", invent_calendar=False
+                )
             elif current is not None:
                 existing.is_cash_for_ifpp = kind in ("checking", "savings", "cash")
             existing.plaid_item_pk = item.id
@@ -249,7 +251,9 @@ def _sync_accounts(session: Session, item: PlaidItem) -> tuple[list[Account], in
         if kind == "credit":
             from honestspend.services.cycle_config import apply_credit_cycle_defaults
 
-            apply_credit_cycle_defaults(session, row, source="plaid")
+            apply_credit_cycle_defaults(
+                session, row, source="plaid", invent_calendar=False
+            )
             if current is not None and row.id is not None:
                 credit_balance_touched.append(int(row.id))
         out.append(row)
