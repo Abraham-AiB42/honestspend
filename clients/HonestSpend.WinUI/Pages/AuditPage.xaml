@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="900">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />

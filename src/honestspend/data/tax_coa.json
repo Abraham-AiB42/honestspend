@@ -196,7 +196,7 @@
     },
     {
       "code": "BIZ_ADVERTISING",
-      "display_name": "Advertising",
+      "display_name": "Marketing",
       "tax_form": "1120S",
       "tax_line": "16",
       "sch_c_line": "8",
@@ -286,14 +286,25 @@
     },
     {
       "code": "BIZ_OTHER_CONTRACT",
-      "display_name": "Contract labor",
+      "display_name": "Services",
       "tax_form": "1120S",
       "tax_line": "20",
       "sch_c_line": "11",
       "deductibility": "full",
       "budget_group": "ops",
       "other_deduction_detail": true,
-      "notes": "Track for 1099-NEC"
+      "notes": "Contractors / 1099-NEC and other outside services"
+    },
+    {
+      "code": "BIZ_EQUIPMENT",
+      "display_name": "Equipment",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "22",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Tools and equipment you expense now. Large capital purchases may belong on §179 / depreciation."
     },
     {
       "code": "BIZ_OTHER_COMMISSIONS",
@@ -318,7 +329,7 @@
     },
     {
       "code": "BIZ_OTHER_MEALS",
-      "display_name": "Business meals",
+      "display_name": "Meals 50%",
       "tax_form": "1120S",
       "tax_line": "20",
       "sch_c_line": "24b",
@@ -326,7 +337,18 @@
       "partial_rule": "meals_50",
       "budget_group": "ops",
       "other_deduction_detail": true,
-      "notes": "Generally 50% deductible; document business purpose"
+      "notes": "Client / business meals — generally 50% deductible; document business purpose"
+    },
+    {
+      "code": "BIZ_OTHER_MEALS_100",
+      "display_name": "Meals 100%",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "24b",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Company events, employee meals, office food treated as 100% deductible"
     },
     {
       "code": "BIZ_OTHER_VEHICLE",
@@ -492,6 +514,31 @@
       "budget_group": "home",
       "legacy_excel": "Home",
       "notes": "Mortgage interest may be Sch A separately"
+    },
+    {
+      "code": "PER_HOA",
+      "display_name": "HOA / association",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "home"
+    },
+    {
+      "code": "PER_INVEST",
+      "display_name": "Investments / brokerage",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "savings"
+    },
+    {
+      "code": "PER_HEALTHCARE",
+      "display_name": "Pharmacy / health",
+      "tax_form": "none",
+      "tax_line": null,
+      "deductibility": "none",
+      "budget_group": "protection",
+      "notes": "Everyday copays and pharmacy; Sch A medical is separate"
     },
     {
       "code": "PER_UTILITIES",

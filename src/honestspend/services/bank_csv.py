@@ -256,6 +256,19 @@ def _parse_amount(val: str) -> Decimal | None:
     return d
 
 
+def _looks_like_csv_header(line: str) -> bool:
+    """True for Date,Description,Amount — not 'Activity Start Date - 08/13/2024'."""
+    low = (line or "").lower()
+    if re.search(r"date\s*[-:]\s*\d", low):
+        return False
+    has_date = bool(
+        re.search(r"\b(date|posted|trans(?:action)?\s*date|posting\s*date|post\s*date)\b", low)
+    )
+    has_amt = bool(re.search(r"\b(amount|debit|credit|amt)\b", low))
+    has_desc = bool(re.search(r"\b(description|payee|memo|merchant|name)\b", low))
+    return has_date and (has_amt or has_desc)
+
+
 def _detect_dialect(sample: str) -> csv.Dialect:
     try:
         return csv.Sniffer().sniff(sample[:4096], delimiters=",;\t|")
@@ -282,10 +295,9 @@ def preview_bank_csv(
 
     lines = text.splitlines()
     start = 0
-    for i, line in enumerate(lines[:15]):
+    for i, line in enumerate(lines[:20]):
         if "," in line or "\t" in line or ";" in line:
-            low = line.lower()
-            if any(k in low for k in ("date", "amount", "description", "debit", "credit", "payee")):
+            if _looks_like_csv_header(line):
                 start = i
                 break
     body = "\n".join(lines[start:])

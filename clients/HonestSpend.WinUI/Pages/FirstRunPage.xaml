@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="14" MaxWidth="560">
+        <StackPanel x:Name="WizardBody" Spacing="14" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Get started" />
             <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Height="6" />
             <TextBlock x:Name="EngineChip" Opacity="0.65" FontSize="12" TextWrapping="Wrap"

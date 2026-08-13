@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="640">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Add something" />
             <TextBlock Opacity="0.8" TextWrapping="Wrap"
                 Text="Short wizards. No jargon. We'll only ask what we need to keep you safe." />

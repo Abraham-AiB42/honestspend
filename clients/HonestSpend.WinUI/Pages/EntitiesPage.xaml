@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="720">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Entities" />
             <TextBlock Opacity="0.8" TextWrapping="Wrap"
                 Text="Personal is always available. Add Business(es) for company books and Child(ren) for siloed allowance tracking. Each Who has its own Safe to spend by default." />

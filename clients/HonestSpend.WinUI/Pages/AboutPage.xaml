@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="12" MaxWidth="640">
+        <StackPanel Spacing="12" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="HonestSpend" />
             <TextBlock x:Name="VersionText" Opacity="0.8" Text="Connecting…" />
             <TextBlock x:Name="MaturityText" Opacity="0.75" TextWrapping="Wrap"

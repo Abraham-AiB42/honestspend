@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="1000">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -35,7 +35,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Select all" Click="SelectAll_Click" />
                         <Button Content="Clear" Click="ClearSelection_Click" />
-                        <ComboBox x:Name="BulkCatBox" Header="Category" MinWidth="220" PlaceholderText="Pick category" />
+                        <ComboBox x:Name="BulkCatBox" Header="Category" MinWidth="220" PlaceholderText="Pick category" MaxDropDownHeight="320" />
                         <Button Content="Apply to selected" Click="BulkApply_Click"
                                 Style="{StaticResource AccentButtonStyle}" VerticalAlignment="Bottom" />
                     </StackPanel>
@@ -92,7 +92,7 @@
                 <CalendarDatePicker x:Name="DateBox" Header="Date" Grid.Row="1" Grid.Column="0" />
                 <NumberBox x:Name="AmtBox" Header="Amount (+ in / − out)" Grid.Row="1" Grid.Column="1" />
                 <TextBox x:Name="PayeeBox" Header="Payee" Grid.Row="2" Grid.Column="0" />
-                <ComboBox x:Name="CatBox" Header="Category" Grid.Row="2" Grid.Column="1" />
+                <ComboBox x:Name="CatBox" Header="Category" Grid.Row="2" Grid.Column="1" MaxDropDownHeight="320" />
             </Grid>
             <Button Content="Add transaction" Click="Add_Click" Style="{StaticResource AccentButtonStyle}" />
             <StackPanel Orientation="Horizontal" Spacing="8">

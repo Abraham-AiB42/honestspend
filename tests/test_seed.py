@@ -57,8 +57,13 @@ def test_create_business_and_child_coa(tmp_path: Path):
         for c in s.query(Category).filter(Category.profile_id == biz.id).all()
         if "MEALS" in c.code
     ]
-    assert len(meals) == 1
-    assert meals[0].partial_rule == "meals_50"
+    assert len(meals) == 2
+    by_name = {c.display_name: c for c in meals}
+    assert by_name["Meals 50%"].partial_rule == "meals_50"
+    assert by_name["Meals 100%"].display_name == "Meals 100%"
+    assert any(c.display_name == "Equipment" for c in s.query(Category).filter(Category.profile_id == biz.id))
+    assert any(c.display_name == "Marketing" for c in s.query(Category).filter(Category.profile_id == biz.id))
+    assert any(c.display_name == "Services" for c in s.query(Category).filter(Category.profile_id == biz.id))
     assert meals[0].tax_form == "1120S" or meals[0].tax_form
 
     personal = s.query(Profile).filter(Profile.slug == "personal").one()

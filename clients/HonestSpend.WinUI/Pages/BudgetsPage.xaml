@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="720">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -47,7 +47,7 @@
                     BorderThickness="1" CornerRadius="12" Padding="16">
                 <StackPanel Spacing="10">
                     <TextBlock FontWeight="SemiBold" Text="Add / update budget" />
-                    <ComboBox x:Name="CategoryBox" Header="Category" HorizontalAlignment="Stretch" />
+                    <ComboBox x:Name="CategoryBox" Header="Category" HorizontalAlignment="Stretch" MaxDropDownHeight="320" />
                     <ComboBox x:Name="PeriodBox" Header="Period" SelectedIndex="2" HorizontalAlignment="Stretch">
                         <ComboBoxItem Content="Daily (workdays)" Tag="daily" />
                         <ComboBoxItem Content="Weekly" Tag="weekly" />

@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="800">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -57,7 +57,7 @@
                 <ComboBoxItem Content="Exact match" Tag="exact" />
                 <ComboBoxItem Content="Regex (advanced)" Tag="regex" />
             </ComboBox>
-            <ComboBox x:Name="CatBox" Header="Assign category" HorizontalAlignment="Stretch" />
+            <ComboBox x:Name="CatBox" Header="Assign category" HorizontalAlignment="Stretch" MaxDropDownHeight="320" />
             <NumberBox x:Name="PriorityBox" Header="Priority (higher wins if two match)" Value="100" />
             <CheckBox x:Name="TransferBox" Content="Treat as transfer (not spend)" />
             <StackPanel Orientation="Horizontal" Spacing="8">

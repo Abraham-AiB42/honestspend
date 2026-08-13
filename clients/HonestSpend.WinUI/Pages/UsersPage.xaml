@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="720">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Users &amp; API keys" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
                 Text="Local multi-role access. No key = desktop owner. Tokens send as X-API-Key." />

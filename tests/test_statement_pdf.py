@@ -39,6 +39,27 @@ def test_parse_skips_headers():
     assert rows == []
 
 
+def test_parse_skips_promo_apr_table_lines():
+    text = """
+    Account Activity 2026
+    08/01/2026 HOME DEPOT #1234              -$84.22
+    PROMOTIONAL RATE EXPIRES 08/07/26 0.00% $0.00 30 $0.00 $93.15
+    PROMOTIONAL RATE EXPIRES 05/07/27 0.00% $0.00 30 $0.00 $8,189.34
+    You must pay your promotional balance of $7,286.92 in full by 04/02/27 to avoid paying deferred interest charges.
+    You must pay your promotional balance of $261.00 in full by 06/02/27 to avoid paying deferred interest charges.
+    Equal Pay Promo 0.00% (d) 07/15/26 $80.00
+    08/03/2026 PAYMENT THANK YOU             $200.00
+    """
+    rows = parse_statement_lines(text)
+    payees = " ".join(r["payee"].lower() for r in rows)
+    assert "home depot" in payees
+    assert "payment" in payees
+    assert not any("0.00%" in r["payee"] for r in rows)
+    assert not any("deferred" in r["payee"].lower() for r in rows)
+    assert not any("equal pay" in r["payee"].lower() for r in rows)
+    assert not any(abs(float(r["amount"])) in (93.15, 8189.34, 7286.92, 261.0, 80.0) for r in rows)
+
+
 def test_parse_statement_ending_balance_prefers_new():
     text = """
     Previous Balance $1,000.00

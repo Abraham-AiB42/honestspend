@@ -34,6 +34,8 @@ def _apply_partial(amount: Decimal, rule: str | None) -> Decimal:
     spend = -amount if amount < 0 else amount
     if rule == "meals_50":
         return spend * Decimal("0.5")
+    if rule == "meals_100":
+        return spend
     if rule == "medical_agi_75":
         # Full tracked; AGI floor applied at tax time
         return spend

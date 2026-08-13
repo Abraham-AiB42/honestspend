@@ -82,7 +82,7 @@ _PERSONAL_CATEGORY = re.compile(
 )
 _CREDIT_FILE_HINT = re.compile(
     r"\b("
-    r"card|visa|amex|american\s*express|mastercard|\bmc\b|"
+    r"card|creditcard|visa|amex|american\s*express|mastercard|\bmc\b|"
     r"discover|credit|ccard|sapphire|freedom|reserve|"
     r"surpass|hilton\s*honors|activity_\d{8}|_activity_"
     r")\b",
@@ -274,6 +274,10 @@ def guess_account_kind(
         return "credit"
     if product and re.search(r"\bcard\b", product, re.I) and not re.search(r"\bloan\b", product, re.I):
         return "credit"
+    if re.search(r"\bloan\s+account\b|personal\s+loan|discover\s+loan", blob, re.I) and not re.search(
+        r"\b(credit\s*card|discover\s+it)\b", blob, re.I
+    ):
+        return "loan"
     if _LOAN_FILE_HINT.search(filename) or re.search(
         r"vehicle\s+description|motor\s+finance|lease\s+term|\bvin\s+number\b|"
         r"hyundai\s+motor|toyota\s+financial|principal\s+balance",
@@ -340,6 +344,8 @@ _BANK_ALIASES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(_B + r"(apple\s*card)" + _E, re.I), "Apple Card"),
     (re.compile(_B + r"(home\s*depot|homedepot)" + _E, re.I), "Home Depot"),
     (re.compile(_B + r"(target\s*circle|target\s*card|target\s+mastercard|target)" + _E, re.I), "Target"),
+    (re.compile(_B + r"(scheels)" + _E, re.I), "Scheels"),
+    (re.compile(_B + r"(fnbo|first\s+national\s+bank\s+of\s+omaha)" + _E, re.I), "FNBO"),
 ]
 
 # Store / product brand — what people actually call the card (before the issuing bank)
@@ -356,6 +362,7 @@ _CARD_BRANDS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"sapphire", re.I), "Chase Sapphire"),
     (re.compile(r"ink\s+business", re.I), "Chase Ink"),
     (re.compile(r"apple\s+card", re.I), "Apple Card"),
+    (re.compile(r"scheels", re.I), "Scheels"),
 ]
 
 _LOAN_HINTS: list[tuple[re.Pattern[str], str, str | None]] = [
@@ -366,6 +373,7 @@ _LOAN_HINTS: list[tuple[re.Pattern[str], str, str | None]] = [
     (re.compile(r"honda\s+financial", re.I), "Car loan", "Honda"),
     (re.compile(r"ford\s+credit", re.I), "Car loan", "Ford"),
     (re.compile(r"gm\s+financial|chevrolet", re.I), "Car loan", "GM"),
+    (re.compile(r"discover\s+personal\s+loans|discover\s+loan\s+account|personal\s+loan\s+account", re.I), "Personal loan", "Discover"),
     (re.compile(r"student\s+loan|nelnet|aidvantage|great\s+lakes|mohela", re.I), "Student loan", None),
     (re.compile(r"auto\s+loan|motor\s+finance", re.I), "Car loan", None),
 ]
@@ -549,7 +557,17 @@ def match_tails_from_acctid(acctid: str | None) -> list[str]:
 
 def last4_from_text(*blobs: str | None) -> str | None:
     """Pick a plausible account last-4 from filename / statement text."""
-    text = " ".join(b for b in blobs if b)
+    named = [b for b in blobs if b]
+    # Filename first so Discover-Statement-20260728-3065.pdf still yields 3065
+    # when the PDF body is concatenated after it.
+    for blob in named:
+        hit = _last4_from_one_blob(blob)
+        if hit:
+            return hit
+    return _last4_from_one_blob(" ".join(named)) if named else None
+
+
+def _last4_from_one_blob(text: str) -> str | None:
     if not text:
         return None
     # Prefer explicit masks: ****1234, Account Ending 6-44112, XXXXXX3333
@@ -562,7 +580,8 @@ def last4_from_text(*blobs: str | None) -> str | None:
         r"statements-(\d{4})",
         r"(?:\*{2,}|x{2,}|…|\.{2,}|ending\s*(?:in)?\s*)(\d{4,5})\b",
         r"X{2,}[\s\-X]*(\d{4,5})\b",
-        r"(?:chase|citi|discover|amex|capitalone)[_-]?(\d{4})(?:[^0-9]|$)",
+        r"(?:chase|citi|discover|amex|capitalone|scheels|fnbo|signature)[_-]?(\d{4})(?:[^0-9]|$)",
+        r"scheels[^\d]{0,40}(\d{4})\b",
         r"(?:acct(?:ount)?|card\s*(?:ending|#|no\.?|number))\D{0,12}(\d{4})\b",
         r"(?:^|[\s:M])(\d{4}):\s+[A-Za-z]",
         r"(?:^|[_-])(\d{4})[_-](?:activity|transactions|allavailable)",
@@ -719,13 +738,12 @@ def enrich_review_fields(
     if look_loan:
         loan_label = loan_label or gl
         loan_detail = loan_detail or gd
-        if loan_label or file_says_loan:
-            if kind not in ("checking", "savings") or file_says_loan:
-                kind = "loan"
-                acc["kind"] = "loan"
-            elif loan_label and kind in ("checking", "savings") and not acc.get("loan_label"):
-                # A checking register that pays a mortgage is not itself a home loan
-                loan_label, loan_detail = None, None
+        if file_says_loan or kind == "loan":
+            kind = "loan"
+            acc["kind"] = "loan"
+        elif loan_label:
+            # A card statement that mentions a mortgage/auto product is not itself a loan
+            loan_label, loan_detail = None, None
     owners = []
     if not txn_export:
         owners = extract_owner_names(header, product, acc.get("owner_name") or "")
@@ -1051,8 +1069,21 @@ def _analyze_csv_bytes(content: bytes, filename: str) -> list[dict[str, Any]]:
     # Category + Card columns often exist but aren't in the tiny preview sample
     for m in re.finditer(r"(?i)(?:office\s*&\s*shipping|professional\s*services|restaurants?|gasoline|shopping|entertainment)", raw_snip):
         categories.append(m.group(0))
-    kind = guess_account_kind(filename=filename, raw_text=raw_snip, headers=headers)
-    bank = guess_bank_label(filename, raw_snip)
+    header = _account_header_text(raw_snip)
+    kind = guess_account_kind(filename=filename, raw_text=header, headers=headers)
+    bank = guess_bank_label(filename, header)
+    if not bank:
+        for p in payees[:4]:
+            if not p or re.search(r"payment to|from share|transfer", str(p), re.I):
+                continue
+            hit = guess_bank_label(str(p))
+            if hit:
+                bank = hit
+                break
+    if _infer_credit_union(raw_snip) and not re.search(r"loan\s+account", header, re.I):
+        bank = bank or "Credit union"
+        if kind in ("credit", "loan"):
+            kind = "checking"
     cls = classify_account_source(
         filename=filename,
         kind=kind,
@@ -1062,7 +1093,7 @@ def _analyze_csv_bytes(content: bytes, filename: str) -> list[dict[str, Any]]:
     )
     stem = re.sub(r"\.[^.]+$", "", filename)
     stem = re.sub(r"[_\-]+", " ", stem).strip()[:50]
-    last4 = last4_from_text(filename, raw_snip)
+    last4 = _last4_from_csv_preview(headers, sample) or last4_from_text(filename, header)
     nick = _nickname(bank or "Bank", kind, last4) if (bank or last4) else (stem or _nickname(None, kind, None))
     d0 = min(dates) if dates else None
     d1 = max(dates) if dates else None
@@ -1402,12 +1433,85 @@ def analyze_upload(filename: str, content: bytes) -> list[dict[str, Any]]:
     ]
 
 
+_ACTIVITY_FMTS = frozenset({"csv", "txt", "ofx", "qfx", "qif", "xlsx", "xls"})
+
+
 def _is_statement_acc(acc: dict[str, Any], filename: str = "") -> bool:
-    if acc.get("is_statement"):
-        return True
-    if (acc.get("file_format") or "").lower() == "pdf":
+    """PDF / thin statement files vs activity exports (even if the bank named them 'statement')."""
+    fmt = (acc.get("file_format") or "").lower()
+    n = int(acc.get("transactions_found") or 0)
+    if fmt in _ACTIVITY_FMTS and n >= 8:
+        return False
+    if fmt == "pdf" and n >= 4 and _looks_like_activity_pdf(filename or "", acc):
+        return False
+    if fmt == "pdf" or acc.get("is_statement"):
         return True
     return bool(re.search(r"statement", filename or "", re.I))
+
+
+def _looks_like_activity_pdf(filename: str, acc: dict[str, Any]) -> bool:
+    blob = " ".join(
+        x
+        for x in (
+            filename,
+            acc.get("human_title") or "",
+            acc.get("preview_hint") or "",
+        )
+        if x
+    )
+    return bool(
+        re.search(
+            r"transaction site|account details|recent transactions|download transactions",
+            blob,
+            re.I,
+        )
+    )
+
+
+def _kinds_compatible(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    ka = (a.get("kind") or "").lower() or "checking"
+    kb = (b.get("kind") or "").lower() or "checking"
+    return ka == kb
+
+
+def _account_header_text(raw: str, *, max_lines: int = 16) -> str:
+    """Identity lines only — stop at the first dated register row."""
+    lines: list[str] = []
+    for line in (raw or "").splitlines():
+        head = line[:80]
+        if (
+            re.match(r"^\s*[\d\"]", line)
+            and re.search(r"\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2}", head)
+            and not re.search(r"activity|statement\s+period|prepared|start date|end date", line, re.I)
+        ):
+            break
+        lines.append(line)
+        if len(lines) >= max_lines:
+            break
+    return "\n".join(lines)
+
+
+def _last4_from_csv_preview(headers: list[str], sample: list[Any]) -> str | None:
+    idx = None
+    for i, h in enumerate(headers or []):
+        if re.search(r"card\s*(no\.?|num|number|#)|last\s*4", str(h), re.I):
+            idx = i
+            break
+    if idx is None:
+        return None
+    tails: list[str] = []
+    for row in sample or []:
+        if not isinstance(row, dict):
+            continue
+        raw = row.get("raw")
+        if not isinstance(raw, list) or idx >= len(raw):
+            continue
+        digits = re.sub(r"\D", "", str(raw[idx] or ""))
+        if len(digits) >= 4:
+            tails.append(digits[-4:])
+    if not tails:
+        return None
+    return max(set(tails), key=tails.count)
 
 
 _BRAND_FAMILIES = (
@@ -1416,8 +1520,10 @@ _BRAND_FAMILIES = (
     frozenset({"td bank", "target"}),
     frozenset({"chase", "prime visa", "chase freedom", "chase sapphire", "chase ink"}),
     frozenset({"wells fargo", "wells fargo reflect"}),
-    frozenset({"capital one", "discover"}),
+    frozenset({"capital one"}),
+    frozenset({"discover"}),
     frozenset({"canvas credit union", "credit union"}),
+    frozenset({"scheels", "fnbo", "first national bank of omaha"}),
 )
 
 
@@ -1425,7 +1531,7 @@ def _banks_compatible(a: dict[str, Any], b: dict[str, Any]) -> bool:
     ba = (a.get("brand") or a.get("bank_label") or a.get("org") or "").strip().lower()
     bb = (b.get("brand") or b.get("bank_label") or b.get("org") or "").strip().lower()
     if not ba or not bb:
-        return True
+        return False
     if ba == bb or ba in bb or bb in ba:
         return True
     for fam in _BRAND_FAMILIES:
@@ -1470,17 +1576,49 @@ def _fp_cores(acc: dict[str, Any]) -> set[str]:
     return keys
 
 
+def _statement_year(text: str) -> str | None:
+    m = re.search(
+        r"statement\s+period\s+\d{1,2}/\d{1,2}/(\d{2,4})",
+        text or "",
+        re.I,
+    )
+    if m:
+        y = m.group(1)
+        return y if len(y) == 4 else f"20{y}"
+    m = re.search(r"\b(20\d{2})\s+totals\s+year-to-date\b", text or "", re.I)
+    if m:
+        return m.group(1)
+    return None
+
+
 def _fingerprints_from_text(text: str) -> list[str]:
     """Pull date+amount pairs even when Discover puts the amount a few lines later."""
     if not text:
         return []
-    lines = text.splitlines()
-    date_re = re.compile(r"\b(\d{1,2}/\d{1,2}/\d{2,4})\b")
+    year = _statement_year(text)
+    body = text
+    cut = re.search(r"\n\s*Transactions\b", text, re.I)
+    if cut:
+        body = text[cut.start() :]
+    lines = body.splitlines()
+    date_re = re.compile(r"\b(\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4}|\d{1,2}/\d{1,2})\b")
     out: list[str] = []
     for i, line in enumerate(lines):
+        if re.search(
+            r"total payments for this period|interest charge calculation|"
+            r"totals year-to-date|promotional rate expires",
+            line,
+            re.I,
+        ):
+            break
         ds = date_re.findall(line)
         if not ds:
             continue
+        raw_date = ds[0]
+        if re.fullmatch(r"\d{1,2}/\d{1,2}", raw_date):
+            if not year:
+                continue
+            raw_date = f"{raw_date}/{year}"
         amts = _AMT_TOKEN.findall(line)
         if not amts:
             for j in range(i + 1, min(i + 5, len(lines))):
@@ -1491,11 +1629,38 @@ def _fingerprints_from_text(text: str) -> list[str]:
                     break
         if not amts:
             continue
-        payee = re.sub(r"\d{1,2}/\d{1,2}/\d{2,4}", " ", line)
-        fp = _txn_fingerprint(ds[0], amts[-1], payee)
+        if re.sub(r"[^\d]", "", amts[-1]) in ("000", "0"):
+            continue
+        payee = date_re.sub(" ", line)
+        fp = _txn_fingerprint(raw_date, amts[-1], payee)
         if fp:
             out.append(fp)
     return out
+
+
+def _ordered_date_amounts(acc: dict[str, Any]) -> list[str]:
+    """Document-order date|cents pairs (first line items first)."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for x in acc.get("txn_fps") or []:
+        parts = str(x).split("|")
+        if len(parts) < 2 or not parts[0] or not parts[1]:
+            continue
+        key = f"{parts[0]}|{parts[1]}"
+        if key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+    return keys
+
+
+def _head_line_item_hits(probe: dict[str, Any], pool: dict[str, Any], *, head: int = 4) -> int:
+    """How many of probe's first date→amount line items appear in pool."""
+    lead = _ordered_date_amounts(probe)[:head]
+    if not lead:
+        return 0
+    target = set(_ordered_date_amounts(pool))
+    return sum(1 for k in lead if k in target)
 
 
 def _fingerprints_from_rows(rows: list[Any] | None) -> list[str]:
@@ -1538,7 +1703,7 @@ def _primary_rank(acc: dict[str, Any]) -> tuple[int, int, int]:
 
 
 def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
-    """Attach statements to the matching activity file in this batch (same last-4).
+    """Attach statements to the matching activity file (first line items, then last-4).
 
     Mutates account dicts: action=attach, attach_to_*, what_we_will_do, attachments.
     Does not merge two live accounts that only share a member number.
@@ -1568,7 +1733,7 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
         if ri != rj:
             parent[rj] = ri
 
-    # Duplicate activity files (same last-4, compatible bank)
+    # Duplicate activity files (same last-4, compatible bank + kind)
     by_l4: dict[str, list[int]] = {}
     for i in primaries:
         l4 = refs[i]["acc"].get("last4")
@@ -1576,19 +1741,58 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
             by_l4.setdefault(str(l4), []).append(i)
     for idxs in by_l4.values():
         for j in idxs[1:]:
-            if _banks_compatible(refs[idxs[0]]["acc"], refs[j]["acc"]):
+            if _banks_compatible(refs[idxs[0]]["acc"], refs[j]["acc"]) and _kinds_compatible(
+                refs[idxs[0]]["acc"], refs[j]["acc"]
+            ):
                 union(idxs[0], j)
 
-    # Overlapping posted transactions (Discover activity PDF ↔ Discover CSV)
+    def _copy_last4(si: int, pi: int) -> None:
+        lead = refs[pi]["acc"]
+        stmt = refs[si]["acc"]
+        if stmt.get("last4") and not lead.get("last4"):
+            lead["last4"] = stmt["last4"]
+            lead["suggested_nickname"] = friendly_account_name(
+                brand=lead.get("brand") or stmt.get("brand") or lead.get("bank_label"),
+                bank=lead.get("bank_label") or stmt.get("bank_label"),
+                kind=lead.get("kind") or stmt.get("kind") or "credit",
+                last4=stmt["last4"],
+            )
+            lead["human_title"] = lead["suggested_nickname"]
+
+    # First 3–4 statement line items (date → amount) against each activity file
     for si in statements:
-        sfps = _fp_cores(refs[si]["acc"])
-        if len(sfps) < 1:
+        stmt = refs[si]["acc"]
+        head = _ordered_date_amounts(stmt)[:4]
+        need = 2 if len(head) >= 2 else (1 if len(head) == 1 else 0)
+        if need == 0:
             continue
         hit_roots: list[int] = []
+        best = 0
+        for i in primaries:
+            hits = _head_line_item_hits(stmt, refs[i]["acc"], head=4)
+            if hits < need:
+                continue
+            root = find(i)
+            if hits > best:
+                best = hits
+                hit_roots = [root]
+            elif hits == best and root not in hit_roots:
+                hit_roots.append(root)
+        if len(hit_roots) == 1:
+            union(si, hit_roots[0])
+            _copy_last4(si, hit_roots[0])
+
+    # Broader fingerprint overlap if the head pass did not unique-match
+    for si in statements:
+        if find(si) != si:
+            continue
+        sfps = _fp_cores(refs[si]["acc"])
+        if len(sfps) < 2:
+            continue
+        hit_roots = []
         for i in primaries:
             overlap = sfps & _fp_cores(refs[i]["acc"])
-            need = 2 if len(sfps) >= 2 else 1
-            if len(overlap) < need:
+            if len(overlap) < 2:
                 continue
             if not _banks_compatible(refs[si]["acc"], refs[i]["acc"]):
                 continue
@@ -1597,37 +1801,43 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
                 hit_roots.append(root)
         if len(hit_roots) == 1:
             union(si, hit_roots[0])
-            lead = refs[hit_roots[0]]["acc"]
-            stmt = refs[si]["acc"]
-            if stmt.get("last4") and not lead.get("last4"):
-                lead["last4"] = stmt["last4"]
-                lead["suggested_nickname"] = friendly_account_name(
-                    brand=lead.get("brand") or stmt.get("brand") or lead.get("bank_label") or "Discover",
-                    bank=lead.get("bank_label") or stmt.get("bank_label"),
-                    kind=lead.get("kind") or "credit",
-                    last4=stmt["last4"],
-                )
-                lead["human_title"] = lead["suggested_nickname"]
+            _copy_last4(si, hit_roots[0])
 
-    # Each statement attaches only if it uniquely matches one primary group
+    # Last-4 backup — prefer the account's own last-4, not a shared member number
     for si in statements:
+        if find(si) != si:
+            continue
         sl4 = refs[si]["acc"].get("last4")
         if not sl4:
             continue
         sl4 = str(sl4)
-        hit_bank: list[int] = []
-        hit_any: list[int] = []
+        own: list[int] = []
+        via_tail: list[int] = []
         for i in primaries:
-            if sl4 not in _primary_keys(refs[i]["acc"]):
-                continue
+            acc = refs[i]["acc"]
             root = find(i)
-            if root not in hit_any:
-                hit_any.append(root)
-            if _banks_compatible(refs[si]["acc"], refs[i]["acc"]) and root not in hit_bank:
-                hit_bank.append(root)
-        hit_roots = hit_bank if len(hit_bank) == 1 else hit_any
-        if len(hit_roots) == 1:
-            union(si, hit_roots[0])
+            if str(acc.get("last4") or "") == sl4:
+                if root not in own:
+                    own.append(root)
+            elif sl4 in {str(t) for t in (acc.get("match_tails") or []) if t}:
+                if root not in via_tail:
+                    via_tail.append(root)
+        if len(own) == 1:
+            oi = own[0]
+            if _kinds_compatible(refs[si]["acc"], refs[oi]["acc"]):
+                union(si, oi)
+        elif len(own) > 1:
+            kind_hits = [
+                i
+                for i in own
+                if _kinds_compatible(refs[si]["acc"], refs[i]["acc"])
+                and _banks_compatible(refs[si]["acc"], refs[i]["acc"])
+            ]
+            if len(kind_hits) == 1:
+                union(si, kind_hits[0])
+        # Shared member-number tails (8888 on every CU share) stay unmatched
+        elif len(via_tail) == 1:
+            union(si, via_tail[0])
 
     groups: dict[int, list[int]] = {}
     for i in range(len(refs)):

@@ -7,8 +7,9 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <ScrollViewer x:Name="PageScroller" Padding="24" ViewChanged="PageScroller_ViewChanged">
-        <StackPanel Spacing="20" MaxWidth="1280">
+    <Grid>
+    <ScrollViewer x:Name="PageScroller" Padding="24">
+        <StackPanel Spacing="20" HorizontalAlignment="Stretch">
             <StackPanel Spacing="4">
                 <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Import bank files" />
                 <TextBlock Opacity="0.85" TextWrapping="Wrap"
@@ -59,12 +60,6 @@
                             <TextBlock FontWeight="SemiBold" Text="We read your files — confirm once" />
                             <TextBlock x:Name="SmartPlanSummary" Opacity="0.9" TextWrapping="Wrap" />
                             <TextBlock x:Name="SmartPlanHint" Opacity="0.7" FontSize="12" TextWrapping="Wrap" />
-                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
-                                <Button Content="Looks good — import everything"
-                                        Click="SmartImportCommit_Click"
-                                        Style="{StaticResource AccentButtonStyle}" />
-                                <Button Content="Re-analyze files" Click="SmartImportPlan_Click" />
-                            </StackPanel>
                             <TextBlock x:Name="SmartEntitiesHeader" FontWeight="SemiBold"
                                        Text="Who owns this money? (only change if wrong)" Margin="0,8,0,0" />
                             <StackPanel x:Name="SmartEntitiesPanel" Spacing="8" />
@@ -72,46 +67,16 @@
                                     Click="AddBusiness_Click" HorizontalAlignment="Left" />
                             <TextBlock FontWeight="SemiBold" Text="What we found in each file" Margin="0,8,0,0" />
                             <TextBlock Opacity="0.85" FontSize="13" TextWrapping="Wrap"
-                                Text="Each numbered card is one account. Tap Merge on a card — it parks on the right. Scroll until it sits next to the account it belongs with, then Complete merge." />
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel x:Name="SmartAccountsPanel" Spacing="10" Grid.Column="0" />
-                                <Border x:Name="MergeDock"
-                                        Grid.Column="1"
-                                        Width="360"
-                                        Margin="16,0,0,0"
-                                        Visibility="Collapsed"
-                                        VerticalAlignment="Top"
-                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
-                                        BorderThickness="2"
-                                        CornerRadius="12"
-                                        Padding="12">
-                                    <StackPanel Spacing="8">
-                                        <TextBlock FontWeight="SemiBold" TextWrapping="Wrap"
-                                                   Text="Merging this account" />
-                                        <TextBlock x:Name="MergeDockHint" Opacity="0.8" FontSize="12" TextWrapping="Wrap"
-                                                   Text="Scroll the list so the matching card lines up beside this one." />
-                                        <Border x:Name="MergeDockCardHost" />
-                                        <TextBlock x:Name="MergeAlignLabel" Opacity="0.9" TextWrapping="Wrap" />
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <Button x:Name="CompleteMergeBtn" Content="Complete merge"
-                                                    Click="CompleteMerge_Click"
-                                                    Style="{StaticResource AccentButtonStyle}"
-                                                    IsEnabled="False" />
-                                            <Button Content="Cancel" Click="CancelMerge_Click" />
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
-                            </Grid>
-                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                                Text="Each numbered card is one account. Tap Merge on the one to fold in — it stays on the right. Scroll to the matching account and tap Merge here." />
+                            <TextBlock Opacity="0.75" FontSize="12" TextWrapping="Wrap"
+                                Text="Transaction lists are often newer than the statement. We match the statement’s first few date + amount line items inside the list — extra recent charges on the list are expected." />
+                            <StackPanel x:Name="SmartAccountsPanel" Spacing="10" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                                 <Button Content="Looks good — import everything"
                                         Click="SmartImportCommit_Click"
                                         Style="{StaticResource AccentButtonStyle}" />
-                                <Button Content="Re-analyze files" Click="SmartImportPlan_Click" />
+                                <Button Content="Import these + attach more"
+                                        Click="SmartImportThenMore_Click" />
                             </StackPanel>
                         </StackPanel>
                     </Border>
@@ -122,10 +87,10 @@
                         <StackPanel Spacing="2">
                             <TextBlock x:Name="AnalyzeBusyTitle" FontWeight="SemiBold" Text="Analyzing files…" />
                             <TextBlock x:Name="AnalyzeBusyDetail" Opacity="0.75" FontSize="12" TextWrapping="Wrap"
-                                       Text="Reading downloads and matching statements to transaction lists." />
+                                       Text="Reading downloads and matching statements to transaction lists. Lists may include newer charges than the statement — that’s expected." />
                         </StackPanel>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel x:Name="PreMapActions" Orientation="Horizontal" Spacing="8">
                         <Button x:Name="AnalyzeMapBtn" Content="Analyze &amp; map (recommended)" Click="SmartImportPlan_Click"
                                 Style="{StaticResource AccentButtonStyle}" />
                         <Button x:Name="PreviewOnlyBtn" Content="Preview only" Click="PreviewCsv_Click" />
@@ -265,4 +230,26 @@
             <InfoBar x:Name="ErrorBar" IsClosable="True" IsOpen="False" Severity="Error" />
         </StackPanel>
     </ScrollViewer>
+    <Border x:Name="MergeDock"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            Width="380"
+            MaxHeight="720"
+            Margin="0,72,24,24"
+            Visibility="Collapsed"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+            BorderThickness="2"
+            CornerRadius="12"
+            Padding="12">
+        <StackPanel Spacing="8">
+            <TextBlock FontWeight="SemiBold" TextWrapping="Wrap"
+                       Text="This card popped out" />
+            <TextBlock x:Name="MergeDockHint" Opacity="0.8" FontSize="12" TextWrapping="Wrap"
+                       Text="Scroll to the matching account and tap Merge here on that card. Cancel puts this one back." />
+            <Button Content="Cancel" Click="CancelMerge_Click" HorizontalAlignment="Left" />
+            <Border x:Name="MergeDockCardHost" />
+        </StackPanel>
+    </Border>
+    </Grid>
 </Page>

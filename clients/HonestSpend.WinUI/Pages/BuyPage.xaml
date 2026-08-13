@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="640">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Can I buy this?" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
                 Text="Picks the smartest safe account from float, rewards, and promo terms. Uses Who / money view from the top bar." />
@@ -46,7 +46,7 @@
                 <NumberBox x:Name="PlanMonthlyBox" Header="Monthly ($)" Minimum="0"
                            SpinButtonPlacementMode="Compact" PlaceholderText="Optional" />
             </StackPanel>
-            <ComboBox x:Name="CategoryBox" Header="Budget category (optional)"
+            <ComboBox x:Name="CategoryBox" Header="Budget category (optional)" MaxDropDownHeight="320"
                       PlaceholderText="Any / uncategorized"
                       HorizontalAlignment="Stretch" />
             <StackPanel Orientation="Horizontal" Spacing="8">

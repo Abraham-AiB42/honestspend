@@ -324,11 +324,203 @@ def test_cu_membership_splits_shares_not_chase(monkeypatch):
     assert "savings" in kinds
 
 
-def test_discover_and_capital_one_are_same_family():
+def test_activity_csv_named_statement_is_primary():
+    from honestspend.services.smart_import import _is_statement_acc
+
+    assert _is_statement_acc(
+        {"file_format": "csv", "transactions_found": 29, "is_statement": False},
+        "Discover-Statement-2026813.csv",
+    ) is False
+    assert _is_statement_acc(
+        {"file_format": "pdf", "transactions_found": 22, "is_statement": True},
+        "20260718-statements-9748-.pdf",
+    ) is True
+
+
+def test_loan_csv_attaches_to_loan_statement_not_card():
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "Discover-Statement-2026813.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:disc-loan",
+                    "file_format": "csv",
+                    "kind": "loan",
+                    "last4": "3065",
+                    "bank_label": "Discover",
+                    "human_title": "Personal loan · Discover · …3065",
+                    "transactions_found": 29,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "Discover-Statement-20260728-3065.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:disc-loan",
+                    "file_format": "pdf",
+                    "kind": "loan",
+                    "last4": "3065",
+                    "bank_label": "Discover",
+                    "is_statement": True,
+                    "human_title": "Personal loan · Discover · …3065",
+                    "transactions_found": 0,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 2,
+            "filename": "Discover-card-3065.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:disc-card",
+                    "file_format": "csv",
+                    "kind": "credit",
+                    "last4": "3065",
+                    "bank_label": "Discover",
+                    "human_title": "Discover · …3065",
+                    "transactions_found": 40,
+                    "action": "create",
+                }
+            ],
+        },
+    ]
+    cluster_batch_sources(sources)
+    assert sources[1]["accounts"][0]["action"] == "attach"
+    assert sources[1]["accounts"][0]["attach_to_source_key"] == "csv:disc-loan"
+    assert sources[2]["accounts"][0]["action"] != "attach"
+
+
+def test_card_no_column_and_loan_header_from_real_layouts():
+    cap = (
+        "Transaction Date,Posted Date,Card No.,Description,Category,Debit,Credit\n"
+        "2026-08-12,2026-08-12,8857,CAPITAL ONE AUTOPAY PYMT,Payment/Credit,,169.90\n"
+        "2026-07-21,2026-07-22,8857,LOVELAND PULSE,Phone/Cable,99.95,\n"
+    ).encode()
+    accs = analyze_upload("2026-08-13_transaction_download.csv", cap)
+    assert accs[0]["kind"] == "credit"
+    assert accs[0]["last4"] == "8857"
+    assert accs[0]["bank_label"] == "Capital One"
+
+    loan = (
+        '"Discover, a division of Capital One, N.A., (Discover) Account Activity",,\n'
+        ",,\n"
+        "Account Ending in 3065,,\n"
+        "Discover Loan Account,,\n"
+        ",,\n"
+        "Date,Description,Amount\n"
+        "07/17/2026,Web Payment,-370.92\n"
+        "06/17/2026,Web Payment,-370.92\n"
+        "05/17/2026,Web Payment,-370.92\n"
+        "04/17/2026,Web Payment,-370.92\n"
+        "03/17/2026,Web Payment,-370.92\n"
+        "02/17/2026,Web Payment,-370.92\n"
+        "01/17/2026,Web Payment,-370.92\n"
+        "12/17/2025,Web Payment,-370.92\n"
+    ).encode()
+    accs = analyze_upload("Discover-Statement-2026813.csv", loan)
+    assert accs[0]["kind"] == "loan"
+    assert accs[0]["last4"] == "3065"
+    assert accs[0]["loan_label"] == "Personal loan"
+
+
+def test_cu_register_payees_do_not_become_apple_card_or_mortgage():
+    csv = (
+        "Posting Date,Description,Amount\n"
+        "8/6/2026,GREENBRIAR PAIRE TYPE: Assoc Pmt,-130.00\n"
+        "8/5/2026,From Share 01,75.00\n"
+        "8/5/2026,Payment to Apple Card,-80.00\n"
+        "8/3/2026,Payment to Rocket Mortgage TYPE: LOAN,-1595.03\n"
+        "8/2/2026,From Share 01,200.00\n"
+        "8/1/2026,XCEL ENERGY,-90.00\n"
+        "7/30/2026,From Share 01,50.00\n"
+        "7/28/2026,SAFEWAY,-40.00\n"
+    ).encode()
+    accs = analyze_upload("ExportedTransactions.csv", csv)
+    title = (accs[0].get("human_title") or "") + " " + (accs[0].get("suggested_nickname") or "")
+    assert accs[0]["kind"] != "loan"
+    assert "Apple Card" not in title
+    assert "Home loan" not in title
+    assert accs[0]["kind"] in ("checking", "savings")
+
+
+def test_same_last4_different_issuer_does_not_attach():
+    """Amex …1009 must not swallow a Scheels/FNBO …1009 statement."""
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "activity (1).xlsx",
+            "accounts": [
+                {
+                    "source_key": "xlsx:amex",
+                    "file_format": "xlsx",
+                    "kind": "credit",
+                    "last4": "1009",
+                    "brand": "Blue Business Plus",
+                    "bank_label": "Blue Business Plus",
+                    "human_title": "Blue Business Plus · …1009",
+                    "transactions_found": 39,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "Transaction Site - Account Details.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:scheels-txns",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "last4": "1009",
+                    "brand": "Scheels",
+                    "bank_label": "Scheels",
+                    "human_title": "Scheels · …1009",
+                    "transactions_found": 6,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 2,
+            "filename": "2025-10-17.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:scheels-stmt",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "last4": "1009",
+                    "brand": "Scheels",
+                    "bank_label": "FNBO",
+                    "is_statement": True,
+                    "human_title": "Scheels · …1009",
+                    "statement_fields": {"credit_limit": "13700.00"},
+                    "transactions_found": 0,
+                    "action": "create",
+                }
+            ],
+        },
+    ]
+    cluster_batch_sources(sources)
+    assert sources[2]["accounts"][0]["action"] == "attach"
+    assert sources[2]["accounts"][0]["attach_to_source_key"] == "pdf:scheels-txns"
+    assert sources[0]["accounts"][0]["action"] != "attach"
+    assert not any(
+        (att.get("filename") == "2025-10-17.pdf")
+        for att in (sources[0]["accounts"][0].get("attachments") or [])
+    )
+
+
+def test_discover_and_capital_one_are_not_the_same_account():
     assert guess_bank_label("Discover-AccountActivity-20260115.pdf", "Discover, a division of Capital One") == "Discover"
     assert guess_bank_label("activity.csv", "© 2026 Capital One, N.A.  Discover is a division of Capital One") == "Discover"
-    assert _banks_compatible({"bank_label": "Discover"}, {"bank_label": "Capital One"})
-    assert _banks_compatible({"org": "Capital One"}, {"org": "Discover"})
+    # Same parent company, different products — do not glue a Discover card to a Capital One card
+    assert not _banks_compatible({"bank_label": "Discover"}, {"bank_label": "Capital One"})
+    assert not _banks_compatible({"org": "Capital One"}, {"org": "Discover"})
 
 
 def test_fingerprints_from_discover_activity_layout():
@@ -455,6 +647,93 @@ def test_cluster_statement_pdf_to_qif_by_transactions():
     assert sources[1]["accounts"][0]["action"] == "attach"
     assert sources[1]["accounts"][0]["attach_to_source_key"] == "qif:ccard"
     assert sources[0]["accounts"][0].get("last4") == "4411"
+
+
+def test_fingerprints_mmdd_uses_statement_year():
+    text = (
+        "WELLS FARGO REFLECT\nAccount ending in 9690\n"
+        "Statement Period 07/09/2026 to 08/07/2026\n"
+        "Payment Due Date 09/02/2026\nMinimum Payment $83.00\n"
+        "Transactions\n"
+        "07/23 07/23 7414718JX0 ONLINE ACH PAYMENT THANK YOU 1,320.00\n"
+        "07/02 07/02 AUTOMATIC PAYMENT - THANK YOU 97.00\n"
+    )
+    fps = _fingerprints_from_text(text)
+    cores = {str(x).rsplit("|", 1)[0] for x in fps}
+    assert "2026-07-23|132000" in cores
+    assert "2026-07-02|9700" in cores
+    assert not any(c.startswith("2026-09-02") for c in cores)
+
+
+def test_first_four_line_items_date_amount_picks_the_right_file():
+    """First 3–4 posted date→amount pairs beat last-4 / bank labels."""
+    stmt_fps = [
+        _txn_fingerprint("2026-08-12", "169.90", "AUTOPAY"),
+        _txn_fingerprint("2026-07-24", "30.00", "CASH BACK"),
+        _txn_fingerprint("2026-07-21", "99.95", "LOVELAND PULSE"),
+        _txn_fingerprint("2026-06-22", "99.95", "LOVELAND PULSE"),
+    ]
+    hit_fps = list(stmt_fps) + [_txn_fingerprint("2026-05-16", "199.90", "AUTOPAY")]
+    miss_fps = [
+        _txn_fingerprint("2026-08-11", "21.52", "XCEL"),
+        _txn_fingerprint("2026-02-20", "12.99", "PARAMOUNT"),
+        _txn_fingerprint("2026-01-20", "12.99", "PAYMENT"),
+        _txn_fingerprint("2025-12-29", "12.99", "PARAMOUNT"),
+    ]
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "other.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:other",
+                    "file_format": "csv",
+                    "kind": "credit",
+                    "last4": "7687",
+                    "bank_label": "Target",
+                    "txn_fps": miss_fps,
+                    "transactions_found": 20,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "2026-08-13_transaction_download.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:cap1",
+                    "file_format": "csv",
+                    "kind": "credit",
+                    "last4": None,
+                    "bank_label": "Capital One",
+                    "txn_fps": hit_fps,
+                    "transactions_found": 24,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 2,
+            "filename": "Statement_072026_8857.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:cap1",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "last4": "8857",
+                    "is_statement": True,
+                    "txn_fps": stmt_fps,
+                    "transactions_found": 4,
+                    "action": "create",
+                }
+            ],
+        },
+    ]
+    cluster_batch_sources(sources)
+    assert sources[2]["accounts"][0]["action"] == "attach"
+    assert sources[2]["accounts"][0]["attach_to_source_key"] == "csv:cap1"
+    assert sources[1]["accounts"][0].get("last4") == "8857"
 
 
 def test_commit_applies_statement_to_qif_account(tmp_path, monkeypatch):

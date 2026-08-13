@@ -410,6 +410,10 @@ def learn_rule_from_correction(
     # Skip very short / noisy
     if len(pat) < 3:
         return None
+    from honestspend.services.recurring_detect import is_check_payee
+
+    if is_check_payee(pat) or is_check_payee(payee):
+        return None
 
     existing = (
         session.query(CategoryRule)
@@ -475,7 +479,65 @@ DEFAULT_RULE_SEEDS: list[tuple[str, str, str, int]] = [
     ("transfer", "contains", "SYS_TRANSFER", 90),
     ("venmo", "contains", "SYS_TRANSFER", 80),
     ("zelle", "contains", "SYS_TRANSFER", 80),
+    ("payment to american express", "contains", "SYS_CC_PAYMENT", 210),
+    ("payment to chase", "contains", "SYS_CC_PAYMENT", 210),
+    ("payment to jpmorgan", "contains", "SYS_CC_PAYMENT", 210),
+    ("payment to discover", "contains", "SYS_CC_PAYMENT", 210),
+    ("payment to apple card", "contains", "SYS_CC_PAYMENT", 210),
+    ("rocket mortgage", "contains", "PER_HOUSING", 200),
+    ("hyundai motor", "contains", "SYS_LOAN_PRINCIPAL", 200),
+    ("department of education", "contains", "SYS_LOAN_PRINCIPAL", 190),
+    ("student loan", "contains", "SYS_LOAN_PRINCIPAL", 180),
+    ("greenbriar", "contains", "PER_HOA", 190),
+    ("robinhood", "contains", "PER_INVEST", 180),
+    ("xcel", "contains", "PER_UTILITIES", 100),
+    ("city of loveland", "contains", "PER_UTILITIES", 90),
+    ("cvs", "contains", "PER_HEALTHCARE", 90),
+    ("walgreens", "contains", "PER_HEALTHCARE", 90),
+    ("farmers", "contains", "PER_INSURANCE", 90),
 ]
+
+
+def ensure_seed_rules(session: Session) -> int:
+    """Idempotent: add any new seed rules that were not in the original install."""
+    personal = session.query(Profile).filter(Profile.slug == "personal").one_or_none()
+    created = 0
+    existing = {
+        (r.pattern or "").lower()
+        for r in session.query(CategoryRule).filter(CategoryRule.source == "seed").all()
+    }
+    for pattern, mt, code, prio in DEFAULT_RULE_SEEDS:
+        if pattern.lower() in existing:
+            continue
+        cat = session.query(Category).filter(Category.code == code).first()
+        if not cat:
+            continue
+        session.add(
+            CategoryRule(
+                profile_id=personal.id if personal and not code.startswith("SYS_") else None,
+                match_type=mt,
+                pattern=pattern,
+                category_id=cat.id,
+                priority=prio,
+                is_transfer=code.startswith("SYS_TRANSFER") or code.startswith("SYS_CC"),
+                source="seed",
+            )
+        )
+        existing.add(pattern.lower())
+        created += 1
+    for prof in session.query(Profile).all():
+        et = (prof.entity_type or "").lower()
+        if et not in ("business", "s_corp", "llc") and (prof.tax_form_primary or "").upper() not in (
+            "1120S",
+            "1065",
+            "SCHC",
+            "1120",
+        ):
+            continue
+        created += seed_rules_for_profile(session, prof)
+    if created:
+        session.flush()
+    return created
 
 
 BUSINESS_RULE_SEEDS: list[tuple[str, str, str, int]] = [
@@ -491,6 +553,14 @@ BUSINESS_RULE_SEEDS: list[tuple[str, str, str, int]] = [
     ("linkedin ads", "contains", "BIZ_ADVERTISING", 110),
     ("meta ads", "contains", "BIZ_ADVERTISING", 110),
     ("google ads", "contains", "BIZ_ADVERTISING", 110),
+    ("gusto", "contains", "BIZ_SALARIES", 200),
+    ("paychex", "contains", "BIZ_SALARIES", 200),
+    ("tax payment", "contains", "BIZ_TAXES_LICENSES", 190),
+    ("next level marketing", "contains", "BIZ_ADVERTISING", 180),
+    ("lift local", "contains", "BIZ_ADVERTISING", 180),
+    ("docusign", "contains", "BIZ_OTHER_SOFTWARE", 120),
+    ("vestwell", "contains", "BIZ_PENSION", 180),
+    ("microsoft", "contains", "BIZ_OTHER_SOFTWARE", 90),
 ]
 
 

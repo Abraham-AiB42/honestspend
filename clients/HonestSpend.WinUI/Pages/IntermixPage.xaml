@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="16" MaxWidth="640">
+        <StackPanel Spacing="16" HorizontalAlignment="Stretch">
             <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Entity intermix" />
             <TextBlock Opacity="0.75" TextWrapping="Wrap"
                 Text="Reimburse, distributions, capital injects — paired transfers so personal/business books stay clean. Not tax advice." />

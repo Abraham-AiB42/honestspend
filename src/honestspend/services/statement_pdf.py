@@ -245,6 +245,40 @@ def _parse_date(raw: str, default_year: int) -> date | None:
     return None
 
 
+_PROMO_DISCLOSURE = re.compile(
+    r"promotional\s+rate\s+expires|"
+    r"rate\s+expires\s+\d|"
+    r"deferred\s+interest|"
+    r"promotional\s+balance\s+of|"
+    r"equal\s+pay\s+promo|"
+    r"introductory\s+purchase|"
+    r"interest\s+saving\s+balance|"
+    r"to avoid paying deferred|"
+    r"balance\s+subject\s+to\s+promo|"
+    r"\b\d+\.\d{1,2}\s*%\s+\$",
+    re.I,
+)
+_PROMO_PAYEE = re.compile(
+    r"^\s*\d+\.\d{1,2}\s*%|"
+    r"deferred interest|"
+    r"promotional rate|"
+    r"equal pay promo|"
+    r"rate expires|"
+    r"promotional balance",
+    re.I,
+)
+
+
+def is_promo_disclosure_line(text: str, *, payee: str | None = None) -> bool:
+    """True for promo APR / deferred-interest table rows — not spend."""
+    blob = f"{text or ''} {payee or ''}"
+    if _PROMO_DISCLOSURE.search(blob):
+        return True
+    if _PROMO_PAYEE.search(payee or "") or _PROMO_PAYEE.search(text or ""):
+        return True
+    return False
+
+
 def parse_statement_lines(
     text: str,
     *,
@@ -260,6 +294,8 @@ def parse_statement_lines(
     for line in text.splitlines():
         line = " ".join(line.split())
         if len(line) < 8:
+            continue
+        if is_promo_disclosure_line(line):
             continue
         # Skip summary headers only when there is no date (keep dated INTEREST CHARGED / fees)
         low = line.lower()
@@ -301,6 +337,8 @@ def parse_statement_lines(
             continue
         # skip pure totals (keep bare "PAYMENT" — real pay-down rows on many statements)
         if mid.lower() in ("total", "subtotal", "balance"):
+            continue
+        if is_promo_disclosure_line(line, payee=mid):
             continue
 
         key = f"{txn_date.isoformat()}|{mid[:40].lower()}|{amt}"

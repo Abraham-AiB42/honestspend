@@ -1372,6 +1372,14 @@ class SetupCategorizeConfirmIn(BaseModel):
     transaction_ids: list[int] | None = None
     create_rule: bool = True
     profile_id: int | None = None
+    reassign: bool = False
+
+
+class SetupCategorizeUndoIn(BaseModel):
+    transaction_ids: list[int]
+    rule_id: int | None = None
+    payee_key: str | None = None
+    profile_id: int | None = None
 
 
 @app.post("/api/setup/categorize/confirm")
@@ -1386,9 +1394,23 @@ def setup_categorize_confirm(body: SetupCategorizeConfirmIn, db: Session = Depen
             category_id=body.category_id,
             create_rule=body.create_rule,
             profile_id=body.profile_id,
+            reassign=body.reassign,
         )
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/setup/categorize/undo")
+def setup_categorize_undo(body: SetupCategorizeUndoIn, db: Session = Depends(get_db)):
+    from honestspend.services.setup_categorize import undo_payee_category
+
+    return undo_payee_category(
+        db,
+        transaction_ids=body.transaction_ids,
+        rule_id=body.rule_id,
+        payee_key=body.payee_key,
+        profile_id=body.profile_id,
+    )
 
 
 @app.get("/api/setup/budgets")

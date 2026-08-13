@@ -35,6 +35,41 @@ def test_guess_loan_kind_from_transaction_details_filename():
     assert kind == "loan"
 
 
+def test_discover_card_statement_stays_credit():
+    from honestspend.services.smart_import import last4_from_text
+
+    kind = guess_account_kind(
+        filename="Discover-Statement-20260720-7990.pdf",
+        raw_text="Discover it® Card  Account ending in 7990  New Balance",
+    )
+    assert kind == "credit"
+    assert last4_from_text("Discover-Statement-20260728-3065.pdf") == "3065"
+    assert (
+        last4_from_text(
+            "Discover-Statement-20260728-3065.pdf",
+            "August 2026 statement page 1 of 6 prepared for\n" * 20,
+        )
+        == "3065"
+    )
+
+
+def test_discover_personal_loan_statement_is_loan():
+    from honestspend.services.smart_import import guess_loan_label
+
+    kind = guess_account_kind(
+        filename="Discover-Statement-20260728-3065.pdf",
+        raw_text="LOAN AGREEMENT: Please refer to the Truth-in-Lending Disclosures. "
+        "Discover Personal Loans, PO Box 30396.",
+    )
+    assert kind == "loan"
+    label, detail = guess_loan_label(
+        "Discover-Statement-20260728-3065.pdf",
+        "Discover Personal Loans  LOAN AGREEMENT",
+    )
+    assert label == "Personal loan"
+    assert detail == "Discover"
+
+
 def test_loan_txn_file_matches_existing_loan_not_card(tmp_path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()

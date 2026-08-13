@@ -39,7 +39,8 @@ public sealed partial class ImportPage : Page
     private string? _lastMergeId;
     private string? _lastMergeLabel;
     private (int Fi, string Sk)? _parkedMerge;
-    private (int Fi, string Sk)? _alignedMergeTarget;
+    private readonly Dictionary<(int Fi, string Sk), Button> _mergeButtons = new();
+    private readonly Dictionary<(int Fi, string Sk), (StackPanel Details, Button SkipBtn, Button MergeBtn)> _skipChrome = new();
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private int? _freezeAccountId;
@@ -590,6 +591,23 @@ public sealed partial class ImportPage : Page
             }
         }
         box.SelectedIndex = selected;
+        box.SelectionChanged += (_, _) =>
+        {
+            if (box.SelectedItem is not ComboBoxItem { Tag: StmtLinkChoice ch })
+                return;
+            if (ch.Mode == "attach" && !string.IsNullOrEmpty(ch.SourceKey))
+            {
+                SetCardSkipped(fileIndex, sourceKey, false);
+                CollapseCardOnto(fileIndex, sourceKey, ch.FileIndex, ch.SourceKey);
+            }
+            else if (ch.Mode == "create")
+            {
+                SetCardSkipped(fileIndex, sourceKey, false);
+                ExpandCollapsedCard(fileIndex, sourceKey, resetAction: false);
+            }
+            else if (ch.Mode == "skip")
+                SetCardSkipped(fileIndex, sourceKey, true);
+        };
         _statementLinks.Add((fileIndex, sourceKey, box));
         return box;
     }
@@ -628,7 +646,9 @@ public sealed partial class ImportPage : Page
                 await RefreshBooksNamesAsync(api, plan);
                 RenderSmartPlan(plan);
                 SmartPlanPanel.Visibility = Visibility.Visible;
-                PreviewText.Text = JsonUi.Str(plan, "summary") + "\n" + JsonUi.Str(plan, "hint");
+                if (PreMapActions is not null)
+                    PreMapActions.Visibility = Visibility.Collapsed;
+                PreviewText.Text = "";
             }
             finally
             {
@@ -944,15 +964,48 @@ public sealed partial class ImportPage : Page
         }
     }
 
+    private void OnCardMergeClick(int fi, string sk)
+    {
+        if (_parkedMerge is { } parked)
+        {
+            if (parked.Fi == fi && parked.Sk == sk)
+                return;
+            CompleteMergeOnto(parked.Fi, parked.Sk, fi, sk);
+            return;
+        }
+        ParkCardForMerge(fi, sk);
+    }
+
     private void ParkCardForMerge(int fi, string sk)
     {
-        CancelMergePark();
-        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
-        if (src.Card is null)
-            return;
-        _parkedMerge = (fi, sk);
-        src.Card.Visibility = Visibility.Collapsed;
-        MergeDockCardHost.Child = new Border
+        try
+        {
+            CancelMergePark();
+            var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
+            if (src.Card is null)
+                return;
+
+            _parkedMerge = (fi, sk);
+            src.Card.Opacity = 0.4;
+            MergeDockCardHost.Child = BuildParkedCardClone(src, fi);
+            MergeDock.Visibility = Visibility.Visible;
+            RefreshMergeButtons();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Title = "Could not start merge";
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+            CancelMergePark();
+        }
+    }
+
+    private UIElement BuildParkedCardClone(
+        (int FileIndex, string SourceKey, ComboBox KindBox, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox, Border Card, TextBlock TitleBlock, int CardNum) src,
+        int fi)
+    {
+        var nick = src.NickBox?.Text?.Trim() ?? "";
+        return new Border
         {
             Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"],
             CornerRadius = new CornerRadius(8),
@@ -964,7 +1017,7 @@ public sealed partial class ImportPage : Page
                 {
                     new TextBlock
                     {
-                        Text = src.TitleBlock.Text,
+                        Text = src.TitleBlock?.Text ?? $"Account {src.CardNum}",
                         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                         TextWrapping = TextWrapping.Wrap,
                     },
@@ -976,135 +1029,109 @@ public sealed partial class ImportPage : Page
                     },
                     new TextBlock
                     {
-                        Text = string.IsNullOrWhiteSpace(src.NickBox.Text) ? "" : src.NickBox.Text.Trim(),
+                        Text = nick,
                         Opacity = 0.85,
                         TextWrapping = TextWrapping.Wrap,
+                        Visibility = string.IsNullOrEmpty(nick) ? Visibility.Collapsed : Visibility.Visible,
                     },
                 },
             },
         };
-        MergeDock.Visibility = Visibility.Visible;
-        MergeAlignLabel.Text = "";
-        CompleteMergeBtn.IsEnabled = false;
-        _alignedMergeTarget = null;
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            UpdateMergeDockSticky();
-            UpdateMergeAlignment();
-        });
     }
 
-    private void CancelMergePark()
-    {
-        if (_parkedMerge is { } parked)
-        {
-            var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == parked.Fi && r.SourceKey == parked.Sk);
-            if (src.Card is not null)
-                src.Card.Visibility = Visibility.Visible;
-        }
-        _parkedMerge = null;
-        _alignedMergeTarget = null;
-        if (MergeDock is not null)
-        {
-            MergeDock.Visibility = Visibility.Collapsed;
-            MergeDock.Margin = new Thickness(16, 0, 0, 0);
-            MergeDockCardHost.Child = null;
-            MergeAlignLabel.Text = "";
-            CompleteMergeBtn.IsEnabled = false;
-        }
-    }
-
-    private void PageScroller_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
-    {
-        if (_parkedMerge is null || MergeDock.Visibility != Visibility.Visible)
-            return;
-        UpdateMergeDockSticky();
-        UpdateMergeAlignment();
-    }
-
-    private void UpdateMergeDockSticky()
-    {
-        if (MergeDock.Parent is not FrameworkElement grid)
-            return;
-        try
-        {
-            var gridY = grid.TransformToVisual(PageScroller).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-            var top = 24 - gridY;
-            if (top < 0)
-                top = 0;
-            var max = Math.Max(0, grid.ActualHeight - MergeDock.ActualHeight);
-            if (top > max)
-                top = max;
-            MergeDock.Margin = new Thickness(16, top, 0, 0);
-        }
-        catch
-        {
-            /* transform not ready */
-        }
-    }
-
-    private void UpdateMergeAlignment()
+    private void RestoreParkedCardLook()
     {
         if (_parkedMerge is not { } parked)
             return;
-        try
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == parked.Fi && r.SourceKey == parked.Sk);
+        if (src.Card is null)
+            return;
+        src.Card.Opacity = 1;
+        if (_collapsedOnto.ContainsKey((parked.Fi, parked.Sk)))
+            return;
+        src.Card.Visibility = Visibility.Visible;
+    }
+
+    private void TeardownMergeDock()
+    {
+        RestoreParkedCardLook();
+        _parkedMerge = null;
+        if (MergeDock is null)
+            return;
+        MergeDock.Visibility = Visibility.Collapsed;
+        MergeDockCardHost.Child = null;
+        RefreshMergeButtons();
+    }
+
+    private void CancelMergePark()
+        => TeardownMergeDock();
+
+    private void RefreshMergeButtons()
+    {
+        Style? accent = null;
+        try { accent = (Style)Application.Current.Resources["AccentButtonStyle"]; }
+        catch { /* theme resource missing */ }
+
+        foreach (var kv in _mergeButtons)
         {
-            var dockMid = MergeDock.TransformToVisual(PageScroller)
-                .TransformPoint(new Windows.Foundation.Point(0, MergeDock.ActualHeight / 2)).Y;
-            (int Fi, string Sk)? best = null;
-            var bestDist = 72.0;
-            foreach (var row in _smartAccountRows)
+            var btn = kv.Value;
+            if (_parkedMerge is not { } parked)
             {
-                if (row.FileIndex == parked.Fi && row.SourceKey == parked.Sk)
-                    continue;
-                if (row.Card.Visibility != Visibility.Visible || row.Card.ActualHeight < 8)
-                    continue;
-                var mid = row.Card.TransformToVisual(PageScroller)
-                    .TransformPoint(new Windows.Foundation.Point(0, row.Card.ActualHeight / 2)).Y;
-                var dist = Math.Abs(mid - dockMid);
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    best = (row.FileIndex, row.SourceKey);
-                }
+                btn.Content = "Merge";
+                btn.Style = null;
+                btn.Visibility = Visibility.Visible;
+                continue;
             }
-            _alignedMergeTarget = best;
-            foreach (var row in _smartAccountRows)
+            if (kv.Key.Fi == parked.Fi && kv.Key.Sk == parked.Sk)
             {
-                var isAlign = best is { } b && row.FileIndex == b.Fi && row.SourceKey == b.Sk;
-                row.Card.BorderThickness = new Thickness(isAlign ? 3 : 1);
+                btn.Visibility = Visibility.Collapsed;
+                continue;
             }
-            if (best is { } hit)
-            {
-                var tgt = _smartAccountRows.First(r => r.FileIndex == hit.Fi && r.SourceKey == hit.Sk);
-                MergeAlignLabel.Text = $"Lined up with {tgt.TitleBlock.Text}";
-                CompleteMergeBtn.IsEnabled = true;
-            }
-            else
-            {
-                MergeAlignLabel.Text = "Scroll until this card sits next to the matching account.";
-                CompleteMergeBtn.IsEnabled = false;
-            }
-        }
-        catch
-        {
-            CompleteMergeBtn.IsEnabled = false;
+            btn.Content = "Merge here";
+            btn.Style = accent;
+            btn.Visibility = Visibility.Visible;
         }
     }
 
-    private void CompleteMerge_Click(object sender, RoutedEventArgs e)
+    private void CompleteMergeOnto(int srcFi, string srcSk, int tgtFi, string tgtSk)
     {
-        if (_parkedMerge is not { } src || _alignedMergeTarget is not { } tgt)
-            return;
-        MapCardOnto(src.Fi, src.Sk, tgt.Fi, tgt.Sk);
-        var parked = _parkedMerge;
-        CancelMergePark();
-        // MapCardOnto already collapsed the source onto the target
-        _ = parked;
+        try
+        {
+            MapCardOnto(srcFi, srcSk, tgtFi, tgtSk);
+            var merged = _collapsedOnto.ContainsKey((srcFi, srcSk));
+            TeardownMergeDock();
+            if (!merged)
+            {
+                ErrorBar.Title = "Could not merge those cards";
+                ErrorBar.Message = "Pick What to do → Same account as… on the card you want to fold in.";
+                ErrorBar.IsOpen = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Title = "Merge failed";
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+            CancelMergePark();
+        }
     }
 
     private void CancelMerge_Click(object sender, RoutedEventArgs e)
         => CancelMergePark();
+
+    private void SetCardSkipped(int fi, string sk, bool skipped)
+    {
+        var row = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
+        if (row.Card is not null)
+            row.Card.Opacity = skipped ? 0.75 : 1;
+        if (!_skipChrome.TryGetValue((fi, sk), out var chrome))
+            return;
+        chrome.Details.Visibility = skipped ? Visibility.Collapsed : Visibility.Visible;
+        chrome.MergeBtn.Visibility = skipped ? Visibility.Collapsed : Visibility.Visible;
+        chrome.SkipBtn.Content = skipped ? "Undo skip" : "Skip this account";
+        if (skipped && _parkedMerge is { } parked && parked.Fi == fi && parked.Sk == sk)
+            CancelMergePark();
+    }
 
     private void AddBusiness_Click(object sender, RoutedEventArgs e)
     {
@@ -1170,8 +1197,9 @@ public sealed partial class ImportPage : Page
         SmartPlanSummary.Text = JsonUi.Str(plan, "summary");
         var hint = JsonUi.Str(plan, "hint");
         SmartPlanHint.Text = string.IsNullOrWhiteSpace(hint)
-            ? "Drag one card onto another to map them. Rename an account and the lists update."
-            : hint + " Drag a card onto another to map it. Renames update the lists live.";
+            ? "Check names, skip anything that isn’t an account, then import below."
+            : hint;
+        CancelMergePark();
         SmartEntitiesPanel.Children.Clear();
         SmartAccountsPanel.Children.Clear();
         _smartEntityRows.Clear();
@@ -1179,7 +1207,8 @@ public sealed partial class ImportPage : Page
         _statementLinks.Clear();
         _attachHosts.Clear();
         _collapsedOnto.Clear();
-        CancelMergePark();
+        _mergeButtons.Clear();
+        _skipChrome.Clear();
 
         var entityCount = 0;
         if (plan.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
@@ -1284,6 +1313,7 @@ public sealed partial class ImportPage : Page
                 }
             }
 
+            var pendingAttach = new List<(int SrcFi, string SrcSk, int TgtFi, string TgtSk)>();
             var cardNum = 0;
             foreach (var src in sources.EnumerateArray())
             {
@@ -1293,9 +1323,14 @@ public sealed partial class ImportPage : Page
                     continue;
                 foreach (var a in accs.EnumerateArray())
                 {
-                    if (JsonUi.Str(a, "action") == "attach")
-                        continue;
                     cardNum++;
+                    if (JsonUi.Str(a, "action") == "attach")
+                    {
+                        var tgtFi = JsonUi.Int(a, "attach_to_file_index", -1);
+                        var tgtSk = JsonUi.Str(a, "attach_to_source_key");
+                        if (tgtFi >= 0 && !string.IsNullOrEmpty(tgtSk))
+                            pendingAttach.Add((fi, JsonUi.Str(a, "source_key"), tgtFi, tgtSk));
+                    }
                     var sk = JsonUi.Str(a, "source_key");
                     var ekey = JsonUi.Str(a, "entity_key", "personal");
                     var action = JsonUi.Str(a, "action", "create");
@@ -1458,14 +1493,15 @@ public sealed partial class ImportPage : Page
                     titleRow.Children.Add(titleBlock);
                     titleRow.Children.Add(titleBtns);
                     stack.Children.Add(titleRow);
-                    stack.Children.Add(new TextBlock
+                    var details = new StackPanel { Spacing = 8 };
+                    details.Children.Add(new TextBlock
                     {
                         Text = willDo,
                         Opacity = 0.95,
                         TextWrapping = TextWrapping.Wrap,
                         FontSize = 14,
                     });
-                    stack.Children.Add(new TextBlock
+                    details.Children.Add(new TextBlock
                     {
                         Text = string.Join("\n", reviewBits.Select(x => "• " + x)),
                         Opacity = 0.9,
@@ -1479,20 +1515,20 @@ public sealed partial class ImportPage : Page
                     picks.Children.Add(kindBox);
                     picks.Children.Add(entityBox);
                     picks.Children.Add(actionBox);
-                    stack.Children.Add(picks);
-                    stack.Children.Add(nickBox);
+                    details.Children.Add(picks);
+                    details.Children.Add(nickBox);
                     var attachHost = new StackPanel { Spacing = 2 };
-                    stack.Children.Add(attachHost);
+                    details.Children.Add(attachHost);
                     _attachHosts[(fi, sk)] = attachHost;
 
                     if (LooksLikeStatement(a))
                     {
                         var stmtHint = kind == "loan"
-                            ? "This looks like a loan statement. Drag it onto the loan card, or pick Use books / Same account as…"
+                            ? "This looks like a loan statement. Tap Merge, then Merge here on the loan card — or pick Use books / Same account as…"
                             : linkTargets.Count > 1
-                                ? "Drag this card onto the matching account, or use What to do → Same account as…"
-                                : "This looks like a statement. Drag it onto the matching account, or skip it.";
-                        stack.Children.Add(new TextBlock
+                                ? "Tap Merge, then Merge here on the matching account — or use What to do → Same account as…"
+                                : "This looks like a statement. Tap Merge, then Merge here on the matching account — or skip it.";
+                        details.Children.Add(new TextBlock
                         {
                             Text = stmtHint,
                             FontSize = 13,
@@ -1500,7 +1536,7 @@ public sealed partial class ImportPage : Page
                             Opacity = 0.9,
                             Margin = new Thickness(0, 4, 0, 0),
                         });
-                        stack.Children.Add(BuildStatementLinkBox(
+                        details.Children.Add(BuildStatementLinkBox(
                             fi, sk, currentlyAttached: false,
                             attachedToFileIndex: null, attachedToSourceKey: null,
                             linkTargets));
@@ -1570,18 +1606,22 @@ public sealed partial class ImportPage : Page
                         IsTextSelectionEnabled = true,
                         FontSize = 13,
                     };
-                    stack.Children.Add(more);
+                    details.Children.Add(more);
 
                     skipBtn.Click += (_, _) =>
                     {
-                        SelectComboTag(actionBox, "skip");
-                        row.Opacity = 0.45;
+                        var skipped = actionBox.SelectedItem is ComboBoxItem cur && cur.Tag as string == "skip";
+                        if (skipped)
+                            SelectComboTag(actionBox, "create");
+                        else
+                            SelectComboTag(actionBox, "skip");
                     };
-                    mergeBtn.Click += (_, _) => ParkCardForMerge(fi, sk);
+                    _mergeButtons[(fi, sk)] = mergeBtn;
+                    _skipChrome[(fi, sk)] = (details, skipBtn, mergeBtn);
+                    mergeBtn.Click += (_, _) => OnCardMergeClick(fi, sk);
                     actionBox.SelectionChanged += async (_, _) =>
                     {
-                        row.Opacity = (actionBox.SelectedItem is ComboBoxItem si && si.Tag as string == "skip")
-                            ? 0.45 : 1;
+                        SetCardSkipped(fi, sk, actionBox.SelectedItem is ComboBoxItem si && si.Tag as string == "skip");
                         if (!_inAttachUi)
                         {
                             if (actionBox.SelectedItem is ComboBoxItem { Tag: StmtLinkChoice ch }
@@ -1596,7 +1636,7 @@ public sealed partial class ImportPage : Page
                     if (a.TryGetProperty("attachments", out var atts) && atts.ValueKind == JsonValueKind.Array
                         && atts.GetArrayLength() > 0)
                     {
-                        stack.Children.Add(new TextBlock
+                        details.Children.Add(new TextBlock
                         {
                             Text = "Statements linked here (change the number if we guessed wrong):",
                             FontSize = 13,
@@ -1632,14 +1672,19 @@ public sealed partial class ImportPage : Page
                                     attachedToFileIndex: fi, attachedToSourceKey: sk,
                                     linkTargets));
                             }
-                            stack.Children.Add(attBlock);
+                            details.Children.Add(attBlock);
                         }
                     }
+                    stack.Children.Add(details);
                     row.Child = stack;
+                    if (action == "skip")
+                        SetCardSkipped(fi, sk, true);
                     SmartAccountsPanel.Children.Add(row);
                     _smartAccountRows.Add((fi, sk, kindBox, entityBox, actionBox, nickBox, row, titleBlock, cardNum));
                 }
             }
+            foreach (var job in pendingAttach)
+                CollapseCardOnto(job.SrcFi, job.SrcSk, job.TgtFi, job.TgtSk);
         }
 
         if (SmartAccountsPanel.Children.Count == 0)
@@ -2060,6 +2105,12 @@ public sealed partial class ImportPage : Page
     }
 
     private async void SmartImportCommit_Click(object sender, RoutedEventArgs e)
+        => await CommitSmartImportAsync(stayForMore: false);
+
+    private async void SmartImportThenMore_Click(object sender, RoutedEventArgs e)
+        => await CommitSmartImportAsync(stayForMore: true);
+
+    private async Task CommitSmartImportAsync(bool stayForMore)
     {
         ErrorBar.IsOpen = false;
         SuccessBar.IsOpen = false;
@@ -2068,7 +2119,9 @@ public sealed partial class ImportPage : Page
         {
             if (_pendingFiles.Count == 0)
                 throw new InvalidOperationException("No files queued.");
-            SetImportBusy(true, "Importing…", "Writing transactions and applying statement facts to the linked accounts.");
+            SetImportBusy(true, "Importing…", stayForMore
+                ? "Writing this batch. You can drop more statements or lists next."
+                : "Writing transactions and applying statement facts to the linked accounts.");
             await Task.Delay(40);
             var planJson = BuildPlanJsonFromUi();
             using var api = new LedgerApiClient(timeout: TimeSpan.FromMinutes(5));
@@ -2096,38 +2149,20 @@ public sealed partial class ImportPage : Page
                 if (string.IsNullOrEmpty(plain) || plain is "?" or "—")
                     plain = JsonUi.Str(res, "summary");
                 ResultText.Text =
-                    plain + "\n\n" +
-                    JsonUi.Str(res, "hint") + "\n" +
+                    plain + "\n" +
                     $"New: {JsonUi.Str(res, "transactions_created")} · " +
                     $"Duplicates skipped: {JsonUi.Str(res, "duplicates_skipped", "0")}";
-                if (res.TryGetProperty("results", out var rr) && rr.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var r in rr.EnumerateArray().Take(24))
-                    {
-                        ResultText.Text += $"\n· {JsonUi.Str(r, "filename")} · " +
-                            $"{JsonUi.Str(r, "format")} · +{JsonUi.Str(r, "transactions_created", "0")}" +
-                            (JsonUi.Str(r, "skipped_existing", "0") is "0" or "?" or "—"
-                                ? ""
-                                : $" · skipped {JsonUi.Str(r, "skipped_existing")}");
-                        if (!string.IsNullOrEmpty(JsonUi.Str(r, "error")) && JsonUi.Str(r, "error") is not ("?" or "—"))
-                            ResultText.Text += $" · err {JsonUi.Str(r, "error")}";
-                        // multi-account OFX detail
-                        if (r.TryGetProperty("accounts", out var acs) && acs.ValueKind == JsonValueKind.Array)
-                        {
-                            foreach (var a in acs.EnumerateArray().Take(8))
-                                ResultText.Text +=
-                                    $"\n    · {JsonUi.Str(a, "nickname", JsonUi.Str(a, "acctid"))} " +
-                                    $"+{JsonUi.Str(a, "transactions_created", "0")} " +
-                                    $"(skip {JsonUi.Str(a, "skipped_existing", "0")})";
-                        }
-                    }
-                }
-                SuccessBar.Title = "Books updated";
-                SuccessBar.Message = plain.Length > 120 ? plain[..120] + "…" : plain;
+                SuccessBar.Title = stayForMore ? "Imported — add more if you have them" : "Books updated";
+                SuccessBar.Message = stayForMore
+                    ? "Drop another statement or list. We’ll match it to the books you just imported."
+                    : (plain.Length > 120 ? plain[..120] + "…" : plain);
                 SuccessBar.IsOpen = true;
                 await ReviewPromosAfterImportAsync(api, res);
                 await LoadAsync();
-                await ContinueSetupAfterImportAsync(api);
+                if (stayForMore)
+                    ReadyForMoreFiles();
+                else
+                    await ContinueSetupAfterImportAsync(api);
             }
             finally
             {
@@ -2144,6 +2179,19 @@ public sealed partial class ImportPage : Page
         {
             SetImportBusy(false);
         }
+    }
+
+    private void ReadyForMoreFiles()
+    {
+        CancelMergePark();
+        _pendingFiles.Clear();
+        PendingFilesList.ItemsSource = null;
+        _smartPlanJson = null;
+        SmartPlanPanel.Visibility = Visibility.Collapsed;
+        if (PreMapActions is not null)
+            PreMapActions.Visibility = Visibility.Visible;
+        CsvPathText.Text = "Imported. Drop more statements or lists to attach.";
+        DropZoneHint.Text = "Drop more files — we match them to the books you just imported";
     }
 
     private async void PickCsv_Click(object sender, RoutedEventArgs e)

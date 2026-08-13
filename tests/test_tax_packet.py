@@ -36,7 +36,7 @@ def test_meals_50_percent_in_packet(tmp_path: Path):
     s.flush()
     meals = (
         s.query(Category)
-        .filter(Category.profile_id == personal.id, Category.display_name == "Business meals")
+        .filter(Category.profile_id == personal.id, Category.partial_rule == "meals_50")
         .one()
     )
     s.add(

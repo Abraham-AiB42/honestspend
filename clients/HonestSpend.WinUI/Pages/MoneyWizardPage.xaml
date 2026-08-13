@@ -8,7 +8,7 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="14" MaxWidth="520">
+        <StackPanel Spacing="14" HorizontalAlignment="Stretch">
             <TextBlock x:Name="TitleText" Style="{StaticResource TitleTextBlockStyle}" Text="Wizard" />
             <TextBlock x:Name="StepText" Opacity="0.7" />
             <TextBlock x:Name="QuestionText" TextWrapping="Wrap" FontSize="18" FontWeight="SemiBold" />

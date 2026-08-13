@@ -108,6 +108,69 @@ def seed_all(session: Session) -> None:
     session.commit()
 
 
+def _coa_base_code(code: str) -> str:
+    return (code or "").split("__p")[0]
+
+
+def ensure_coa_categories(session: Session) -> int:
+    """Add any new COA rows that shipped after this books file was created."""
+    coa = load_coa()
+    added = 0
+    existing = {c.code for c in session.query(Category).all()}
+    personal = session.query(Profile).filter(Profile.slug == "personal").first()
+    if personal:
+        for pack in ("personal_budget", "personal_itemized", "personal_adjustments"):
+            for item in coa.get(pack, []):
+                row = make_category_row(item, scope="personal", profile_id=personal.id)
+                if row.code in existing:
+                    continue
+                session.add(row)
+                existing.add(row.code)
+                added += 1
+    if session.query(Category).filter(Category.scope == "system").count() == 0:
+        for item in coa.get("system_categories", []):
+            row = make_category_row(item, scope="system", profile_id=None, is_system=True)
+            if row.code in existing:
+                continue
+            session.add(row)
+            existing.add(row.code)
+            added += 1
+    biz_packs = ("business_income", "business_expenses", "separately_stated")
+    biz_by_code = {
+        item["code"]: item
+        for pack in biz_packs
+        for item in coa.get(pack, [])
+    }
+    for prof in session.query(Profile).all():
+        et = (prof.entity_type or "").lower()
+        form = (prof.tax_form_primary or "").upper()
+        if et not in ("business", "s_corp", "llc") and form not in ("1120S", "1065", "SCHC", "1120"):
+            continue
+        for pack in biz_packs:
+            for item in coa.get(pack, []):
+                row = make_category_row(item, scope="business", profile_id=prof.id)
+                if row.code in existing:
+                    continue
+                session.add(row)
+                existing.add(row.code)
+                added += 1
+    session.flush()
+    for cat in session.query(Category).filter(Category.scope == "business").all():
+        item = biz_by_code.get(_coa_base_code(cat.code))
+        if not item:
+            continue
+        name = item.get("display_name")
+        if name and cat.display_name != name:
+            cat.display_name = name
+        if item.get("partial_rule") and cat.partial_rule != item.get("partial_rule"):
+            cat.partial_rule = item.get("partial_rule")
+        if item.get("notes") and cat.notes != item.get("notes"):
+            cat.notes = item.get("notes")
+    if added:
+        session.flush()
+    return added
+
+
 def _seed_profiles(session: Session, profiles: list[dict]) -> None:
     existing = {p.slug for p in session.query(Profile).all()}
     for p in profiles:

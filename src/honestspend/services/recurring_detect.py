@@ -54,6 +54,25 @@ def normalize_payee(payee: str | None) -> str:
     return " ".join(parts[:5])
 
 
+_CHECK_PAYEE = re.compile(
+    r"(?:check|chk|cheque)\s*(?:#|no\.?|number)?\s*(\d+)\b",
+    re.I,
+)
+
+
+def is_check_payee(payee: str | None) -> bool:
+    return bool(_CHECK_PAYEE.search(payee or ""))
+
+
+def categorize_payee_key(payee: str | None) -> str:
+    """Group key for setup categorize. Check numbers stay distinct."""
+    raw = (payee or "").strip()
+    m = _CHECK_PAYEE.search(raw)
+    if m:
+        return f"check #{m.group(1)}"
+    return normalize_payee(raw) or raw.lower()[:40]
+
+
 def _guess_cadence(dates: list[date]) -> str | None:
     if len(dates) < 2:
         return None

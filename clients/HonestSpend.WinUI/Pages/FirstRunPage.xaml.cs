@@ -2617,10 +2617,16 @@ public sealed partial class FirstRunPage : Page
             });
 
             _catChips.Clear();
+            var moreCats = new List<(int Id, string Name)>();
             if (st.TryGetProperty("category_chips", out var chips) && chips.ValueKind == JsonValueKind.Array)
             {
                 foreach (var c in chips.EnumerateArray())
                     _catChips.Add((JsonUi.Int(c, "id", 0), JsonUi.Str(c, "name")));
+            }
+            if (st.TryGetProperty("more_chips", out var moreEl) && moreEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in moreEl.EnumerateArray())
+                    moreCats.Add((JsonUi.Int(c, "id", 0), JsonUi.Str(c, "name")));
             }
 
             JsonElement? first = null;
@@ -2659,27 +2665,64 @@ public sealed partial class FirstRunPage : Page
                     if (id.TryGetInt32(out var n)) _pendingTxnIds.Add(n);
             }
 
+            var fromBits = new List<string>();
+            if (f.TryGetProperty("from_accounts", out var fromEl) && fromEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var n in fromEl.EnumerateArray())
+                {
+                    var s = n.GetString();
+                    if (!string.IsNullOrWhiteSpace(s))
+                        fromBits.Add(s!);
+                }
+            }
+            var toName = JsonUi.Str(f, "to_account");
+            var fromLine = fromBits.Count > 0 ? string.Join(", ", fromBits) : "this account";
+            var toLine = string.IsNullOrWhiteSpace(toName) ? _pendingPayeeLabel : toName;
             Fields.Children.Add(new TextBlock
             {
                 Text =
                     $"Payee: {_pendingPayeeLabel}\n" +
+                    $"From: {fromLine}\n" +
+                    $"To: {toLine}\n" +
                     $"{JsonUi.Int(f, "count", 0)} transactions · ${JsonUi.Str(f, "total_abs")} total",
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 8),
             });
 
-            var chipPanel = new StackPanel { Spacing = 6 };
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            var col = 0;
-            foreach (var (cid, cname) in _catChips.Take(16))
+            var usable = _catChips
+                .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            moreCats = moreCats
+                .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var allCats = usable
+                .Concat(moreCats)
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var rows = (usable.Count + 1) / 2;
+            for (var i = 0; i < rows; i++)
+                grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            for (var i = 0; i < usable.Count; i++)
             {
-                if (cid <= 0) continue;
+                var (cid, cname) = usable[i];
                 var b = new Button
                 {
-                    Content = cname,
                     Tag = cid,
-                    Padding = new Thickness(10, 6, 10, 6),
+                    Padding = new Thickness(10, 8, 10, 8),
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Center,
+                    Content = new TextBlock
+                    {
+                        Text = cname,
+                        TextWrapping = TextWrapping.Wrap,
+                        TextAlignment = TextAlignment.Center,
+                    },
                 };
                 b.Click += async (_, _) =>
                 {
@@ -2690,18 +2733,41 @@ public sealed partial class FirstRunPage : Page
                         ErrorBar.IsOpen = true;
                     }
                 };
-                row.Children.Add(b);
-                col++;
-                if (col >= 4)
-                {
-                    chipPanel.Children.Add(row);
-                    row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-                    col = 0;
-                }
+                Grid.SetRow(b, i / 2);
+                Grid.SetColumn(b, i % 2);
+                grid.Children.Add(b);
             }
-            if (row.Children.Count > 0)
-                chipPanel.Children.Add(row);
-            Fields.Children.Add(chipPanel);
+            Fields.Children.Add(grid);
+
+            if (usable.Count + moreCats.Count > 0)
+            {
+                var moreBox = new ComboBox
+                {
+                    Header = "All categories",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Margin = new Thickness(0, 8, 0, 0),
+                    PlaceholderText = "Scroll the full list…",
+                    MaxDropDownHeight = 320,
+                    IsEditable = false,
+                };
+                foreach (var (cid, cname) in allCats)
+                {
+                    if (cid <= 0) continue;
+                    moreBox.Items.Add(new ComboBoxItem { Content = cname, Tag = cid });
+                }
+                moreBox.SelectionChanged += async (_, _) =>
+                {
+                    if (moreBox.SelectedItem is not ComboBoxItem { Tag: int cid } || cid <= 0)
+                        return;
+                    try { await ConfirmPayeeCategoryAsync(cid); }
+                    catch (Exception ex)
+                    {
+                        ErrorBar.Message = ex.Message;
+                        ErrorBar.IsOpen = true;
+                    }
+                };
+                Fields.Children.Add(moreBox);
+            }
 
             var skipPayee = new Button
             {
@@ -2715,6 +2781,7 @@ public sealed partial class FirstRunPage : Page
                 Render();
             };
             Fields.Children.Add(skipPayee);
+            AddRecentAssignments(st, allCats);
         }
         catch (Exception ex)
         {
@@ -2722,18 +2789,136 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
-    private async Task ConfirmPayeeCategoryAsync(int categoryId)
+    private void AddRecentAssignments(JsonElement st, List<(int Id, string Name)> allCats)
     {
-        if (string.IsNullOrEmpty(_pendingPayeeKey) && (_pendingTxnIds is null || _pendingTxnIds.Count == 0))
+        if (!st.TryGetProperty("recent_assignments", out var arr)
+            || arr.ValueKind != JsonValueKind.Array
+            || arr.GetArrayLength() == 0)
+            return;
+
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "Just assigned — undo or edit if that was wrong",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 20, 0, 8),
+        });
+
+        var byCat = new Dictionary<string, List<JsonElement>>(StringComparer.OrdinalIgnoreCase);
+        var catOrder = new List<string>();
+        foreach (var item in arr.EnumerateArray())
+        {
+            var cat = JsonUi.Str(item, "category_name", "Category");
+            if (!byCat.ContainsKey(cat))
+            {
+                byCat[cat] = new List<JsonElement>();
+                catOrder.Add(cat);
+            }
+            byCat[cat].Add(item);
+        }
+
+        foreach (var cat in catOrder)
+        {
+            Fields.Children.Add(new TextBlock
+            {
+                Text = cat,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                Opacity = 0.9,
+                Margin = new Thickness(0, 8, 0, 4),
+            });
+            foreach (var item in byCat[cat])
+            {
+                var payee = JsonUi.Str(item, "payee");
+                var payeeKey = JsonUi.Str(item, "payee_key");
+                var count = JsonUi.Int(item, "count", 0);
+                var catId = JsonUi.Int(item, "category_id", 0);
+                var ids = new List<int>();
+                if (item.TryGetProperty("transaction_ids", out var idEl) && idEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var id in idEl.EnumerateArray())
+                        if (id.TryGetInt32(out var n)) ids.Add(n);
+                }
+
+                var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var fromA = JsonUi.Str(item, "from_account");
+                var toA = JsonUi.Str(item, "to_account");
+                var matchLine = $"{payee}  ·  {count} match{(count == 1 ? "" : "es")}";
+                if (!string.IsNullOrWhiteSpace(fromA) || !string.IsNullOrWhiteSpace(toA))
+                    matchLine += $"\nFrom {fromA}  →  To {(string.IsNullOrWhiteSpace(toA) ? payee : toA)}";
+                row.Children.Add(new TextBlock
+                {
+                    Text = matchLine,
+                    TextWrapping = TextWrapping.Wrap,
+                    VerticalAlignment = VerticalAlignment.Center,
+                });
+                var btns = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                Grid.SetColumn(btns, 1);
+
+                var editBox = new ComboBox
+                {
+                    PlaceholderText = "Edit",
+                    MinWidth = 140,
+                    MaxDropDownHeight = 280,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                foreach (var (cid, cname) in allCats)
+                {
+                    if (cid <= 0) continue;
+                    var opt = new ComboBoxItem { Content = cname, Tag = cid };
+                    editBox.Items.Add(opt);
+                    if (cid == catId)
+                        editBox.SelectedItem = opt;
+                }
+                editBox.SelectionChanged += async (_, _) =>
+                {
+                    if (editBox.SelectedItem is not ComboBoxItem { Tag: int nid } || nid <= 0 || nid == catId)
+                        return;
+                    try { await ConfirmPayeeCategoryAsync(nid, ids, payeeKey, reassign: true); }
+                    catch (Exception ex)
+                    {
+                        ErrorBar.Message = ex.Message;
+                        ErrorBar.IsOpen = true;
+                    }
+                };
+
+                var undo = new Button { Content = "Undo" };
+                undo.Click += async (_, _) =>
+                {
+                    try { await UndoPayeeCategoryAsync(ids, payeeKey); }
+                    catch (Exception ex)
+                    {
+                        ErrorBar.Message = ex.Message;
+                        ErrorBar.IsOpen = true;
+                    }
+                };
+                btns.Children.Add(editBox);
+                btns.Children.Add(undo);
+                row.Children.Add(btns);
+                Fields.Children.Add(row);
+            }
+        }
+    }
+
+    private async Task ConfirmPayeeCategoryAsync(
+        int categoryId,
+        List<int>? txnIds = null,
+        string? payeeKey = null,
+        bool reassign = false)
+    {
+        var key = payeeKey ?? _pendingPayeeKey;
+        var ids = txnIds ?? _pendingTxnIds;
+        if (string.IsNullOrEmpty(key) && (ids is null || ids.Count == 0))
             return;
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync();
         var res = await api.SetupCategorizeConfirmAsync(new
         {
             category_id = categoryId,
-            payee_key = _pendingPayeeKey,
-            transaction_ids = _pendingTxnIds,
+            payee_key = key,
+            transaction_ids = ids,
             create_rule = true,
+            reassign,
         });
         InfoBar.Title = "Categorized";
         InfoBar.Message =
@@ -2742,6 +2927,23 @@ public sealed partial class FirstRunPage : Page
         InfoBar.IsOpen = true;
         _pendingPayeeKey = null;
         _pendingTxnIds = null;
+        Render();
+    }
+
+    private async Task UndoPayeeCategoryAsync(List<int> txnIds, string payeeKey)
+    {
+        if (txnIds.Count == 0 && string.IsNullOrEmpty(payeeKey))
+            return;
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var res = await api.SetupCategorizeUndoAsync(new
+        {
+            transaction_ids = txnIds,
+            payee_key = payeeKey,
+        });
+        InfoBar.Title = "Undone";
+        InfoBar.Message = $"Cleared {JsonUi.Int(res, "cleared", 0)} match(es). That payee is back in the queue.";
+        InfoBar.IsOpen = true;
         Render();
     }
 

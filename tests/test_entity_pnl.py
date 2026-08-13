@@ -87,7 +87,7 @@ def test_build_entity_pnl_buckets(tmp_path: Path, monkeypatch):
     )
     meals = (
         s.query(Category)
-        .filter(Category.profile_id == biz.id, Category.display_name == "Business meals")
+        .filter(Category.profile_id == biz.id, Category.partial_rule == "meals_50")
         .first()
     )
 
