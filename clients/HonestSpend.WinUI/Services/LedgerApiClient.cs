@@ -249,6 +249,16 @@ public sealed class LedgerApiClient : IDisposable
         return GetJsonAsync(q, ct);
     }
 
+    public Task<JsonElement> RemapAccountAsync(int sourceAccountId, int targetAccountId, CancellationToken ct = default)
+        => PostJsonAsync("api/accounts/remap", new
+        {
+            source_account_id = sourceAccountId,
+            target_account_id = targetAccountId,
+        }, ct);
+
+    public Task<JsonElement> UndoRemapAccountAsync(string mergeId, CancellationToken ct = default)
+        => PostJsonAsync("api/accounts/remap-undo", new { merge_id = mergeId }, ct);
+
     public Task<JsonElement> PutRewardsRatesAsync(int accountId, object rates, CancellationToken ct = default)
         => PutJsonAsync($"api/accounts/{accountId}/rewards-rates", new { rates }, ct);
 

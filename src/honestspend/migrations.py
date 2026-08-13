@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -503,6 +503,25 @@ def _mig_23_promo_terms(conn) -> None:
     )
 
 
+def _mig_24_account_merges(conn) -> None:
+    """Undo log for remapping a mis-created account into an existing one."""
+    conn.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS account_merges ("
+            "id VARCHAR(32) PRIMARY KEY,"
+            "source_account_id INTEGER NOT NULL,"
+            "target_account_id INTEGER NOT NULL,"
+            "payload_json TEXT,"
+            "created_at DATETIME NOT NULL,"
+            "undone_at DATETIME)"
+        )
+    )
+    _exec_ignore(
+        conn,
+        "CREATE INDEX IF NOT EXISTS ix_account_merges_source ON account_merges(source_account_id)",
+    )
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -528,6 +547,7 @@ MIGRATIONS: dict[int, Callable] = {
     21: _mig_21_coming_up_settings,
     22: _mig_22_schedule_agency_steals,
     23: _mig_23_promo_terms,
+    24: _mig_24_account_merges,
 }
 
 

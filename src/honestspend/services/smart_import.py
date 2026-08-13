@@ -96,6 +96,16 @@ _CREDIT_CONTENT_HINT = re.compile(
     re.I,
 )
 _SAVINGS_HINT = re.compile(r"\b(sav|savings|mma|money\s*market|share\s*0?2)\b", re.I)
+_LOAN_FILE_HINT = re.compile(
+    r"(?:"
+    r"loan|mortgage|installment|auto[\s_-]*loan|car[\s_-]*loan|student[\s_-]*loan|"
+    r"hyundai[\s_-]*(?:motor|finance|capital|palisade)?|"
+    r"toyota[\s_-]*financial|honda[\s_-]*financial|ford[\s_-]*credit|"
+    r"gm[\s_-]*financial|nelnet|aidvantage|mohela|"
+    r"santander[\s_-]*consumer|ally[\s_-]*auto"
+    r")",
+    re.I,
+)
 
 
 @dataclass
@@ -262,8 +272,16 @@ def guess_account_kind(
         return "savings"
     if at in ("CREDITLINE", "CREDITCARD", "CCARD", "CREDIT"):
         return "credit"
-    if product and re.search(r"\bcard\b", product, re.I):
+    if product and re.search(r"\bcard\b", product, re.I) and not re.search(r"\bloan\b", product, re.I):
         return "credit"
+    if _LOAN_FILE_HINT.search(filename) or re.search(
+        r"vehicle\s+description|motor\s+finance|lease\s+term|\bvin\s+number\b|"
+        r"hyundai\s+motor|toyota\s+financial|principal\s+balance",
+        blob,
+        re.I,
+    ):
+        if not re.search(r"\b(credit\s*card|visa|amex|mastercard|discover\s*card)\b", filename, re.I):
+            return "loan"
     if _SAVINGS_HINT.search(filename) and not _CREDIT_FILE_HINT.search(filename):
         return "savings"
     header_blob = " ".join(headers or []).lower()
@@ -272,13 +290,6 @@ def guess_account_kind(
             return "credit"
         if "post date" in header_blob and "type" in header_blob:
             return "credit"
-    if re.search(
-        r"vehicle\s+description|motor\s+finance|lease\s+term|\bvin\s+number\b|"
-        r"hyundai\s+motor|toyota\s+financial",
-        blob,
-        re.I,
-    ):
-        return "loan"
     if re.search(r"student\s*loan|loan\s+agreement|principal\s+balance", blob, re.I) and re.search(
         r"\bloan\b", blob, re.I
     ):
@@ -701,18 +712,20 @@ def enrich_review_fields(
     last4 = last4_from_id(str(acctid) if acctid else None) or last4_from_text(
         filename, header if not txn_export else filename, str(acctid or "")
     )
-    look_loan = (fmt0 == "pdf" or acc.get("is_statement") or kind == "loan") and not txn_export
     loan_label, loan_detail = acc.get("loan_label"), acc.get("loan_detail")
+    gl, gd = guess_loan_label(product, filename, header, org or "", raw_text or "")
+    file_says_loan = bool(_LOAN_FILE_HINT.search(filename or "") or kind == "loan")
+    look_loan = file_says_loan or acc.get("is_statement") or fmt0 == "pdf" or kind == "loan"
     if look_loan:
-        gl, gd = guess_loan_label(product, filename, header, org or "", raw_text or "")
         loan_label = loan_label or gl
         loan_detail = loan_detail or gd
-        if loan_label and kind not in ("credit", "checking", "savings"):
-            kind = "loan"
-            acc["kind"] = "loan"
-        elif loan_label and kind in ("checking", "savings") and not acc.get("loan_label"):
-            # A checking register that pays a mortgage is not itself a home loan
-            loan_label, loan_detail = None, None
+        if loan_label or file_says_loan:
+            if kind not in ("checking", "savings") or file_says_loan:
+                kind = "loan"
+                acc["kind"] = "loan"
+            elif loan_label and kind in ("checking", "savings") and not acc.get("loan_label"):
+                # A checking register that pays a mortgage is not itself a home loan
+                loan_label, loan_detail = None, None
     owners = []
     if not txn_export:
         owners = extract_owner_names(header, product, acc.get("owner_name") or "")
@@ -823,24 +836,91 @@ def enrich_review_fields(
     return acc
 
 
-def _match_account(session: Session, *, external_key: str | None, acctid: str | None, nickname_hint: str) -> Account | None:
+def _score_account(
+    a: Account,
+    *,
+    kind: str | None,
+    last4: str,
+    bank_label: str | None,
+    loan_label: str | None,
+    loan_detail: str | None,
+    nickname_hint: str,
+) -> int:
+    """Higher is better. Kind-aware so a loan file does not glue to a card last-4."""
+    nick = (a.nickname or "").lower()
+    inst = (a.institution or "").lower()
+    blob = f"{nick} {inst} {a.external_id or ''}".lower()
+    ak = (a.kind or "").lower()
+    score = 0
+    if kind and ak == kind:
+        score += 22
+    elif kind == "loan" and ak == "credit":
+        score -= 18
+    elif kind == "credit" and ak == "loan":
+        score -= 18
+    if last4 and last4 in blob:
+        score += 36 if (not kind or ak == kind) else 6
+    if loan_detail and loan_detail.lower() in blob:
+        score += 32
+    if loan_label:
+        tokens = [t for t in re.split(r"\W+", loan_label.lower()) if t and t not in ("loan", "a", "the")]
+        if tokens and all(t in blob for t in tokens):
+            score += 24
+        elif any(t in blob for t in tokens):
+            score += 12
+    if bank_label:
+        bl = bank_label.lower()
+        if bl in blob:
+            score += 8 if bl in _GENERIC_LABELS else 16
+    hint = (nickname_hint or "").lower()
+    if hint and hint == nick:
+        score += 26
+    elif hint:
+        words = [w for w in re.split(r"\W+", hint) if len(w) > 3]
+        hits = sum(1 for w in words if w in blob)
+        if words and hits:
+            score += 6 + 4 * hits
+    return score
+
+
+def _match_account(
+    session: Session,
+    *,
+    external_key: str | None,
+    acctid: str | None,
+    nickname_hint: str,
+    kind: str | None = None,
+    bank_label: str | None = None,
+    loan_label: str | None = None,
+    loan_detail: str | None = None,
+    last4: str | None = None,
+) -> Account | None:
     if external_key:
-        hit = session.query(Account).filter(Account.external_id == external_key).first()
+        hit = (
+            session.query(Account)
+            .filter(Account.external_id == external_key, Account.archived_at.is_(None))
+            .first()
+        )
         if hit:
             return hit
-    digits = re.sub(r"\D+", "", acctid or "")
+    digits = re.sub(r"\D+", "", (last4 or acctid or ""))
     tail = digits[-4:] if len(digits) >= 4 else ""
-    if tail:
-        for a in session.query(Account).all():
-            blob = f"{a.nickname or ''} {a.institution or ''} {a.external_id or ''}"
-            if tail in blob:
-                return a
-    # loose nickname
-    hint = (nickname_hint or "").lower()
-    if hint:
-        for a in session.query(Account).all():
-            if (a.nickname or "").lower() == hint:
-                return a
+    best: Account | None = None
+    best_s = 0
+    for a in session.query(Account).filter(Account.archived_at.is_(None)).all():
+        s = _score_account(
+            a,
+            kind=kind,
+            last4=tail,
+            bank_label=bank_label,
+            loan_label=loan_label,
+            loan_detail=loan_detail,
+            nickname_hint=nickname_hint,
+        )
+        if s > best_s:
+            best, best_s = a, s
+    if best is not None and best_s >= 20:
+        return best
     return None
 
 
@@ -1721,7 +1801,10 @@ def build_smart_plan(
             "external_id": a.external_id,
             "institution": a.institution,
         }
-        for a in session.query(Account).order_by(Account.id.asc()).all()
+        for a in session.query(Account)
+        .filter(Account.archived_at.is_(None))
+        .order_by(Account.id.asc())
+        .all()
     ]
 
     sources: list[dict[str, Any]] = []
@@ -1739,8 +1822,13 @@ def build_smart_plan(
             matched = _match_account(
                 session,
                 external_key=ext,
-                acctid=acc.get("acctid"),
-                nickname_hint=acc.get("suggested_nickname") or "",
+                acctid=acc.get("acctid") or acc.get("last4"),
+                nickname_hint=acc.get("suggested_nickname") or acc.get("human_title") or "",
+                kind=acc.get("kind"),
+                bank_label=acc.get("bank_label") or acc.get("institution"),
+                loan_label=acc.get("loan_label"),
+                loan_detail=acc.get("loan_detail"),
+                last4=acc.get("last4"),
             )
             clean = {k: v for k, v in acc.items() if k != "rows"}
             clean.update(
@@ -1935,7 +2023,7 @@ def commit_smart_plan(
                 nick = (dec.get("suggested_nickname") or _nickname(stmt.get("org"), kind, stmt.get("acctid")))[:80]
                 acct = Account(
                     profile_id=profile_id,
-                    kind=kind if kind in ("checking", "savings", "credit", "cash") else "checking",
+                    kind=kind if kind in ("checking", "savings", "credit", "cash", "loan") else "checking",
                     nickname=nick,
                     institution=(stmt.get("org") or None),
                     current_balance=Decimal("0"),
@@ -2012,7 +2100,7 @@ def commit_smart_plan(
                     nick = f"{nick} · …{l4}"[:80]
                 acct = Account(
                     profile_id=profile_id,
-                    kind=kind if kind in ("checking", "savings", "credit", "cash") else "checking",
+                    kind=kind if kind in ("checking", "savings", "credit", "cash", "loan") else "checking",
                     nickname=nick,
                     current_balance=Decimal("0"),
                     external_id=stmt.get("external_key"),

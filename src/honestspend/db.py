@@ -247,6 +247,19 @@ class PromoConflict(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class AccountMerge(Base):
+    """Undo log when a mis-mapped account is merged into another."""
+
+    __tablename__ = "account_merges"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    source_account_id: Mapped[int] = mapped_column(Integer, index=True)
+    target_account_id: Mapped[int] = mapped_column(Integer, index=True)
+    payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    undone_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class Transaction(Base):
     __tablename__ = "transactions"
 

@@ -4405,6 +4405,37 @@ async def import_smart_commit(
         raise HTTPException(400, str(e)) from e
 
 
+class AccountRemapIn(BaseModel):
+    source_account_id: int
+    target_account_id: int
+
+
+class AccountRemapUndoIn(BaseModel):
+    merge_id: str
+
+
+@app.post("/api/accounts/remap")
+def remap_account(body: AccountRemapIn, db: Session = Depends(get_db)):
+    from honestspend.services.account_merge import merge_account_into
+
+    try:
+        return merge_account_into(
+            db, source_id=body.source_account_id, target_id=body.target_account_id
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/accounts/remap-undo")
+def remap_account_undo(body: AccountRemapUndoIn, db: Session = Depends(get_db)):
+    from honestspend.services.account_merge import undo_account_merge
+
+    try:
+        return undo_account_merge(db, body.merge_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.post("/api/import/ofx/preview")
 async def import_ofx_preview(file: UploadFile = File(...)):
     """Preview OFX/QFX transactions without writing."""

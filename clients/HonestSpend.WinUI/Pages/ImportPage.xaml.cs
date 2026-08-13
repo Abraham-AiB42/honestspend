@@ -30,6 +30,10 @@ public sealed partial class ImportPage : Page
     private int _addedBizSeq;
 
     private sealed record StmtLinkChoice(string Mode, int FileIndex = -1, string? SourceKey = null);
+    private sealed record BooksMatchChoice(int AccountId, string Nickname);
+    private readonly HashSet<int> _createdThisSession = new();
+    private string? _lastMergeId;
+    private string? _lastMergeLabel;
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private int? _freezeAccountId;
@@ -939,21 +943,42 @@ public sealed partial class ImportPage : Page
                         });
                     }
                     var canMatch = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number;
-                    var matchLabel = !string.IsNullOrEmpty(JsonUi.Str(a, "matched_nickname"))
-                        ? "Match existing books: " + JsonUi.Str(a, "matched_nickname")
-                        : "Match an account already in your books";
-                    actionBox.Items.Add(new ComboBoxItem
+                    var matchedId = canMatch ? JsonUi.Int(a, "account_id", 0) : 0;
+                    if (plan.TryGetProperty("existing_accounts", out var books) && books.ValueKind == JsonValueKind.Array)
                     {
-                        Content = matchLabel,
-                        Tag = "match",
-                        IsEnabled = canMatch,
-                    });
+                        foreach (var b in books.EnumerateArray())
+                        {
+                            var bid = JsonUi.Int(b, "id", 0);
+                            if (bid <= 0) continue;
+                            var bnick = JsonUi.Str(b, "nickname", $"Account {bid}");
+                            var bkind = JsonUi.Str(b, "kind", "");
+                            actionBox.Items.Add(new ComboBoxItem
+                            {
+                                Content = $"Use books: {bnick}" + (string.IsNullOrEmpty(bkind) ? "" : $" ({bkind})"),
+                                Tag = new BooksMatchChoice(bid, bnick),
+                            });
+                        }
+                    }
                     actionBox.Items.Add(new ComboBoxItem
                     {
                         Content = "Skip — don't import this one",
                         Tag = "skip",
                     });
-                    SelectComboTag(actionBox, action == "match" && canMatch ? "match" : (action == "skip" ? "skip" : "create"));
+                    if (action == "skip")
+                        SelectComboTag(actionBox, "skip");
+                    else if (matchedId > 0)
+                    {
+                        foreach (var item in actionBox.Items.OfType<ComboBoxItem>())
+                        {
+                            if (item.Tag is BooksMatchChoice bm && bm.AccountId == matchedId)
+                            {
+                                actionBox.SelectedItem = item;
+                                break;
+                            }
+                        }
+                    }
+                    else
+                        SelectComboTag(actionBox, "create");
 
                     var nickBox = new TextBox
                     {
@@ -1095,10 +1120,11 @@ public sealed partial class ImportPage : Page
                         SelectComboTag(actionBox, "skip");
                         row.Opacity = 0.45;
                     };
-                    actionBox.SelectionChanged += (_, _) =>
+                    actionBox.SelectionChanged += async (_, _) =>
                     {
                         row.Opacity = (actionBox.SelectedItem is ComboBoxItem si && si.Tag as string == "skip")
                             ? 0.45 : 1;
+                        await MaybeRemapLiveAsync(actionBox, matchedId, title);
                     };
                     if (a.TryGetProperty("attachments", out var atts) && atts.ValueKind == JsonValueKind.Array
                         && atts.GetArrayLength() > 0)
@@ -1157,6 +1183,86 @@ public sealed partial class ImportPage : Page
                 Opacity = 0.8,
                 TextWrapping = TextWrapping.Wrap,
             });
+        }
+    }
+
+    private void RememberCreatedAccounts(JsonElement res)
+    {
+        void TakeId(JsonElement el)
+        {
+            if (el.TryGetProperty("account_id", out var idEl) && idEl.TryGetInt32(out var id) && id > 0)
+                _createdThisSession.Add(id);
+        }
+        TakeId(res);
+        foreach (var key in new[] { "results", "accounts", "files" })
+        {
+            if (!res.TryGetProperty(key, out var arr) || arr.ValueKind != JsonValueKind.Array)
+                continue;
+            foreach (var item in arr.EnumerateArray())
+            {
+                TakeId(item);
+                if (item.TryGetProperty("accounts", out var inner) && inner.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var a in inner.EnumerateArray())
+                        TakeId(a);
+                }
+            }
+        }
+    }
+
+    private async Task MaybeRemapLiveAsync(ComboBox actionBox, int previousMatchId, string title)
+    {
+        if (actionBox.SelectedItem is not ComboBoxItem { Tag: BooksMatchChoice pick })
+            return;
+        if (previousMatchId <= 0 || previousMatchId == pick.AccountId)
+            return;
+        if (!_createdThisSession.Contains(previousMatchId))
+            return;
+        var sourceId = previousMatchId;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.RemapAccountAsync(sourceId, pick.AccountId);
+            _lastMergeId = JsonUi.Str(res, "merge_id");
+            var n = JsonUi.Str(res, "moved_count", "0");
+            _lastMergeLabel = $"{title} → {pick.Nickname}";
+            SuccessBar.Title = "Merged";
+            SuccessBar.Message = $"Moved {n} transaction(s) into {pick.Nickname}. Tap Undo merge if that was wrong.";
+            var undoBtn = new Button { Content = "Undo merge" };
+            undoBtn.Click += UndoRemap_Click;
+            SuccessBar.ActionButton = undoBtn;
+            SuccessBar.IsOpen = true;
+            _createdThisSession.Remove(sourceId);
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async void UndoRemap_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_lastMergeId))
+            return;
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var res = await api.UndoRemapAccountAsync(_lastMergeId);
+            var restored = JsonUi.Int(res, "restored_account_id", 0);
+            if (restored > 0)
+                _createdThisSession.Add(restored);
+            _lastMergeId = null;
+            SuccessBar.ActionButton = null;
+            SuccessBar.Title = "Undone";
+            SuccessBar.Message = "That merge was reversed. Transactions are back on the original account.";
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
         }
     }
 
@@ -1281,6 +1387,12 @@ public sealed partial class ImportPage : Page
                                 dict["action"] = "attach";
                                 dict["attach_to_file_index"] = choice.FileIndex;
                                 dict["attach_to_source_key"] = choice.SourceKey;
+                            }
+                            else if (ai.Tag is BooksMatchChoice books)
+                            {
+                                dict["action"] = "match";
+                                dict["account_id"] = books.AccountId;
+                                dict["matched_nickname"] = books.Nickname;
                             }
                             else if (ai.Tag is string act)
                                 dict["action"] = act;
@@ -1512,6 +1624,7 @@ public sealed partial class ImportPage : Page
                     streams,
                     sign,
                     AutoCatBox.IsChecked == true);
+                RememberCreatedAccounts(res);
                 var plain = JsonUi.Str(res, "customer_message");
                 if (string.IsNullOrEmpty(plain) || plain is "?" or "—")
                     plain = JsonUi.Str(res, "summary");
