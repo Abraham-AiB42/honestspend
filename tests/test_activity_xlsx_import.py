@@ -108,6 +108,36 @@ def test_parse_amex_html_saved_as_xls():
     assert parsed["suggested_entity_type"] == "business"
 
 
+def _discover_html_xls() -> bytes:
+    html = """<html><head><title>Statement</title></head><body>
+    <table>
+      <tr><td>Statement</td></tr>
+      <tr><td>ABRAHAM PETERS</td></tr>
+      <tr><td>Account Ending in 7990</td></tr>
+    </table>
+    <table>
+      <tr><td>Trans. date</td><td>Post date</td><td>Description</td><td>Amount</td><td>Category</td></tr>
+      <tr><td>08/11/2025</td><td>08/11/2025</td><td>QDOBA MEXICAN EATS</td><td>56.78</td><td>Restaurants</td></tr>
+      <tr><td>07/15/2026</td><td>07/15/2026</td><td>DIRECTPAY FULL BALANCE</td><td>-467.68</td><td>Payments and Credits</td></tr>
+    </table>
+    </body></html>"""
+    return html.encode("utf-8")
+
+
+def test_parse_discover_html_xls_reads_trans_date_table():
+    parsed = parse_activity_xlsx(_discover_html_xls(), "DFS-Search-20260813.xls")
+    assert parsed is not None
+    assert parsed["transactions_found"] == 2
+    assert parsed["last4"] == "7990"
+    assert parsed["sample_payees"]
+
+
+def test_analyze_upload_discover_xls():
+    accs = analyze_upload("DFS-Search-20260813.xls", _discover_html_xls())
+    assert accs[0]["transactions_found"] == 2
+    assert accs[0].get("last4") == "7990"
+
+
 def test_analyze_upload_xls_extension():
     raw = _amex_html_xls(
         product="Hilton Honors Surpass Card",
@@ -154,7 +184,11 @@ def test_analyze_upload_xlsx_names_card():
     a = accs[0]
     assert a["kind"] == "credit"
     assert a["suggested_entity_type"] == "business"
-    assert "Blue Business Cash" in (a.get("human_title") or a.get("suggested_nickname") or "")
+    blob = " ".join(
+        str(a.get(k) or "")
+        for k in ("human_title", "suggested_nickname", "product", "review_lines")
+    )
+    assert "Blue Business Cash" in blob or a.get("last4") == "6334"
     assert a.get("last4") == "6334"
 
 

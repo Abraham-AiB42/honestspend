@@ -27,6 +27,9 @@ public sealed partial class ImportPage : Page
     private readonly List<(string EntityKey, ComboBox TypeBox, TextBox NameBox, Border Card)> _smartEntityRows = new();
     private readonly List<(int FileIndex, string SourceKey, ComboBox KindBox, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox, Border Card, TextBlock TitleBlock, int CardNum)> _smartAccountRows = new();
     private readonly Dictionary<int, string> _booksNames = new();
+    private readonly Dictionary<(int Fi, string Sk), StackPanel> _attachHosts = new();
+    private readonly Dictionary<(int Fi, string Sk), (int TgtFi, string TgtSk)> _collapsedOnto = new();
+    private bool _inAttachUi;
     private readonly List<(int FileIndex, string SourceKey, ComboBox LinkBox)> _statementLinks = new();
     private int _addedBizSeq;
 
@@ -840,6 +843,7 @@ public sealed partial class ImportPage : Page
                 if (item.Tag is BooksMatchChoice bm && bm.AccountId == books.AccountId)
                 {
                     src.ActionBox.SelectedItem = item;
+                    CollapseCardOnto(srcFi, srcSk, tgtFi, tgtSk);
                     return;
                 }
             }
@@ -853,8 +857,88 @@ public sealed partial class ImportPage : Page
                 && ch.SourceKey == tgtSk)
             {
                 src.ActionBox.SelectedItem = item;
+                CollapseCardOnto(srcFi, srcSk, tgtFi, tgtSk);
                 return;
             }
+        }
+    }
+
+    private string FilenameFor(int fi)
+    {
+        if (fi >= 0 && fi < _pendingFiles.Count)
+            return _pendingFiles[fi].Name;
+        return $"file {fi + 1}";
+    }
+
+    private void CollapseCardOnto(int srcFi, string srcSk, int tgtFi, string tgtSk)
+    {
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == srcFi && r.SourceKey == srcSk);
+        var tgt = _smartAccountRows.FirstOrDefault(r => r.FileIndex == tgtFi && r.SourceKey == tgtSk);
+        if (src.Card is null || tgt.Card is null)
+            return;
+        if (_collapsedOnto.TryGetValue((srcFi, srcSk), out var prev) && (prev.TgtFi != tgtFi || prev.TgtSk != tgtSk))
+            ExpandCollapsedCard(srcFi, srcSk);
+
+        src.Card.Visibility = Visibility.Collapsed;
+        _collapsedOnto[(srcFi, srcSk)] = (tgtFi, tgtSk);
+
+        if (!_attachHosts.TryGetValue((tgtFi, tgtSk), out var host) || host is null)
+            return;
+        var key = $"{srcFi}\t{srcSk}";
+        foreach (var child in host.Children.OfType<FrameworkElement>())
+        {
+            if (Equals(child.Tag, key))
+                return;
+        }
+        var chip = new Border
+        {
+            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorSecondaryBrush"],
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(8, 6, 8, 6),
+            Margin = new Thickness(0, 4, 0, 0),
+            Tag = key,
+        };
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var label = new TextBlock
+        {
+            Text = $"Merged in: {FilenameFor(srcFi)}" +
+                   (string.IsNullOrWhiteSpace(src.NickBox?.Text) ? "" : $" · {src.NickBox.Text.Trim()}"),
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var unlink = new Button { Content = "Unmerge", Margin = new Thickness(8, 0, 0, 0) };
+        unlink.Click += (_, _) => ExpandCollapsedCard(srcFi, srcSk);
+        Grid.SetColumn(unlink, 1);
+        row.Children.Add(label);
+        row.Children.Add(unlink);
+        chip.Child = row;
+        host.Children.Add(chip);
+        RefreshLiveAccountNames();
+    }
+
+    private void ExpandCollapsedCard(int srcFi, string srcSk, bool resetAction = true)
+    {
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == srcFi && r.SourceKey == srcSk);
+        if (src.Card is not null)
+            src.Card.Visibility = Visibility.Visible;
+        if (_collapsedOnto.TryGetValue((srcFi, srcSk), out var onto)
+            && _attachHosts.TryGetValue((onto.TgtFi, onto.TgtSk), out var host))
+        {
+            var key = $"{srcFi}\t{srcSk}";
+            foreach (var child in host.Children.OfType<FrameworkElement>().ToList())
+            {
+                if (Equals(child.Tag, key))
+                    host.Children.Remove(child);
+            }
+        }
+        _collapsedOnto.Remove((srcFi, srcSk));
+        if (resetAction && src.ActionBox is not null)
+        {
+            _inAttachUi = true;
+            try { SelectComboTag(src.ActionBox, "create"); }
+            finally { _inAttachUi = false; }
         }
     }
 
@@ -929,6 +1013,8 @@ public sealed partial class ImportPage : Page
         _smartEntityRows.Clear();
         _smartAccountRows.Clear();
         _statementLinks.Clear();
+        _attachHosts.Clear();
+        _collapsedOnto.Clear();
 
         var entityCount = 0;
         if (plan.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
@@ -1226,6 +1312,9 @@ public sealed partial class ImportPage : Page
                     picks.Children.Add(actionBox);
                     stack.Children.Add(picks);
                     stack.Children.Add(nickBox);
+                    var attachHost = new StackPanel { Spacing = 2 };
+                    stack.Children.Add(attachHost);
+                    _attachHosts[(fi, sk)] = attachHost;
 
                     if (LooksLikeStatement(a))
                     {
@@ -1323,6 +1412,15 @@ public sealed partial class ImportPage : Page
                     {
                         row.Opacity = (actionBox.SelectedItem is ComboBoxItem si && si.Tag as string == "skip")
                             ? 0.45 : 1;
+                        if (!_inAttachUi)
+                        {
+                            if (actionBox.SelectedItem is ComboBoxItem { Tag: StmtLinkChoice ch }
+                                && ch.Mode == "attach"
+                                && !string.IsNullOrEmpty(ch.SourceKey))
+                                CollapseCardOnto(fi, sk, ch.FileIndex, ch.SourceKey!);
+                            else if (_collapsedOnto.ContainsKey((fi, sk)))
+                                ExpandCollapsedCard(fi, sk, resetAction: false);
+                        }
                         await MaybeRemapLiveAsync(actionBox, matchedId, title);
                     };
                     if (a.TryGetProperty("attachments", out var atts) && atts.ValueKind == JsonValueKind.Array

@@ -72,23 +72,28 @@ def looks_like_activity_xlsx(rows: list[tuple[Any, ...]] | None = None, sheet_na
     return False
 
 
+def _norm_header(h: str) -> str:
+    h = _cell_str(h).strip().lower().replace(".", "")
+    return re.sub(r"\s+", " ", h)
+
+
 def _header_indexes(row: tuple[Any, ...]) -> dict[str, int] | None:
-    norms = [_cell_str(c).strip().lower() for c in row]
-    if "date" not in norms or "amount" not in norms:
-        return None
-    if not any(h in ("description", "payee", "name") for h in norms):
-        return None
+    norms = [_norm_header(c) for c in row]
     idx: dict[str, int] = {}
     for i, h in enumerate(norms):
-        if h == "date" and "date" not in idx:
-            idx["date"] = i
-        elif h in ("description", "payee", "name") and "desc" not in idx:
+        if h in ("date", "trans date", "transaction date", "posted date", "post date") and "date" not in idx:
+            # Prefer trans/transaction date over post date
+            if h == "post date" and "date" not in idx:
+                idx["date"] = i
+            elif h != "post date":
+                idx["date"] = i
+        elif h in ("description", "payee", "name", "merchant") and "desc" not in idx:
             idx["desc"] = i
-        elif h == "amount" and "amount" not in idx:
+        elif h in ("amount", "amt", "debit") and "amount" not in idx:
             idx["amount"] = i
         elif h == "category" and "category" not in idx:
             idx["category"] = i
-        elif h == "reference" and "reference" not in idx:
+        elif h in ("reference", "ref", "trans id") and "reference" not in idx:
             idx["reference"] = i
     if "date" in idx and "desc" in idx and "amount" in idx:
         return idx
@@ -197,10 +202,15 @@ def _load_html_tables(content: bytes) -> list[tuple[str, list[tuple[Any, ...]]]]
     out: list[tuple[str, list[tuple[Any, ...]]]] = []
     for i, table in enumerate(parser.tables):
         rows = [tuple(r) for r in table[:8000]]
-        name = "Transaction Details" if i == 0 else f"Sheet{i + 1}"
         blob = " ".join(_cell_str(c) for r in rows[:8] for c in r).lower()
-        if "summary" in blob and "details" not in blob:
+        if any(_header_indexes(r) for r in rows[:12]):
+            name = "Transaction Details"
+        elif "account ending" in blob or "account number" in blob:
+            name = "Account Header"
+        elif "summary" in blob:
             name = "Transaction Summary"
+        else:
+            name = f"Sheet{i + 1}"
         out.append((name, rows))
     return out
 
@@ -244,58 +254,60 @@ def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict
         sheet_names = [n for n, _ in sheets]
         details_rows: list[tuple[Any, ...]] | None = None
         summary_rows: list[tuple[Any, ...]] | None = None
+        header_i = None
+        cols = None
+        best_count = -1
         for name, rows in sheets:
             low = name.lower()
-            if low == "transaction details" or (details_rows is None and "details" in low):
-                details_rows = rows
-            if low == "transaction summary" or (summary_rows is None and "summary" in low):
+            for i, row in enumerate(rows[:40]):
+                found = _header_indexes(row)
+                if not found:
+                    continue
+                ntx = 0
+                for later in rows[i + 1 :]:
+                    if found["date"] < len(later) and _as_date(later[found["date"]]):
+                        ntx += 1
+                if ntx > best_count:
+                    best_count = ntx
+                    details_rows = rows
+                    header_i = i
+                    cols = found
+            if "summary" in low:
                 summary_rows = rows
         if details_rows is None:
             details_rows = sheets[0][1]
 
         raw_rows = details_rows[:8000]
+        all_blob = " ".join(
+            _cell_str(c) for _, rows in sheets for r in rows[:20] for c in r
+        )
 
         if not looks_like_activity_xlsx(raw_rows, sheet_names):
-            # HTML-as-xls often has no sheet name; header row is enough
-            if not any(_header_indexes(r) for r in raw_rows[:40]):
+            if header_i is None and "account ending" not in all_blob.lower():
                 return None
 
         product = ""
         cardholder = ""
         acct_mask = ""
-        header_i = None
-        cols = None
-        for i, row in enumerate(raw_rows[:40]):
-            cells = [_cell_str(c) for c in row]
-            joined = " ".join(cells)
-            if i == 0 and len(cells) > 1 and cells[1]:
-                product = cells[1].split("/")[0].strip()
-            if cells and cells[0].lower() == "prepared for" and i + 1 < len(raw_rows):
-                cardholder = _cell_str(raw_rows[i + 1][0])
-            if cells and cells[0].lower() == "account number" and i + 1 < len(raw_rows):
-                acct_mask = _cell_str(raw_rows[i + 1][0])
-            found = _header_indexes(row)
-            if found:
-                header_i = i
-                cols = found
-                break
-            # Product sometimes only in col B of title row
-            if not product:
-                for c in cells[1:3]:
-                    if c and len(c) > 8 and "card" in c.lower():
-                        product = c.split("/")[0].strip()
-                        break
-
-        # Summary sheet: product / mask / ending balance
         ending = None
-        if summary_rows:
-            srows = summary_rows[:40]
-            for i, row in enumerate(srows):
+        for _, rows in sheets:
+            for i, row in enumerate(rows[:40]):
                 cells = [_cell_str(c) for c in row]
-                if not product and len(cells) > 1 and "card" in cells[1].lower():
-                    product = cells[1].split("/")[0].strip()
-                if cells and cells[0].lower() == "account number" and i + 1 < len(srows):
-                    acct_mask = acct_mask or _cell_str(srows[i + 1][0])
+                if i == 0 and len(cells) > 1 and cells[1] and "card" in cells[1].lower():
+                    product = product or cells[1].split("/")[0].strip()
+                if cells and cells[0].lower() == "prepared for" and i + 1 < len(rows):
+                    cardholder = cardholder or _cell_str(rows[i + 1][0] if rows[i + 1] else "")
+                if cells and cells[0].lower() == "account number" and i + 1 < len(rows):
+                    acct_mask = acct_mask or _cell_str(rows[i + 1][0] if rows[i + 1] else "")
+                if cells and "account ending" in cells[0].lower():
+                    acct_mask = acct_mask or re.sub(r"\s+", " ", cells[0])
+                    if len(cells) > 1 and cells[1]:
+                        acct_mask = acct_mask + " " + cells[1]
+                if not product:
+                    for c in cells[1:3]:
+                        if c and len(c) > 8 and "card" in c.lower():
+                            product = c.split("/")[0].strip()
+                            break
                 if cells and cells[0].lower() in ("total balance", "new balance"):
                     for c in row[1:]:
                         d = _as_decimal(c)
@@ -304,12 +316,17 @@ def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict
                             break
 
         last4 = None
-        m = re.search(r"(\d{4,5})\s*$", acct_mask.replace(" ", ""))
+        acct_tail = None
+        m = re.search(r"(\d{4,5})\s*$", (acct_mask or "").replace(" ", "").replace("\n", ""))
         if m:
             last4 = m.group(1)[-4:]
             acct_tail = m.group(1)
-        else:
-            acct_tail = None
+        if not last4:
+            m2 = re.search(r"ending\s+in\s+(\d{4})", all_blob, re.I)
+            if m2:
+                last4 = m2.group(1)
+                acct_tail = last4
+                acct_mask = acct_mask or f"ending in {last4}"
 
         rows: list[dict[str, Any]] = []
         categories: list[str] = []
@@ -351,11 +368,18 @@ def parse_activity_xlsx(content: bytes, filename: str = "activity.xlsx") -> dict
             )
         )
         ext = (filename.rsplit(".", 1)[-1] if "." in filename else "xlsx").lower()
+        org = "American Express"
+        fn = (filename or "").lower()
+        blob_l = all_blob.lower()
+        if fn.startswith("dfs") or "discover" in fn or "directpay" in blob_l:
+            org = "Discover"
+        elif "chase" in fn:
+            org = "Chase"
         return {
             "ok": True,
             "file_format": "xls" if ext == "xls" else "xlsx",
             "kind": "credit",
-            "org": "American Express",
+            "org": org,
             "product": product or None,
             "cardholder": cardholder or None,
             "acct_mask": acct_mask or None,
