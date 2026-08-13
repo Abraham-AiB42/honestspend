@@ -313,8 +313,8 @@ def upsert_promo_term(
             offer_type=offer_type,
             fingerprint=fp,
             apr=apr_d,
-            active=prin > ZERO,
-            status="inactive" if prin <= ZERO else None,
+            active=prin > ZERO or kind_s == "offer",
+            status="pending" if kind_s == "offer" else ("inactive" if prin <= ZERO else None),
         )
         return {"line": line, "created": True, "conflict": None}
 

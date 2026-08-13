@@ -122,18 +122,34 @@ public sealed partial class FirstRunPage : Page
     protected override async void OnNavigatedTo(NavigationEventArgs e)
     {
         base.OnNavigatedTo(e);
+        var local = StorageLocationService.ReadLocalSetupPhase();
+        if (!string.IsNullOrEmpty(local) && local is "welcome" or "storage" or "security" or "path")
+            _phase = local;
+        Render();
         await RefreshStateAsync();
+    }
+
+    private void SetEngineChip(string text, bool ready)
+    {
+        AppState.EngineReady = ready;
+        try
+        {
+            if (EngineChip is not null)
+                EngineChip.Text = text;
+        }
+        catch { /* ignore */ }
     }
 
     private async Task RefreshStateAsync()
     {
         ErrorBar.IsOpen = false;
+        var early = _phase is "welcome" or "storage" or "security";
         try
         {
             using var api = new LedgerApiClient();
-            // Retry engine so we don't bounce to empty Home
             Exception? last = null;
-            for (var i = 0; i < 8; i++)
+            var tries = early ? 2 : 8;
+            for (var i = 0; i < tries; i++)
             {
                 try
                 {
@@ -148,27 +164,73 @@ public sealed partial class FirstRunPage : Page
                 {
                     last = ex;
                 }
-                await Task.Delay(400);
+                if (!early)
+                    await Task.Delay(400);
             }
             if (last is not null)
                 throw last;
+            if (!await api.HealthAsync())
+                throw new InvalidOperationException("Engine is still starting.");
             var st = await api.GetSetupStateAsync();
+            var serverPhase = JsonUi.Str(st, "phase", "welcome");
+            // Don't rewind past answers the user already gave while the engine booted
+            if (early && serverPhase == "welcome" && _phase is "storage" or "security" or "path")
+            {
+                SetEngineChip("Engine ready — we’ll save these answers as you go.", true);
+                return;
+            }
             ApplyState(st);
+            SetEngineChip("Engine ready.", true);
             Render();
         }
         catch (Exception ex)
         {
-            _phase = "welcome";
-            StepLabel.Text = "Starting engine…";
-            ErrorBar.Message = "Waiting for the money engine. " + ex.Message;
-            ErrorBar.IsOpen = true;
-            QuestionText.Text = "Almost ready";
-            HintText.Text = "HonestSpend is starting the local engine. Tap Next to retry.";
-            Fields.Children.Clear();
-            NextBtn.Content = "Retry";
-            NextBtn.IsEnabled = true;
+            SetEngineChip("Engine still starting — you can answer these first three questions now.", false);
+            if (!early)
+            {
+                ErrorBar.Message = "Waiting for the money engine. " + ex.Message;
+                ErrorBar.IsOpen = true;
+            }
+            if (string.IsNullOrEmpty(_phase) || _phase == "welcome")
+            {
+                _phase = "welcome";
+                _phaseTitle = "Welcome";
+                Render();
+            }
         }
     }
+
+    private async Task TrySyncAdvanceAsync(string action, object? payload = null)
+    {
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            if (!await api.HealthAsync())
+                return;
+            var st = await api.SetupAdvanceAsync(action, payload: payload);
+            SetEngineChip("Engine ready.", true);
+            var server = JsonUi.Str(st, "phase", _phase);
+            if (_phase is "storage" or "security" or "path"
+                && server is "welcome")
+                return;
+            if (PhaseOrderIndex(server) >= PhaseOrderIndex(_phase))
+            {
+                ApplyState(st);
+                Render();
+            }
+        }
+        catch { /* user already moved on */ }
+    }
+
+    private static int PhaseOrderIndex(string phase) => phase switch
+    {
+        "welcome" => 0,
+        "storage" => 1,
+        "security" => 2,
+        "path" => 3,
+        _ => 10,
+    };
 
     private void ApplyState(JsonElement st)
     {
@@ -209,8 +271,11 @@ public sealed partial class FirstRunPage : Page
         if (_phase == "done")
         {
             AppState.ShowSetupNav = false;
+            StorageLocationService.PersistSetupPhase("done");
             NotifyShellChrome();
         }
+        else
+            StorageLocationService.PersistSetupPhase(_phase);
     }
 
     private string ResolvedBooksPath()
@@ -231,7 +296,10 @@ public sealed partial class FirstRunPage : Page
             BackBtn.IsEnabled = allowBack;
             NextBtn.IsEnabled = !busy;
             if (SkipBtn is not null)
-                SkipBtn.IsEnabled = !busy;
+            {
+                SkipBtn.IsEnabled = !busy && PhaseAllowsSkip(_phase);
+                SkipBtn.Visibility = PhaseAllowsSkip(_phase) ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
         catch { /* ignore */ }
         if (status is not null)
@@ -292,13 +360,15 @@ public sealed partial class FirstRunPage : Page
         NextBtn.Content = "Next";
         NextBtn.IsEnabled = true;
         ProgressBar.Value = _progress;
-        StepLabel.Text = $"{_phaseTitle} · {_progress}%";
+        StepLabel.Text = EarlyStepCaption();
         if (SkipBtn is not null)
         {
+            SkipBtn.Visibility = PhaseAllowsSkip(_phase) ? Visibility.Visible : Visibility.Collapsed;
+            SkipBtn.IsEnabled = PhaseAllowsSkip(_phase);
             SkipBtn.Content = _phase switch
             {
-                "welcome" or "path" => "Leave for later",
-                "power_menu" => "I'm not ready — Home",
+                "path" => "Leave for later",
+                "power_menu" => _canComplete ? "Skip optional steps — go to Home" : "I'm not ready — Home",
                 "done" => "Go to Home",
                 _ => "Skip this step",
             };
@@ -317,9 +387,9 @@ public sealed partial class FirstRunPage : Page
         {
             QuestionText.Text = "What can you safely spend?";
             HintText.Text =
-                "A few short steps: where books live, optional app lock, then ~2 minutes to Safe to spend. " +
-                "Then optionally add bills, categories, and budgets — or skip straight to Home.\n\n" +
-                "We never store bank passwords. You can leave anytime — setup stays open until you finish.";
+                "Three required steps first: where books live, then app lock (None is fine), then how to connect money. " +
+                "You can answer these while the engine starts in the background. After import we’ll categorize spend and set budgets.\n\n" +
+                "We never store bank passwords. Setup stays open until you finish.";
             NextBtn.Content = "Get started";
             return;
         }
@@ -338,6 +408,7 @@ public sealed partial class FirstRunPage : Page
 
         if (_phase == "power_menu")
         {
+            AppState.PostImportGuide = false;
             RenderPowerMenu();
             return;
         }
@@ -1103,7 +1174,7 @@ public sealed partial class FirstRunPage : Page
 
         Fields.Children.Add(new TextBlock
         {
-            Text = "You can re-open Get started anytime from the nav to finish depth steps.",
+            Text = "You can come back to these optional steps later from Home.",
             Opacity = 0.65,
             TextWrapping = TextWrapping.Wrap,
             FontSize = 12,
@@ -1159,7 +1230,6 @@ public sealed partial class FirstRunPage : Page
         try
         {
             using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
             if (gen != _storageRenderGen) return;
             var info = await api.GetSetupStorageAsync();
             if (gen != _storageRenderGen) return;
@@ -1431,11 +1501,18 @@ public sealed partial class FirstRunPage : Page
         }
 
         Status("Saving books folder…");
-
-        // Only restart engine when the folder actually changes (Back → re-Next was hanging here)
         var previous = string.IsNullOrWhiteSpace(AppConfig.DataDir)
             ? StorageLocationService.DefaultLocalPath()
             : AppConfig.DataDir!.Trim();
+        StorageLocationService.PersistDataDir(_storagePath);
+
+        // Paint the next question immediately — engine can catch up
+        _phase = "security";
+        _phaseTitle = "App lock";
+        StorageLocationService.PersistSetupPhase("security");
+        Render();
+
+        // Only restart engine when the folder actually changes (Back → re-Next was hanging here)
         var sameFolder = false;
         try
         {
@@ -1446,60 +1523,48 @@ public sealed partial class FirstRunPage : Page
         }
         catch { /* treat as different */ }
 
+        _ = SyncStorageWithEngineAsync(sameFolder);
+    }
+
+    private async Task SyncStorageWithEngineAsync(bool sameFolder)
+    {
         try
         {
-            if (sameFolder)
+            if (!sameFolder)
             {
-                Status("Using this folder…");
-                StorageLocationService.PersistDataDir(_storagePath);
-            }
-            else
-            {
-                Status("Moving books folder and restarting engine…");
-                // Progress callback marshals to UI dispatcher so status updates while we wait
+                SetEngineChip("Moving books folder and starting the engine…", false);
                 var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                 await StorageLocationService.ApplyAndRestartEngineAsync(
                     _storagePath,
                     copyFromPrevious: true,
                     progress: msg =>
                     {
-                        if (dq is null || !dq.TryEnqueue(() => Status(msg)))
-                            Status(msg);
+                        if (dq is null || !dq.TryEnqueue(() => SetEngineChip(msg, false)))
+                            SetEngineChip(msg, false);
                     });
             }
-
-            Status("Confirming setup with engine…");
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
+            if (!await api.HealthAsync())
+                return;
             try
             {
-                var res = await api.PostSetupStorageAsync(_storageKind, _storagePath, advance: true);
-                if (res.TryGetProperty("setup", out var st) && st.ValueKind == JsonValueKind.Object)
-                    ApplyState(st);
-                else
-                {
-                    var st2 = await api.SetupAdvanceAsync("next", payload: new
-                    {
-                        storage_kind = _storageKind,
-                        storage_path = _storagePath,
-                        storage_chosen = true,
-                    });
-                    ApplyState(st2);
-                }
+                await api.PostSetupStorageAsync(_storageKind, _storagePath, advance: true);
             }
             catch
             {
-                // Engine may have just restarted — advance via state machine
-                var st = await api.SetupAdvanceAsync("next", payload: new
+                await api.SetupAdvanceAsync("next", payload: new
                 {
                     storage_kind = _storageKind,
                     storage_path = _storagePath,
                     storage_chosen = true,
                 });
-                ApplyState(st);
             }
-            MsgText.Text = "Books folder: " + _storagePath;
-            Render();
+            SetEngineChip("Engine ready. Books folder saved.", true);
+        }
+        catch
+        {
+            SetEngineChip("Engine still starting — folder is saved on this PC.", false);
         }
         finally
         {
@@ -1638,6 +1703,22 @@ public sealed partial class FirstRunPage : Page
                 AppLockService.SetNone();
                 _securityMode = "none";
                 break;
+        }
+
+        if (_securityMode == "none")
+        {
+            AppLockService.SetNone();
+            _phase = "path";
+            _phaseTitle = "Connect money";
+            StorageLocationService.PersistSetupPhase("path");
+            Render();
+            _ = TrySyncAdvanceAsync("next", new
+            {
+                app_lock_mode = "none",
+                security_configured = true,
+                db_encryption = false,
+            });
+            return;
         }
 
         // Full DB encryption whenever lock ≠ none — block advance if enable fails
@@ -1940,11 +2021,11 @@ public sealed partial class FirstRunPage : Page
 
             if (_phase == "welcome")
             {
-                using var api = new LedgerApiClient();
-                await api.EnsureBackendAsync();
-                var st = await api.SetupAdvanceAsync("next");
-                ApplyState(st);
+                _phase = "storage";
+                _phaseTitle = "Where books live";
+                StorageLocationService.PersistSetupPhase("storage");
                 Render();
+                _ = TrySyncAdvanceAsync("next");
                 return;
             }
 
@@ -2000,8 +2081,15 @@ public sealed partial class FirstRunPage : Page
             {
                 using var api = new LedgerApiClient();
                 await api.EnsureBackendAsync();
-                var st = await api.SetupAdvanceAsync("next");
-                ApplyState(st);
+                if (AppState.PostImportGuide)
+                {
+                    var st = await api.SetupAdvanceAsync("jump", targetPhase: "budgets");
+                    ApplyState(st);
+                    Render();
+                    return;
+                }
+                var stNext = await api.SetupAdvanceAsync("next");
+                ApplyState(stNext);
                 Render();
                 return;
             }
@@ -2554,6 +2642,8 @@ public sealed partial class FirstRunPage : Page
                     TextWrapping = TextWrapping.Wrap,
                 });
                 _pendingPayeeKey = null;
+                if (AppState.PostImportGuide)
+                    NextBtn.Content = "Continue to budgets";
                 return;
             }
 
@@ -2659,7 +2749,7 @@ public sealed partial class FirstRunPage : Page
         HintText.Text =
             "Plans seeded from categorized spend (food→daily, gas→weekly, etc.). " +
             "Edit amounts or leave as-is. Remaining budget reserves out of Safe to spend.";
-        NextBtn.Content = "Save budgets & continue";
+        NextBtn.Content = AppState.PostImportGuide ? "Save budgets & keep going" : "Save budgets & continue";
         _budgetAmountBoxes.Clear();
 
         try
@@ -2818,18 +2908,36 @@ public sealed partial class FirstRunPage : Page
         Render();
     }
 
+    private static bool PhaseAllowsSkip(string phase)
+        => phase is not ("welcome" or "storage" or "security");
+
+    private string EarlyStepCaption()
+    {
+        var early = new[] { "welcome", "storage", "security" };
+        var i = Array.IndexOf(early, _phase);
+        if (i >= 0)
+            return $"Step {i + 1} of 3 · {_phaseTitle}";
+        return $"{_phaseTitle} · {_progress}%";
+    }
+
     private async void Skip_Click(object sender, RoutedEventArgs e)
     {
         if (_loading) return;
+        if (!PhaseAllowsSkip(_phase))
+            return;
         try
         {
             _loading = true;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             // Leave for later vs skip phase — never mark setup complete from Skip
-            if (_phase is "welcome" or "path" or "done" or "power_menu")
+            if (_phase is "power_menu" && _canComplete)
             {
-                // Leave for later: Home while needs_setup stays true
+                await FinishFromPowerMenuAsync();
+                return;
+            }
+            if (_phase is "welcome" or "path" or "done")
+            {
                 Frame?.Navigate(typeof(HomePage));
                 return;
             }

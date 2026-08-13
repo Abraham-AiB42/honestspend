@@ -271,6 +271,8 @@ def preview_bank_csv(
     """Detect columns and sample rows without writing to DB."""
     if isinstance(file_obj, (str, Path)):
         text = Path(file_obj).read_text(encoding="utf-8-sig", errors="replace")
+    elif isinstance(file_obj, (bytes, bytearray)):
+        text = bytes(file_obj).decode("utf-8-sig", errors="replace")
     else:
         raw = file_obj.read()
         if isinstance(raw, bytes):
@@ -437,6 +439,8 @@ def import_bank_csv(
 
     if isinstance(file_obj, (str, Path)):
         text = Path(file_obj).read_text(encoding="utf-8-sig", errors="replace")
+    elif isinstance(file_obj, (bytes, bytearray)):
+        text = bytes(file_obj).decode("utf-8-sig", errors="replace")
     else:
         raw = file_obj.read()
         if isinstance(raw, bytes):

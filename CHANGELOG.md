@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **First-run wizard chrome**: no sidebar, Settings rail, or Who/View header until Get started is finished. Get started is not a nav item after that.
+- **Wizard steps 1–3 while the engine starts**: Welcome, books folder, and No-lock can be answered immediately. Import waits for the engine. PIN/password/Hello still need the engine for encryption.
+- **Post-import tunnel**: Looks good — import everything jumps to Categorize, then Budgets (not a stuck Import page). Smart commit timeout is 5 minutes.
+- **Smart import matching**: Capital One + Discover are one family; statements attach by last-4, brand family, or overlapping transaction fingerprints (date + cents). QIF/OFX now emit fingerprints; commit records QIF account ids so a statement can land on the QIF card.
+- **Same account as…**: every numbered card can link to another file in the batch (QIF/CSV/OFX/PDF). Direction is normalized so the statement attaches to the download.
+- **More detail**: sample postings show date + payee + amount.
+- **Statement facts**: vehicle finance PDFs → car loan; credit-union membership PDFs → share accounts; Discover stays Discover after the Capital One merger footer.
+- **Privacy**: live bank downloads stay local. Never commit real names, last-4s, balances, or live filenames.
+
 - **Store 10.1.2.10 (python3xx.dll)**: MSIX now ships unpacked `engine\python\` + `python3*.dll` next to `python.exe` (package files). Launch refuses PATH/`WindowsApps` python and refuses `python.exe` without a sibling `python3*.dll`. Package-local engine is preferred over LocalAppData extract (packaged child could not load extracted DLLs).
 - **Embeddable CPython 3.14.7** (newest stable): `prepare-engine-bundle.ps1` default was 3.12.8. Launch/packaging require versioned `python314.dll` (not the `python3.dll` stub) plus an `honestspend` package.
 - **Simple Home**: card setup is due day + pay-from only; budget desk and Rescue/Money brief stay off the first screen (rescue only when status is danger).

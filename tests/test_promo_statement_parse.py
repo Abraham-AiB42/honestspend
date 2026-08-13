@@ -78,3 +78,84 @@ def test_lone_zero_percent_does_not_invent_rows():
     assert extract_promo_terms("This card has 0% interest") == []
     assert extract_promo_terms("Enjoy 0% APR!") == []
     assert extract_promo_terms("") == []
+
+
+# Synthetic issuer layouts only — do not paste customer statements here.
+WF_PROMO = """
+New Balance $1,000.00
+PROMOTIONAL BALANCE
+PROMOTIONAL RATE EXPIRES 08/07/26 0.00% $0.00 30 $0.00 $50.00
+PROMOTIONAL BALANCE
+PROMOTIONAL RATE EXPIRES 05/07/27 0.00% $0.00 30 $0.00 $900.00
+"""
+
+AMEX_INTRO = """
+Introductory Purchase
+Rate Expires 03/22/2027 then will go to 16.74% (v)
+0.00% $400.00 $0.00
+"""
+
+HD_DEFERRED = """
+You must pay your promotional balance of $300.00 in full by 04/02/27 to avoid paying deferred interest charges.
+You must pay your promotional balance of $40.00 in full by 06/02/27 to avoid paying deferred interest charges.
+"""
+
+CHASE_ISB = """
+New Balance: $800.00
+Interest Saving Balance: $200.00
+Minimum Payment Due: $35.00
+Equal Pay Promo 0.00% (d) 07/15/26 $80.00
+Equal Pay Promo 0.00% (d) - $60.00
+Equal Pay Promo 0.00% (d) - $40.00
+"""
+
+
+def test_wells_promotional_rate_expires():
+    rows = extract_promo_terms(WF_PROMO)
+    bals = {r["principal_remaining"] for r in rows}
+    assert Decimal("900.00") in bals
+    assert Decimal("50.00") in bals
+    ends = {r.get("end_date") for r in rows}
+    assert date(2027, 5, 7) in ends
+
+
+def test_amex_introductory_purchase():
+    rows = extract_promo_terms(AMEX_INTRO)
+    assert any(
+        r["kind"] == "card_intro"
+        and r["principal_remaining"] == Decimal("400.00")
+        and r.get("end_date") == date(2027, 3, 22)
+        for r in rows
+    )
+
+
+def test_homedepot_deferred_interest():
+    rows = extract_promo_terms(HD_DEFERRED)
+    assert len(rows) >= 2
+    assert any(r["principal_remaining"] == Decimal("300.00") for r in rows)
+    assert any(r.get("end_date") == date(2027, 4, 2) for r in rows)
+
+
+def test_chase_equal_pay_and_isb():
+    from honestspend.services.promo_statement_parse import extract_interest_saving_balance
+
+    rows = extract_promo_terms(CHASE_ISB)
+    plans = [r for r in rows if r["kind"] == "purchase_plan"]
+    assert len(plans) >= 3
+    assert {r["principal_remaining"] for r in plans} >= {
+        Decimal("80.00"),
+        Decimal("60.00"),
+        Decimal("40.00"),
+    }
+    assert extract_interest_saving_balance(CHASE_ISB) == Decimal("200.00")
+
+
+def test_capone_new_balance_and_month_name_due():
+    text = (
+        "Payment Due Date: Aug 17, 2026 Account ending in 4411 "
+        "New Balance $150.00 Minimum Payment Due $25.00"
+    )
+    en = extract_statement_enrichment(text)
+    assert en.get("new_balance") == Decimal("150.00")
+    assert en.get("payment_due_day") == 17
+    assert en.get("min_payment") in (Decimal("25.00"), Decimal("25"))

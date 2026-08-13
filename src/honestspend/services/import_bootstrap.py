@@ -42,12 +42,62 @@ def _pct_to_apr(v: Decimal) -> Decimal:
     return v.quantize(Decimal("0.0001"))
 
 
+_MONTH_NAME = {
+    "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
+    "apr": 4, "april": 4, "may": 5, "jun": 6, "june": 6, "jul": 7, "july": 7,
+    "aug": 8, "august": 8, "sep": 9, "sept": 9, "september": 9, "oct": 10,
+    "october": 10, "nov": 11, "november": 11, "dec": 12, "december": 12,
+}
+
+
+def _parse_loose_date(raw: str) -> date | None:
+    raw = (raw or "").strip().replace(",", "")
+    for fmt in ("%m/%d/%Y", "%m/%d/%y", "%m-%d-%Y", "%m-%d-%y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    m = re.match(r"([A-Za-z]+)\s+(\d{1,2})\s+(\d{4})", raw)
+    if m:
+        mon = _MONTH_NAME.get(m.group(1).lower())
+        if mon:
+            try:
+                return date(int(m.group(3)), mon, int(m.group(2)))
+            except ValueError:
+                return None
+    return None
+
+
+def _labeled_money(text: str, *labels: str) -> Decimal | None:
+    for lab in labels:
+        m = re.search(
+            rf"{lab}\s*[:.]?\s*\$?\s*([\d,]+\.\d{{2}})",
+            text,
+            re.I,
+        )
+        if m:
+            v = _d(m.group(1))
+            if v is not None:
+                return v
+    return None
+
+
 def extract_statement_enrichment(text: str) -> dict[str, Any]:
     """Pull credit/statement fields from OFX, PDF text, or CSV headers/footers."""
     if not text:
         return {}
     t = text.replace("\xa0", " ")
     out: dict[str, Any] = {}
+
+    nb = _labeled_money(t, r"new\s+balance", r"total\s+balance", r"standard\s+balance")
+    if nb is not None:
+        out["new_balance"] = nb
+    isb = _labeled_money(t, r"interest\s+saving\s+balance")
+    if isb is not None:
+        out["interest_saving_balance"] = isb
+    std = _labeled_money(t, r"standard\s+balance")
+    if std is not None:
+        out["standard_balance"] = std
 
     # Credit limit
     for pat in (
@@ -76,8 +126,9 @@ def extract_statement_enrichment(text: str) -> dict[str, Any]:
                 out["available_credit"] = v
                 break
 
-    # APR (purchase)
+    # APR (purchase) — also "Purchases 16.74% (v)"
     for pat in (
+        r"purchases?\s+([\d.]+)\s*%",
         r"(?:purchase\s+)?apr[:\s]*([\d.]+)\s*%",
         r"([\d.]+)\s*%\s*(?:purchase\s+)?(?:annual\s+percentage\s+rate|apr)",
         r"interest\s*rate[:\s]*([\d.]+)\s*%",
@@ -162,19 +213,120 @@ def extract_statement_enrichment(text: str) -> dict[str, Any]:
         if 1 <= d <= 31:
             out["payment_due_day"] = d
 
-    # Closing / statement day
-    m = re.search(
-        r"(?:statement\s*)?(?:closing|close)\s*(?:date)?[:\s]*(\d{1,2})[/-](\d{1,2})",
+    # Month-name due: "Payment Due Date Aug 17, 2026" / "Payment Due Date: August 17, 2026"
+    if "payment_due_day" not in out or "payment_due_date" not in out:
+        md = re.search(
+            r"(?:payment\s*)?due\s*(?:date)?[:\s]*"
+            r"([A-Za-z]+\s+\d{1,2},?\s+\d{4})",
+            t,
+            re.I,
+        )
+        if md:
+            parsed = _parse_loose_date(md.group(1))
+            if parsed:
+                out["payment_due_date"] = parsed
+                out["payment_due_day"] = parsed.day
+
+    # Opening/Closing Date 06/19/26 - 07/18/26  (Chase)
+    oc = re.search(
+        r"opening/?closing\s+date[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s*[-–]\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
         t,
         re.I,
     )
-    if m:
+    if oc:
+        start_d = _parse_loose_date(oc.group(1))
+        end_d = _parse_loose_date(oc.group(2))
+        if start_d:
+            out["statement_period_start"] = start_d
+        if end_d:
+            out["statement_close_date"] = end_d
+            out["statement_close_day"] = end_d.day
+
+    # Closing / statement day — require "date" so we don't hit "close of each billing"
+    if "statement_close_date" not in out:
+        m = re.search(
+            r"(?:statement\s+closing\s+date|closing\s+date|statement\s+date)[:\s]*"
+            r"(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+            t,
+            re.I,
+        )
+        if m:
+            parsed = _parse_loose_date(m.group(1))
+            if parsed:
+                out["statement_close_date"] = parsed
+                out["statement_close_day"] = parsed.day
+        else:
+            m2 = re.search(
+                r"(?:statement\s+closing\s+date|closing\s+date)[:\s]*(\d{1,2})[/-](\d{1,2})",
+                t,
+                re.I,
+            )
+            if m2:
+                try:
+                    mm, dd = int(m2.group(1)), int(m2.group(2))
+                    close_day = dd if mm <= 12 else mm
+                    if 1 <= close_day <= 31:
+                        out["statement_close_day"] = close_day
+                except Exception:
+                    pass
+
+    # Statement period 07/09/2026 to 08/07/2026 → close = period end
+    per = re.search(
+        r"statement\s+period[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+to\s+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        t,
+        re.I,
+    )
+    if per:
+        start_d = _parse_loose_date(per.group(1))
+        end_d = _parse_loose_date(per.group(2))
+        if start_d:
+            out["statement_period_start"] = start_d
+        if end_d:
+            out["statement_close_date"] = end_d
+            out["statement_close_day"] = end_d.day
+
+    # Full due date MM/DD/YYYY already captured as day — also keep date
+    if "payment_due_date" not in out:
+        mdn = re.search(
+            r"(?:payment\s*)?due\s*(?:date)?[:\s]*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+            t,
+            re.I,
+        )
+        if mdn:
+            parsed = _parse_loose_date(mdn.group(1))
+            if parsed:
+                out["payment_due_date"] = parsed
+                out.setdefault("payment_due_day", parsed.day)
+
+    # Cash APY (credit-union statements)
+    apy_m = re.search(
+        r"(?:annual\s+percentage\s+yield|apy)(?:\s+earned)?[:\s]*([\d.]+)\s*%",
+        t,
+        re.I,
+    )
+    if apy_m:
+        v = _d(apy_m.group(1))
+        if v is not None and 0 < v < 20:
+            out["apy"] = _pct_to_apr(v)
+            out["apy_display_pct"] = float(v)
+
+    # Rewards hint: "5% back at Amazon.com"
+    rw = re.search(
+        r"(\d+(?:\.\d+)?)\s*%\s*back\s+(?:at|on)\s+([A-Za-z0-9 .]{3,24})",
+        t,
+        re.I,
+    )
+    if rw:
         try:
-            mm, dd = int(m.group(1)), int(m.group(2))
-            close_day = dd if mm <= 12 else mm
-            if 1 <= close_day <= 31:
-                out["statement_close_day"] = close_day
-        except Exception:
+            pct = float(rw.group(1))
+            cat_raw = rw.group(2).lower()
+            if "amazon" in cat_raw:
+                cat = "amazon"
+            else:
+                cat = re.sub(r"[^a-z0-9]+", "", cat_raw)[:16] or "general"
+            if 0 < pct <= 20:
+                out["rewards_hint"] = {cat: pct}
+        except ValueError:
             pass
 
     return out
@@ -221,6 +373,29 @@ def apply_enrichment_to_account(
             int(enrich["statement_close_day"]),
             f"close day {enrich['statement_close_day']}",
         )
+    if enrich.get("apy") is not None and acct.kind in ("checking", "savings", "cash"):
+        set_field("apy", enrich["apy"], f"APY {enrich.get('apy_display_pct', 0)}%")
+    if enrich.get("new_balance") is not None:
+        # Always refresh institution_balance from this statement
+        try:
+            from honestspend.services.reconcile import set_institution_balance
+
+            set_institution_balance(session, account_id, enrich["new_balance"], mark_reconciled=False)
+            applied.append(f"statement balance ${enrich['new_balance']}")
+        except Exception:
+            pass
+    if enrich.get("interest_saving_balance") is not None and acct.kind == "credit":
+        applied.append(
+            f"interest-saving balance ${enrich['interest_saving_balance']} (pay this to keep purchase grace)"
+        )
+    if enrich.get("rewards_hint") and not (acct.rewards_rates_json or "").strip():
+        import json
+
+        try:
+            acct.rewards_rates_json = json.dumps(enrich["rewards_hint"])
+            applied.append("rewards rates from statement")
+        except Exception:
+            pass
 
     if applied:
         session.flush()
@@ -264,6 +439,21 @@ def apply_statement_promos(
     lines: list[Any] = []
 
     terms = extract_promo_terms(text or "")
+    if not any(t.get("kind") in ("purchase_plan", "card_intro") for t in terms):
+        from honestspend.services.promo_statement_parse import extract_interest_saving_balance
+
+        isb = extract_interest_saving_balance(text or "")
+        nb = extract_statement_enrichment(text or "").get("new_balance")
+        if isb is not None and nb is not None and nb > isb + Decimal("1"):
+            terms = list(terms) + [
+                {
+                    "kind": "card_intro",
+                    "name": "Promotional / plan balances (from ISB)",
+                    "principal_remaining": (nb - isb).quantize(Decimal("0.01")),
+                    "monthly_payment": Decimal("0.00"),
+                    "apr": Decimal("0"),
+                }
+            ]
     for term in terms:
         kind = (term.get("kind") or "purchase_plan").strip() or "purchase_plan"
         name = (term.get("name") or "").strip() or (
@@ -272,7 +462,9 @@ def apply_statement_promos(
         prin = term.get("principal_remaining")
         monthly = term.get("monthly_payment")
         if prin is None:
-            continue
+            if kind != "offer":
+                continue
+            prin = Decimal("0")
         if monthly is None:
             monthly = Decimal("0")
         end_date = term.get("end_date")

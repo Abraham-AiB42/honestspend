@@ -214,11 +214,10 @@ def _meta_from_block(block: str) -> dict[str, str]:
         if m:
             meta[key.lower()] = m.group(1).strip()
     # FI / SONRS often carry bank display name when ORG is missing
-    if not meta.get("org"):
+    if not meta.get("org") or str(meta.get("org") or "").isdigit():
         for pat in (
             r"<FI>\s*<ORG>([^<\r\n]+)",
             r"<SONRS>.*?<FI>\s*<ORG>([^<\r\n]+)",
-            r"<NAME>([^<\r\n]+)",
         ):
             m = re.search(pat, block, re.I | re.S)
             if m:
@@ -226,6 +225,9 @@ def _meta_from_block(block: str) -> dict[str, str]:
                 if val and len(val) < 80 and not val.isdigit():
                     meta["org"] = val
                     break
+        else:
+            if str(meta.get("org") or "").isdigit():
+                meta.pop("org", None)
     ledger = parse_ofx_ledger_balance(block)
     if ledger.get("balance") is not None:
         meta["ledger_balance"] = str(ledger["balance"])

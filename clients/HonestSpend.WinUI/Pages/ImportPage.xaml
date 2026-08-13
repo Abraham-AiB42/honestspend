@@ -8,11 +8,11 @@
     mc:Ignorable="d">
 
     <ScrollViewer Padding="24">
-        <StackPanel Spacing="20" MaxWidth="720">
+        <StackPanel Spacing="20" MaxWidth="980">
             <StackPanel Spacing="4">
                 <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="Import bank files" />
-                <TextBlock Opacity="0.75" TextWrapping="Wrap"
-                    Text="Drop everything you downloaded — 24 months of history, statements, multi-account OFX, CSVs. We map personal vs business, set balances, pull APR/promo/limits when the file has them, detect bills and cards, skip duplicates, and categorize what we can. We never store bank passwords." />
+                <TextBlock Opacity="0.85" TextWrapping="Wrap"
+                    Text="Drop transaction downloads, monthly statements, or both — a folder of statements is fine. We match the same account across files (bank + last 4), skip duplicates, and take every forecast fact we can: New Balance, due date, APR, credit limit, and promos. More files = sharper Safe to spend. We never store bank passwords." />
             </StackPanel>
 
             <!-- Primary: drag-and-drop first paint -->
@@ -30,17 +30,18 @@
                             Tapped="DropZone_Tapped"
                             MinHeight="160">
                         <StackPanel Spacing="8" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="Drop bank files here" FontWeight="SemiBold"
+                            <TextBlock Text="Drop transactions and/or statements" FontWeight="SemiBold"
                                        HorizontalAlignment="Center" FontSize="18" />
-                            <TextBlock Opacity="0.75" HorizontalAlignment="Center" TextWrapping="Wrap"
-                                       Text="CSV · OFX · QFX · QIF · PDF · XLSX — one file or many" />
-                            <TextBlock x:Name="DropZoneHint" Opacity="0.55" FontSize="12"
-                                       HorizontalAlignment="Center" Text="or tap to browse" />
+                            <TextBlock Opacity="0.8" HorizontalAlignment="Center" TextWrapping="Wrap"
+                                       Text="CSV · OFX · QFX · QIF · PDF statements · XLSX — files or a whole folder" />
+                            <TextBlock x:Name="DropZoneHint" Opacity="0.65" FontSize="12"
+                                       HorizontalAlignment="Center" Text="or tap to browse · Pick folder for Statements" />
                         </StackPanel>
                     </Border>
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <Button Content="Pick file(s)…" Click="PickAny_Click" Style="{StaticResource AccentButtonStyle}" />
+                        <Button Content="Pick folder…" Click="PickFolder_Click" />
                         <Button Content="Pick CSV…" Click="PickCsv_Click" />
                         <Button Content="Pick OFX/QFX…" Click="PickOfx_Click" />
                         <Button Content="Pick QIF…" Click="PickQif_Click" />
@@ -67,9 +68,11 @@
                             <TextBlock x:Name="SmartEntitiesHeader" FontWeight="SemiBold"
                                        Text="Who owns this money? (only change if wrong)" Margin="0,8,0,0" />
                             <StackPanel x:Name="SmartEntitiesPanel" Spacing="8" />
+                            <Button x:Name="AddBusinessBtn" Content="Add a business"
+                                    Click="AddBusiness_Click" HorizontalAlignment="Left" />
                             <TextBlock FontWeight="SemiBold" Text="What we found in each file" Margin="0,8,0,0" />
-                            <TextBlock Opacity="0.65" FontSize="12" TextWrapping="Wrap"
-                                Text="Each card is one account we detected. Names come from the bank, last 4 digits, balances, and payees inside the file — not from you guessing filenames." />
+                            <TextBlock Opacity="0.85" FontSize="13" TextWrapping="Wrap"
+                                Text="Each numbered card is one account. If a statement and a download are the same card, open What to do and pick Same account as that number (QIF/CSV/OFX). Use Skip only if a file is junk." />
                             <StackPanel x:Name="SmartAccountsPanel" Spacing="10" />
                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
                                 <Button Content="Looks good — import everything"
@@ -80,12 +83,21 @@
                         </StackPanel>
                     </Border>
 
+                    <StackPanel x:Name="AnalyzeBusyPanel" Visibility="Collapsed" Orientation="Horizontal"
+                                Spacing="12" Margin="0,4,0,0">
+                        <ProgressRing x:Name="AnalyzeBusyRing" Width="28" Height="28" IsActive="False" />
+                        <StackPanel Spacing="2">
+                            <TextBlock x:Name="AnalyzeBusyTitle" FontWeight="SemiBold" Text="Analyzing files…" />
+                            <TextBlock x:Name="AnalyzeBusyDetail" Opacity="0.75" FontSize="12" TextWrapping="Wrap"
+                                       Text="Reading downloads and matching statements to transaction lists." />
+                        </StackPanel>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button Content="Analyze &amp; map (recommended)" Click="SmartImportPlan_Click"
+                        <Button x:Name="AnalyzeMapBtn" Content="Analyze &amp; map (recommended)" Click="SmartImportPlan_Click"
                                 Style="{StaticResource AccentButtonStyle}" />
-                        <Button Content="Preview only" Click="PreviewCsv_Click" />
-                        <Button Content="Import without mapping" Click="ImportCsv_Click" />
-                        <Button Content="Import PDF statement" Click="ImportPdf_Click" />
+                        <Button x:Name="PreviewOnlyBtn" Content="Preview only" Click="PreviewCsv_Click" />
+                        <Button x:Name="ImportWithoutMapBtn" Content="Import without mapping" Click="ImportCsv_Click" />
+                        <Button x:Name="ImportPdfBtn" Content="Import PDF statement" Click="ImportPdf_Click" />
                     </StackPanel>
                     <TextBlock x:Name="PreviewText" Opacity="0.85" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                     <TextBlock x:Name="ResultText" Opacity="0.9" TextWrapping="Wrap" IsTextSelectionEnabled="True" />

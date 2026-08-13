@@ -88,6 +88,136 @@ def extract_pdf_text(file_obj: BinaryIO | bytes | Path | str) -> tuple[str, int]
     return "\n".join(parts), len(reader.pages)
 
 
+def parse_vehicle_finance_statement(text: str) -> dict[str, Any] | None:
+    """Hyundai / similar motor-finance monthly coupon (lease or loan)."""
+    if not text:
+        return None
+    if not re.search(
+        r"vehicle\s+description|motor\s+finance|lease\s+term|\bvin\s+number\b",
+        text,
+        re.I,
+    ):
+        return None
+    vehicle = None
+    vm = re.search(r"Vehicle Description\s+([^\n\r]+)", text, re.I)
+    if vm:
+        raw = " ".join(vm.group(1).split())
+        # "2026 HYUNDAI PALISADE HYBRID" → Hyundai Palisade
+        mm = re.search(
+            r"(?:20\d{2}\s+)?(HYUNDAI|TOYOTA|HONDA|FORD|CHEVROLET|KIA|MAZDA|SUBARU|TESLA)\s+([A-Z][A-Z0-9\-]+)",
+            raw,
+            re.I,
+        )
+        if mm:
+            vehicle = f"{mm.group(1).title()} {mm.group(2).title()}"
+        else:
+            vehicle = raw.title()[:40]
+    lender = None
+    if re.search(r"hyundai\s+motor\s+finance", text, re.I):
+        lender = "Hyundai Motor Finance"
+    elif re.search(r"toyota\s+financial", text, re.I):
+        lender = "Toyota Financial"
+    acct = None
+    am = re.search(r"Account Number\s+(\d{6,})", text, re.I)
+    if am:
+        acct = am.group(1)
+    due = None
+    dm = re.search(
+        r"(?:Your\s+)?Total Amount Due\s*\$?\s*([\d,]+\.\d{2})",
+        text,
+        re.I,
+    )
+    if dm:
+        due = _parse_amount(dm.group(1))
+    return {
+        "kind": "loan",
+        "loan_label": "Car loan",
+        "loan_detail": vehicle,
+        "lender": lender,
+        "acctid": acct,
+        "last4": acct[-4:] if acct and len(acct) >= 4 else None,
+        "ledger_balance": str(due) if due is not None else None,
+        "product": vehicle or lender,
+    }
+
+
+def parse_credit_union_membership(text: str) -> list[dict[str, Any]]:
+    """Canvas-style membership statement: ID: 00/01/02 shares under one member number."""
+    if not text:
+        return []
+    if not re.search(r"\bID:\s*0*\d{1,2}\b", text, re.I):
+        return []
+    if not re.search(r"credit union|canvas\.org|share\s+0?\d", text, re.I):
+        return []
+    org = "Credit union"
+    if re.search(r"canvas\.org|canvas credit union", text, re.I):
+        org = "Canvas Credit Union"
+    member = None
+    mm = re.search(r"Account Number\s+X+(\d{4})", text, re.I)
+    if mm:
+        member = mm.group(1)
+    shares: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for m in re.finditer(
+        r"ID:\s*0*(?P<id>\d{1,2})\s+(?P<label>SAVINGS ACCOUNT|FREE CHECKING|"
+        r"HIGH YIELD MONEY MARKET|MONEY MARKET|CHECKING|SAVINGS|[A-Z][A-Z /-]{3,32})",
+        text,
+        re.I,
+    ):
+        sid = f"{int(m.group('id')):02d}"
+        if sid in seen:
+            continue
+        seen.add(sid)
+        label = " ".join(m.group("label").split()).strip(" -")
+        low = label.lower()
+        if "check" in low:
+            kind = "checking"
+            friendly = "Checking"
+        elif "money market" in low or "mma" in low:
+            kind = "savings"
+            friendly = "Money market"
+        elif "sav" in low:
+            kind = "savings"
+            friendly = "Savings"
+        else:
+            kind = "checking"
+            friendly = label.title()[:32]
+        ending = None
+        # Prefer "Ending Balance for LABEL 1,234.56" after this share
+        tail = text[m.end() : m.end() + 1800]
+        em = re.search(
+            rf"Ending Balance for\s+{re.escape(label)}\s+\$?\s*([\d,]+\.\d{{2}})",
+            tail,
+            re.I,
+        )
+        if not em:
+            em = re.search(
+                r"Ending Balance for[^\n]{0,40}\s+\$?\s*([\d,]+\.\d{2})",
+                tail,
+                re.I,
+            )
+        if em:
+            ending = _parse_amount(em.group(1))
+        share_num = f"{int(sid):04d}"
+        shares.append(
+            {
+                "share_id": sid,
+                "label": label,
+                "kind": kind,
+                "friendly": friendly,
+                "org": org,
+                "member_last4": member,
+                "acctid": share_num,
+                "last4": share_num,
+                "match_tails": [share_num, sid, str(int(sid))],
+                "ledger_balance": str(ending) if ending is not None else None,
+                "apply_balance_only": True,
+                "is_statement": True,
+            }
+        )
+    return shares
+
+
 def _parse_amount(raw: str) -> Decimal | None:
     s = raw.replace("$", "").replace(",", "").replace(" ", "").strip()
     # parentheses for credit-card credits on some statements
@@ -191,11 +321,17 @@ def parse_statement_lines(
 # Statement summary lines (not txn rows) — prefer most authoritative label
 _ENDING_BAL_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"(?i)\bnew\s+balance\b"), "new_balance"),
+    (re.compile(r"(?i)\btotal\s+balance\b"), "total_balance"),
+    (re.compile(r"(?i)\bstandard\s+balance\b"), "standard_balance"),
     (re.compile(r"(?i)\bclosing\s+balance\b"), "closing"),
     (re.compile(r"(?i)\bending\s+balance\b"), "ending"),
     (re.compile(r"(?i)\bstatement\s+balance\b"), "statement"),
     (re.compile(r"(?i)\bcurrent\s+balance\b"), "current"),
 ]
+
+_LABELED_NEW_BAL = re.compile(
+    r"(?i)(?:new\s+balance|total\s+balance)\s*[:.]?\s*\$?\s*([\d,]+\.\d{2})"
+)
 
 
 def parse_statement_ending_balance(text: str) -> tuple[Decimal | None, str | None]:
@@ -207,23 +343,34 @@ def parse_statement_ending_balance(text: str) -> tuple[Decimal | None, str | Non
     best: Decimal | None = None
     best_src: str | None = None
     best_rank = 999
+    # Prefer an explicit "New Balance $1,234.56" even on a jammed header line
+    labeled = _LABELED_NEW_BAL.findall(text or "")
+    if labeled:
+        amt = _parse_amount(labeled[0])
+        if amt is not None:
+            return amt, "new_balance"
+
     for line in text.splitlines():
         line_c = " ".join(line.split())
         if len(line_c) < 8:
             continue
         low = line_c.lower()
-        # Skip previous / min / payment-due lines (not ending bal)
+        # Skip previous / min / pay-off-warning lines (not ending bal)
         if any(
             x in low
             for x in (
                 "previous balance",
                 "past due",
                 "minimum payment",
-                "payment due",
+                "pay off the new balance",
+                "will pay off",
                 "credit limit",
                 "available credit",
             )
         ):
+            continue
+        # "Payment Due Date … New Balance $199.90" is OK — labeled extractor already ran
+        if "payment due" in low and "new balance" not in low and "total balance" not in low:
             continue
         rank = None
         src = None
@@ -400,6 +547,16 @@ def import_statement_pdf(
     # New Balance / Ending Balance → institution_balance (CSV/OFX parity)
     drift: Decimal | None = None
     ending, bal_src = parse_statement_ending_balance(text)
+    if ending is None:
+        try:
+            from honestspend.services.import_bootstrap import extract_statement_enrichment
+
+            en0 = extract_statement_enrichment(text)
+            if en0.get("new_balance") is not None:
+                ending = en0["new_balance"]
+                bal_src = "new_balance"
+        except Exception:
+            pass
     if ending is not None:
         from honestspend.services.reconcile import set_institution_balance
 
@@ -412,6 +569,26 @@ def import_statement_pdf(
         result.books_balance = str(books)
         drift = (books - ending).quantize(Decimal("0.01"))
         result.drift = str(drift)
+        try:
+            from honestspend.services.import_bootstrap import extract_statement_enrichment
+            from honestspend.services.statement_freeze import freeze_statement_cycle
+
+            en = extract_statement_enrichment(text)
+            close = en.get("statement_close_date")
+            due = en.get("payment_due_date")
+            start = en.get("statement_period_start")
+            if acct.kind == "credit" and (close or due or acct.statement_close_day):
+                freeze_statement_cycle(
+                    session,
+                    account_id,
+                    actual_balance=ending,
+                    cycle_end=close,
+                    due_date=due,
+                    cycle_start=start,
+                    source="import",
+                )
+        except Exception:
+            pass
     else:
         result.books_balance = str(acct.current_balance or 0)
         result.balance_source = "none"

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using HonestSpend_WinUI.Helpers;
 using HonestSpend_WinUI.Services;
@@ -23,8 +24,12 @@ public sealed partial class ImportPage : Page
     private readonly List<StorageFile> _pendingFiles = new();
     /// <summary>Last smart-import plan JSON (user can tweak combos then commit).</summary>
     private string? _smartPlanJson;
-    private readonly List<(string EntityKey, ComboBox TypeBox, TextBox NameBox)> _smartEntityRows = new();
-    private readonly List<(int FileIndex, string SourceKey, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox)> _smartAccountRows = new();
+    private readonly List<(string EntityKey, ComboBox TypeBox, TextBox NameBox, Border Card)> _smartEntityRows = new();
+    private readonly List<(int FileIndex, string SourceKey, ComboBox KindBox, ComboBox EntityBox, ComboBox ActionBox, TextBox NickBox, Border Card)> _smartAccountRows = new();
+    private readonly List<(int FileIndex, string SourceKey, ComboBox LinkBox)> _statementLinks = new();
+    private int _addedBizSeq;
+
+    private sealed record StmtLinkChoice(string Mode, int FileIndex = -1, string? SourceKey = null);
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private int? _freezeAccountId;
@@ -406,9 +411,9 @@ public sealed partial class ImportPage : Page
             if (!e.DataView.Contains(StandardDataFormats.StorageItems))
                 return;
             var items = await e.DataView.GetStorageItemsAsync();
-            var files = items.OfType<StorageFile>().ToList();
+            var files = await CollectImportFilesAsync(items);
             if (files.Count == 0)
-                throw new InvalidOperationException("Drop files (not folders).");
+                throw new InvalidOperationException("Drop bank files or a folder of statements.");
             QueueFiles(files);
             if (_pendingFiles.Count > 0)
                 await RunSmartPlanAsync();
@@ -426,6 +431,55 @@ public sealed partial class ImportPage : Page
     private async void PickAny_Click(object sender, RoutedEventArgs e)
         => await PickAnyFilesAsync();
 
+    private async void PickFolder_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var picker = new FolderPicker();
+            picker.SuggestedStartLocation = PickerLocationId.Downloads;
+            picker.FileTypeFilter.Add("*");
+            var window = App.MainWindowInstance
+                ?? throw new InvalidOperationException("Main window not ready.");
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+            var files = await CollectImportFilesAsync(new IStorageItem[] { folder });
+            if (files.Count == 0)
+                throw new InvalidOperationException("That folder has no CSV / OFX / QIF / PDF / XLSX files.");
+            QueueFiles(files);
+            await RunSmartPlanAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
+    private async Task<List<StorageFile>> CollectImportFilesAsync(IEnumerable<IStorageItem> items)
+    {
+        var files = new List<StorageFile>();
+        foreach (var item in items)
+        {
+            if (item is StorageFile f)
+                files.Add(f);
+            else if (item is StorageFolder folder)
+            {
+                foreach (var inner in await folder.GetFilesAsync())
+                    files.Add(inner);
+                var subs = await folder.GetFoldersAsync();
+                var n = 0;
+                foreach (var sub in subs)
+                {
+                    if (n++ >= 25) break;
+                    foreach (var inner in await sub.GetFilesAsync())
+                        files.Add(inner);
+                }
+            }
+        }
+        return files;
+    }
+
     private async Task PickAnyFilesAsync()
     {
         var files = await PickFilesAsync(AllImportExt);
@@ -438,6 +492,97 @@ public sealed partial class ImportPage : Page
     private async void SmartImportPlan_Click(object sender, RoutedEventArgs e)
         => await RunSmartPlanAsync();
 
+    private void SetImportBusy(bool busy, string? title = null, string? detail = null)
+    {
+        if (AnalyzeBusyPanel is not null)
+            AnalyzeBusyPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+        if (AnalyzeBusyRing is not null)
+            AnalyzeBusyRing.IsActive = busy;
+        if (title is not null && AnalyzeBusyTitle is not null)
+            AnalyzeBusyTitle.Text = title;
+        if (detail is not null && AnalyzeBusyDetail is not null)
+            AnalyzeBusyDetail.Text = detail;
+        if (AnalyzeMapBtn is not null) AnalyzeMapBtn.IsEnabled = !busy;
+        if (PreviewOnlyBtn is not null) PreviewOnlyBtn.IsEnabled = !busy;
+        if (ImportWithoutMapBtn is not null) ImportWithoutMapBtn.IsEnabled = !busy;
+        if (ImportPdfBtn is not null) ImportPdfBtn.IsEnabled = !busy;
+        if (SmartPlanPanel is not null)
+            SmartPlanPanel.IsHitTestVisible = !busy;
+        if (DropZone is not null)
+            DropZone.Opacity = busy ? 0.55 : 1;
+    }
+
+    private static bool LooksLikeStatement(JsonElement a)
+    {
+        if (JsonUi.Str(a, "action") == "attach")
+            return true;
+        if (a.TryGetProperty("is_statement", out var st) && st.ValueKind == JsonValueKind.True)
+            return true;
+        return string.Equals(JsonUi.Str(a, "file_format"), "pdf", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private ComboBox BuildStatementLinkBox(
+        int fileIndex,
+        string sourceKey,
+        bool currentlyAttached,
+        int? attachedToFileIndex,
+        string? attachedToSourceKey,
+        IReadOnlyList<(int Number, int FileIndex, string SourceKey, string Title, string Format, string Filename)> targets)
+    {
+        var box = new ComboBox
+        {
+            Header = currentlyAttached
+                ? "Linked to — change if we guessed wrong"
+                : "This statement belongs to",
+            MinWidth = 280,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        box.Items.Add(new ComboBoxItem
+        {
+            Content = currentlyAttached ? "Keep as its own account instead" : "This account (its own books)",
+            Tag = new StmtLinkChoice("create"),
+        });
+        foreach (var t in targets)
+        {
+            if (t.FileIndex == fileIndex && t.SourceKey == sourceKey)
+                continue;
+            box.Items.Add(new ComboBoxItem
+            {
+                Content = new TextBlock
+                {
+                    Text = $"{t.Number}. {t.Title}  ({t.Format} · {t.Filename})",
+                    TextWrapping = TextWrapping.Wrap,
+                    Width = 360,
+                },
+                Tag = new StmtLinkChoice("attach", t.FileIndex, t.SourceKey),
+            });
+        }
+        box.Items.Add(new ComboBoxItem
+        {
+            Content = "Skip — don't import this file",
+            Tag = new StmtLinkChoice("skip"),
+        });
+
+        var selected = 0;
+        if (currentlyAttached)
+        {
+            for (var i = 0; i < box.Items.Count; i++)
+            {
+                if (box.Items[i] is ComboBoxItem { Tag: StmtLinkChoice c }
+                    && c.Mode == "attach"
+                    && c.FileIndex == attachedToFileIndex
+                    && string.Equals(c.SourceKey, attachedToSourceKey, StringComparison.Ordinal))
+                {
+                    selected = i;
+                    break;
+                }
+            }
+        }
+        box.SelectedIndex = selected;
+        _statementLinks.Add((fileIndex, sourceKey, box));
+        return box;
+    }
+
     private async Task RunSmartPlanAsync()
     {
         ErrorBar.IsOpen = false;
@@ -447,8 +592,14 @@ public sealed partial class ImportPage : Page
             ErrorBar.IsOpen = true;
             return;
         }
+        SetImportBusy(
+            true,
+            "Analyzing files…",
+            $"Reading {_pendingFiles.Count} file(s) and matching statements to transaction lists.");
+        PreviewText.Text = "Working — matching accounts and statements…";
         try
         {
+            await Task.Delay(40);
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var streams = new List<(Stream Stream, string FileName)>();
@@ -478,6 +629,106 @@ public sealed partial class ImportPage : Page
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
         }
+        finally
+        {
+            SetImportBusy(false);
+        }
+    }
+
+    private static void SelectComboTag(ComboBox box, string? tag)
+    {
+        for (var i = 0; i < box.Items.Count; i++)
+        {
+            if (box.Items[i] is ComboBoxItem ci && ci.Tag is string t
+                && string.Equals(t, tag, StringComparison.OrdinalIgnoreCase))
+            {
+                box.SelectedIndex = i;
+                return;
+            }
+        }
+        if (box.Items.Count > 0 && box.SelectedIndex < 0)
+            box.SelectedIndex = 0;
+    }
+
+    private void FillEntityBox(ComboBox box, string? selected)
+    {
+        box.Items.Clear();
+        box.Items.Add(new ComboBoxItem { Content = "Personal / household", Tag = "personal" });
+        foreach (var (ek, _, nameBox, _) in _smartEntityRows)
+        {
+            if (ek is "personal" or "individual") continue;
+            var label = string.IsNullOrWhiteSpace(nameBox.Text) ? "New business" : nameBox.Text;
+            box.Items.Add(new ComboBoxItem { Content = label, Tag = ek });
+        }
+        SelectComboTag(box, selected);
+    }
+
+    private void RefreshAccountEntityLabels()
+    {
+        foreach (var acc in _smartAccountRows)
+        {
+            var cur = (acc.EntityBox.SelectedItem as ComboBoxItem)?.Tag as string;
+            FillEntityBox(acc.EntityBox, cur);
+        }
+    }
+
+    private void AddBusiness_Click(object sender, RoutedEventArgs e)
+    {
+        _addedBizSeq++;
+        var key = $"business:added-{_addedBizSeq}";
+        var row = new Border
+        {
+            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10),
+        };
+        var typeBox = new ComboBox { Header = "Personal or business?", MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };
+        typeBox.Items.Add(new ComboBoxItem { Content = "Personal / household", Tag = "personal" });
+        typeBox.Items.Add(new ComboBoxItem { Content = "Business", Tag = "business" });
+        SelectComboTag(typeBox, "business");
+        var nameBox = new TextBox
+        {
+            Header = "Name on the books",
+            Text = "",
+            PlaceholderText = "e.g. Studio name LLC",
+        };
+        nameBox.TextChanged += (_, _) => RefreshAccountEntityLabels();
+        var removeBtn = new Button { Content = "Remove", Tag = key };
+        removeBtn.Click += RemoveBusiness_Click;
+        var headRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        headRow.Children.Add(new TextBlock
+        {
+            Text = "Books owner — you added this",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        headRow.Children.Add(removeBtn);
+        var stack = new StackPanel { Spacing = 6 };
+        stack.Children.Add(headRow);
+        stack.Children.Add(typeBox);
+        stack.Children.Add(nameBox);
+        row.Child = stack;
+        SmartEntitiesPanel.Children.Add(row);
+        _smartEntityRows.Add((key, typeBox, nameBox, row));
+        RefreshAccountEntityLabels();
+    }
+
+    private void RemoveBusiness_Click(object sender, RoutedEventArgs e)
+    {
+        var key = (sender as Button)?.Tag as string;
+        if (string.IsNullOrEmpty(key)) return;
+        var hit = _smartEntityRows.FirstOrDefault(r => r.EntityKey == key);
+        if (hit.Card is null) return;
+        SmartEntitiesPanel.Children.Remove(hit.Card);
+        _smartEntityRows.RemoveAll(r => r.EntityKey == key);
+        foreach (var acc in _smartAccountRows)
+        {
+            if (acc.EntityBox.SelectedItem is ComboBoxItem ci && ci.Tag as string == key)
+                SelectComboTag(acc.EntityBox, "personal");
+        }
+        RefreshAccountEntityLabels();
     }
 
     private void RenderSmartPlan(JsonElement plan)
@@ -488,6 +739,7 @@ public sealed partial class ImportPage : Page
         SmartAccountsPanel.Children.Clear();
         _smartEntityRows.Clear();
         _smartAccountRows.Clear();
+        _statementLinks.Clear();
 
         var entityCount = 0;
         if (plan.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
@@ -508,27 +760,37 @@ public sealed partial class ImportPage : Page
                     CornerRadius = new CornerRadius(8),
                     Padding = new Thickness(10),
                 };
-                var typeBox = new ComboBox { Header = "Personal or business?", MinWidth = 160 };
-                typeBox.Items.Add(new ComboBoxItem { Content = "Personal / household", Tag = "personal", IsSelected = et is "personal" or "individual" });
-                typeBox.Items.Add(new ComboBoxItem { Content = "Business", Tag = "business", IsSelected = et == "business" });
-                if (typeBox.SelectedIndex < 0) typeBox.SelectedIndex = 0;
+                var typeBox = new ComboBox { Header = "Personal or business?", MinWidth = 220, HorizontalAlignment = HorizontalAlignment.Stretch };
+                typeBox.Items.Add(new ComboBoxItem { Content = "Personal / household", Tag = "personal" });
+                typeBox.Items.Add(new ComboBoxItem { Content = "Business", Tag = "business" });
+                SelectComboTag(typeBox, et is "individual" ? "personal" : et);
                 var nameBox = new TextBox
                 {
                     Header = "Name on the books",
                     Text = name,
-                    PlaceholderText = et == "business" ? "e.g. AP Agency LLC" : "Personal",
+                    PlaceholderText = et == "business" ? "e.g. Studio name LLC" : "Personal",
                 };
-                var stack = new StackPanel { Spacing = 6 };
-                stack.Children.Add(new TextBlock
+                var headRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                headRow.Children.Add(new TextBlock
                 {
                     Text = string.IsNullOrEmpty(conf) ? "Books owner" : $"Books owner · confidence {conf}",
                     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
                 });
+                if (et == "business" || key.StartsWith("business", StringComparison.OrdinalIgnoreCase))
+                {
+                    var removeBtn = new Button { Content = "Remove", Tag = key };
+                    removeBtn.Click += RemoveBusiness_Click;
+                    headRow.Children.Add(removeBtn);
+                }
+                var stack = new StackPanel { Spacing = 6 };
+                stack.Children.Add(headRow);
                 stack.Children.Add(typeBox);
                 stack.Children.Add(nameBox);
                 row.Child = stack;
                 SmartEntitiesPanel.Children.Add(row);
-                _smartEntityRows.Add((key, typeBox, nameBox));
+                nameBox.TextChanged += (_, _) => RefreshAccountEntityLabels();
+                _smartEntityRows.Add((key, typeBox, nameBox, row));
             }
         }
 
@@ -543,10 +805,17 @@ public sealed partial class ImportPage : Page
             var et0 = JsonUi.Str(entsHdr[0], "entity_type", "personal");
             onlySimplePersonal = et0 is "personal" or "individual";
         }
+        var namedBiz = _smartEntityRows.Count(r =>
+            r.EntityKey.StartsWith("business:", StringComparison.OrdinalIgnoreCase));
         if (onlySimplePersonal)
         {
             SmartEntitiesHeader.Text = "Books owner (we assumed Personal — change only if business money)";
             SmartEntitiesHeader.Opacity = 0.75;
+        }
+        else if (namedBiz >= 2)
+        {
+            SmartEntitiesHeader.Text = "Who owns this money? We found more than one business — check the names";
+            SmartEntitiesHeader.Opacity = 1;
         }
         else
         {
@@ -556,6 +825,25 @@ public sealed partial class ImportPage : Page
 
         if (plan.TryGetProperty("sources", out var sources) && sources.ValueKind == JsonValueKind.Array)
         {
+            var linkTargets = new List<(int Number, int FileIndex, string SourceKey, string Title, string Format, string Filename)>();
+            var cardNumPre = 0;
+            foreach (var src in sources.EnumerateArray())
+            {
+                if (!src.TryGetProperty("accounts", out var preAccs) || preAccs.ValueKind != JsonValueKind.Array)
+                    continue;
+                var preFi = JsonUi.Int(src, "file_index", 0);
+                var preName = JsonUi.Str(src, "filename");
+                foreach (var a in preAccs.EnumerateArray())
+                {
+                    if (JsonUi.Str(a, "action") == "attach")
+                        continue;
+                    cardNumPre++;
+                    var title = JsonUi.Str(a, "human_title", JsonUi.Str(a, "suggested_nickname", preName));
+                    var fmt = JsonUi.Str(a, "file_format", "file").ToUpperInvariant();
+                    linkTargets.Add((cardNumPre, preFi, JsonUi.Str(a, "source_key"), title, fmt, preName));
+                }
+            }
+
             var cardNum = 0;
             foreach (var src in sources.EnumerateArray())
             {
@@ -565,6 +853,8 @@ public sealed partial class ImportPage : Page
                     continue;
                 foreach (var a in accs.EnumerateArray())
                 {
+                    if (JsonUi.Str(a, "action") == "attach")
+                        continue;
                     cardNum++;
                     var sk = JsonUi.Str(a, "source_key");
                     var ekey = JsonUi.Str(a, "entity_key", "personal");
@@ -607,96 +897,253 @@ public sealed partial class ImportPage : Page
                         Padding = new Thickness(12),
                     };
 
+                    var kindBox = new ComboBox
+                    {
+                        Header = "This is a…",
+                        MinWidth = 200,
+                        Width = 220,
+                        HorizontalAlignment = HorizontalAlignment.Left,
+                    };
+                    kindBox.Items.Add(new ComboBoxItem { Content = "Checking", Tag = "checking" });
+                    kindBox.Items.Add(new ComboBoxItem { Content = "Savings", Tag = "savings" });
+                    kindBox.Items.Add(new ComboBoxItem { Content = "Credit card", Tag = "credit" });
+                    kindBox.Items.Add(new ComboBoxItem { Content = "Loan", Tag = "loan" });
+                    kindBox.Items.Add(new ComboBoxItem { Content = "Cash", Tag = "cash" });
+                    SelectComboTag(kindBox, kind);
+
                     var entityBox = new ComboBox
                     {
-                        Header = "Belongs to",
-                        MinWidth = 160,
-                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                        Header = "Personal or business?",
+                        MinWidth = 220,
+                        Width = 240,
+                        HorizontalAlignment = HorizontalAlignment.Left,
                     };
-                    foreach (var (ek, _, nameBox) in _smartEntityRows)
+                    FillEntityBox(entityBox, ekey is "individual" ? "personal" : ekey);
+
+                    var actionBox = new ComboBox { Header = "What to do", MinWidth = 280, Width = 360 };
+                    actionBox.Items.Add(new ComboBoxItem { Content = "Create new account", Tag = "create" });
+                    foreach (var t in linkTargets)
                     {
-                        var label = string.IsNullOrWhiteSpace(nameBox.Text) ? ek : nameBox.Text;
-                        entityBox.Items.Add(new ComboBoxItem
+                        if (t.FileIndex == fi && t.SourceKey == sk)
+                            continue;
+                        actionBox.Items.Add(new ComboBoxItem
                         {
-                            Content = label,
-                            Tag = ek,
-                            IsSelected = ek == ekey,
+                            Content = new TextBlock
+                            {
+                                Text = $"Same account as {t.Number}. {t.Title}\n{t.Format} · {t.Filename}",
+                                TextWrapping = TextWrapping.Wrap,
+                                Width = 330,
+                            },
+                            Tag = new StmtLinkChoice("attach", t.FileIndex, t.SourceKey),
                         });
                     }
-                    if (entityBox.Items.Count > 0 && entityBox.SelectedIndex < 0)
-                        entityBox.SelectedIndex = 0;
-
-                    var actionBox = new ComboBox { Header = "What to do", MinWidth = 180 };
-                    actionBox.Items.Add(new ComboBoxItem
-                    {
-                        Content = "Create new account (recommended)",
-                        Tag = "create",
-                        IsSelected = action != "match",
-                    });
                     var canMatch = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number;
                     var matchLabel = !string.IsNullOrEmpty(JsonUi.Str(a, "matched_nickname"))
-                        ? "Match existing: " + JsonUi.Str(a, "matched_nickname")
-                        : "Match an existing account";
+                        ? "Match existing books: " + JsonUi.Str(a, "matched_nickname")
+                        : "Match an account already in your books";
                     actionBox.Items.Add(new ComboBoxItem
                     {
                         Content = matchLabel,
                         Tag = "match",
-                        IsSelected = action == "match" && canMatch,
                         IsEnabled = canMatch,
                     });
-                    if (actionBox.SelectedIndex < 0) actionBox.SelectedIndex = 0;
+                    actionBox.Items.Add(new ComboBoxItem
+                    {
+                        Content = "Skip — don't import this one",
+                        Tag = "skip",
+                    });
+                    SelectComboTag(actionBox, action == "match" && canMatch ? "match" : (action == "skip" ? "skip" : "create"));
 
                     var nickBox = new TextBox
                     {
                         Header = "Account name we will use",
                         Text = nick,
-                        PlaceholderText = "e.g. Chase checking …4521",
+                        PlaceholderText = "e.g. Chase credit …4521",
+                        FontSize = 15,
                     };
 
-                    var stack = new StackPanel { Spacing = 6 };
-                    stack.Children.Add(new TextBlock
+                    var stack = new StackPanel { Spacing = 8 };
+                    var titleRow = new Grid();
+                    titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    var titleBlock = new TextBlock
                     {
                         Text = $"{cardNum}. {title}",
                         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-                        FontSize = 15,
+                        FontSize = 18,
                         TextWrapping = TextWrapping.Wrap,
-                    });
+                    };
+                    var skipBtn = new Button { Content = "Skip this account", Margin = new Thickness(8, 0, 0, 0) };
+                    Grid.SetColumn(skipBtn, 1);
+                    titleRow.Children.Add(titleBlock);
+                    titleRow.Children.Add(skipBtn);
+                    stack.Children.Add(titleRow);
                     stack.Children.Add(new TextBlock
                     {
                         Text = willDo,
-                        Opacity = 0.9,
+                        Opacity = 0.95,
                         TextWrapping = TextWrapping.Wrap,
-                        FontSize = 13,
+                        FontSize = 14,
                     });
                     stack.Children.Add(new TextBlock
                     {
                         Text = string.Join("\n", reviewBits.Select(x => "• " + x)),
-                        Opacity = 0.75,
-                        FontSize = 12,
+                        Opacity = 0.9,
+                        FontSize = 13,
                         TextWrapping = TextWrapping.Wrap,
                         Margin = new Thickness(0, 2, 0, 4),
+                        IsTextSelectionEnabled = true,
                     });
 
-                    // Advanced-ish controls: still available but secondary
-                    if (_smartEntityRows.Count > 1)
-                        stack.Children.Add(entityBox);
-                    else
-                    {
-                        // Keep entityBox in tree for BuildPlanJsonFromUi but hide it
-                        entityBox.Visibility = Visibility.Collapsed;
-                        stack.Children.Add(entityBox);
-                    }
-                    if (canMatch)
-                        stack.Children.Add(actionBox);
-                    else
-                    {
-                        actionBox.Visibility = Visibility.Collapsed;
-                        stack.Children.Add(actionBox);
-                    }
+                    var picks = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+                    picks.Children.Add(kindBox);
+                    picks.Children.Add(entityBox);
+                    picks.Children.Add(actionBox);
+                    stack.Children.Add(picks);
                     stack.Children.Add(nickBox);
+
+                    if (LooksLikeStatement(a))
+                    {
+                        var stmtHint = kind == "loan"
+                            ? "This looks like a loan statement. Use What to do → Same account as… if it belongs with a numbered download."
+                            : linkTargets.Count > 1
+                                ? "We could not pair this statement automatically. Use What to do → Same account as… and pick the QIF/CSV/OFX card it belongs to."
+                                : "This looks like a statement. Keep it as its own account, or skip it.";
+                        stack.Children.Add(new TextBlock
+                        {
+                            Text = stmtHint,
+                            FontSize = 13,
+                            TextWrapping = TextWrapping.Wrap,
+                            Opacity = 0.9,
+                            Margin = new Thickness(0, 4, 0, 0),
+                        });
+                        stack.Children.Add(BuildStatementLinkBox(
+                            fi, sk, currentlyAttached: false,
+                            attachedToFileIndex: null, attachedToSourceKey: null,
+                            linkTargets));
+                    }
+
+                    var moreBits = new List<string>(reviewBits);
+                    var postingLines = new List<string>();
+                    if (a.TryGetProperty("sample_postings", out var posts) && posts.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var p in posts.EnumerateArray().Take(8))
+                        {
+                            if (p.ValueKind == JsonValueKind.Object)
+                            {
+                                var line = JsonUi.Str(p, "line");
+                                if (string.IsNullOrWhiteSpace(line) || line is "?" or "—")
+                                {
+                                    var pay = JsonUi.Str(p, "payee");
+                                    var amt = JsonUi.Str(p, "amount");
+                                    var dt = JsonUi.Str(p, "date");
+                                    line = string.Join("  ", new[] { dt, pay, amt }.Where(s =>
+                                        !string.IsNullOrWhiteSpace(s) && s is not "?" and not "—"));
+                                }
+                                if (!string.IsNullOrWhiteSpace(line) && line is not "?" and not "—")
+                                    postingLines.Add(line);
+                            }
+                            else if (p.ValueKind == JsonValueKind.String)
+                            {
+                                var s = p.GetString();
+                                if (!string.IsNullOrWhiteSpace(s))
+                                    postingLines.Add(s!);
+                            }
+                        }
+                    }
+                    if (postingLines.Count > 0)
+                    {
+                        moreBits.Add("Recent activity (payee + amount):");
+                        moreBits.AddRange(postingLines);
+                    }
+                    else if (a.TryGetProperty("sample_payees", out var pays) && pays.ValueKind == JsonValueKind.Array)
+                    {
+                        var pnames = pays.EnumerateArray()
+                            .Select(x => x.GetString())
+                            .Where(s => !string.IsNullOrWhiteSpace(s))
+                            .Take(6)
+                            .ToList();
+                        if (pnames.Count > 0)
+                            moreBits.Add("Payees: " + string.Join(", ", pnames));
+                    }
+                    if (a.TryGetProperty("reasons", out var reasons) && reasons.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var rsn in reasons.EnumerateArray().Take(4))
+                        {
+                            var s = rsn.GetString();
+                            if (!string.IsNullOrWhiteSpace(s) && !moreBits.Contains(s!))
+                                moreBits.Add(s!);
+                        }
+                    }
+                    var more = new Expander
+                    {
+                        Header = "More detail — help me tell this apart",
+                        HorizontalAlignment = HorizontalAlignment.Stretch,
+                    };
+                    more.Content = new TextBlock
+                    {
+                        Text = string.Join("\n", moreBits.Select(x => "• " + x)),
+                        TextWrapping = TextWrapping.Wrap,
+                        IsTextSelectionEnabled = true,
+                        FontSize = 13,
+                    };
+                    stack.Children.Add(more);
+
+                    skipBtn.Click += (_, _) =>
+                    {
+                        SelectComboTag(actionBox, "skip");
+                        row.Opacity = 0.45;
+                    };
+                    actionBox.SelectionChanged += (_, _) =>
+                    {
+                        row.Opacity = (actionBox.SelectedItem is ComboBoxItem si && si.Tag as string == "skip")
+                            ? 0.45 : 1;
+                    };
+                    if (a.TryGetProperty("attachments", out var atts) && atts.ValueKind == JsonValueKind.Array
+                        && atts.GetArrayLength() > 0)
+                    {
+                        stack.Children.Add(new TextBlock
+                        {
+                            Text = "Statements linked here (change the number if we guessed wrong):",
+                            FontSize = 13,
+                            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                            TextWrapping = TextWrapping.Wrap,
+                            Margin = new Thickness(0, 6, 0, 0),
+                        });
+                        foreach (var att in atts.EnumerateArray())
+                        {
+                            var an = JsonUi.Str(att, "filename");
+                            var facts = new List<string>();
+                            if (att.TryGetProperty("statement_fields", out var sf) && sf.ValueKind == JsonValueKind.Object)
+                            {
+                                foreach (var p in sf.EnumerateObject())
+                                    facts.Add($"{p.Name} {p.Value.ToString()}");
+                            }
+                            var attSk = JsonUi.Str(att, "source_key");
+                            var attFi = JsonUi.Int(att, "file_index", fi);
+                            var attBlock = new StackPanel { Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
+                            attBlock.Children.Add(new TextBlock
+                            {
+                                Text = facts.Count == 0
+                                    ? "• " + an
+                                    : "• " + an + " — " + string.Join(", ", facts.Take(5)),
+                                FontSize = 13,
+                                TextWrapping = TextWrapping.Wrap,
+                                IsTextSelectionEnabled = true,
+                            });
+                            if (!string.IsNullOrEmpty(attSk))
+                            {
+                                attBlock.Children.Add(BuildStatementLinkBox(
+                                    attFi, attSk, currentlyAttached: true,
+                                    attachedToFileIndex: fi, attachedToSourceKey: sk,
+                                    linkTargets));
+                            }
+                            stack.Children.Add(attBlock);
+                        }
+                    }
                     row.Child = stack;
                     SmartAccountsPanel.Children.Add(row);
-                    _smartAccountRows.Add((fi, sk, entityBox, actionBox, nickBox));
+                    _smartAccountRows.Add((fi, sk, kindBox, entityBox, actionBox, nickBox, row));
                 }
             }
         }
@@ -727,7 +1174,7 @@ public sealed partial class ImportPage : Page
         }
 
         var entities = new List<Dictionary<string, object?>>();
-        foreach (var (key, typeBox, nameBox) in _smartEntityRows)
+        foreach (var (key, typeBox, nameBox, _) in _smartEntityRows)
         {
             var et = "personal";
             if (typeBox.SelectedItem is ComboBoxItem ti && ti.Tag is string t)
@@ -768,6 +1215,35 @@ public sealed partial class ImportPage : Page
                 ["profile_id"] = profileId,
             });
         }
+        // If any account was assigned to business, keep a business owner in the plan
+        var needsBusiness = false;
+        if (root.TryGetProperty("sources", out var peekSrc) && peekSrc.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var src in peekSrc.EnumerateArray())
+            {
+                if (!src.TryGetProperty("accounts", out var accs)) continue;
+                foreach (var a in accs.EnumerateArray())
+                {
+                    var sk = JsonUi.Str(a, "source_key");
+                    var fi = JsonUi.Int(src, "file_index", 0);
+                    var row = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
+                    if (row.EntityBox?.SelectedItem is ComboBoxItem ei2 && ei2.Tag is string ek2
+                        && ek2.StartsWith("business", StringComparison.OrdinalIgnoreCase))
+                        needsBusiness = true;
+                }
+            }
+        }
+        if (needsBusiness && !entities.Any(e => string.Equals(Convert.ToString(e.GetValueOrDefault("entity_type")), "business", StringComparison.OrdinalIgnoreCase)))
+        {
+            entities.Add(new Dictionary<string, object?>
+            {
+                ["key"] = "business",
+                ["entity_type"] = "business",
+                ["display_name"] = "Business",
+                ["action"] = "create",
+                ["profile_id"] = null,
+            });
+        }
         plan["entities"] = entities;
 
         var sources = new List<Dictionary<string, object?>>();
@@ -785,12 +1261,51 @@ public sealed partial class ImportPage : Page
                                ?? new Dictionary<string, object?>();
                     if (row.EntityBox is not null)
                     {
+                        if (row.KindBox.SelectedItem is ComboBoxItem ki && ki.Tag is string kindTag)
+                            dict["kind"] = kindTag;
                         if (row.EntityBox.SelectedItem is ComboBoxItem ei && ei.Tag is string ek)
-                            dict["entity_key"] = ek;
-                        if (row.ActionBox.SelectedItem is ComboBoxItem ai && ai.Tag is string act)
-                            dict["action"] = act;
+                        {
+                            dict["entity_key"] = ek.StartsWith("business", StringComparison.OrdinalIgnoreCase)
+                                ? (ek == "business" ? "business" : ek)
+                                : ek;
+                            if (ek is "individual")
+                                dict["entity_key"] = "personal";
+                        }
+                        if (row.ActionBox.SelectedItem is ComboBoxItem ai)
+                        {
+                            if (ai.Tag is StmtLinkChoice choice
+                                && choice.Mode == "attach"
+                                && !string.IsNullOrEmpty(choice.SourceKey))
+                            {
+                                dict["action"] = "attach";
+                                dict["attach_to_file_index"] = choice.FileIndex;
+                                dict["attach_to_source_key"] = choice.SourceKey;
+                            }
+                            else if (ai.Tag is string act)
+                                dict["action"] = act;
+                        }
                         if (!string.IsNullOrWhiteSpace(row.NickBox.Text))
                             dict["suggested_nickname"] = row.NickBox.Text.Trim();
+                    }
+                    var link = _statementLinks.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
+                    if (link.LinkBox?.SelectedItem is ComboBoxItem { Tag: StmtLinkChoice choice2 })
+                    {
+                        if (choice2.Mode == "attach" && !string.IsNullOrEmpty(choice2.SourceKey))
+                        {
+                            dict["action"] = "attach";
+                            dict["attach_to_file_index"] = choice2.FileIndex;
+                            dict["attach_to_source_key"] = choice2.SourceKey;
+                        }
+                        else if (choice2.Mode == "skip")
+                        {
+                            dict["action"] = "skip";
+                        }
+                        else if (choice2.Mode == "create")
+                        {
+                            dict["action"] = "create";
+                            dict.Remove("attach_to_file_index");
+                            dict.Remove("attach_to_source_key");
+                        }
                     }
                     accounts.Add(dict);
                 }
@@ -803,7 +1318,164 @@ public sealed partial class ImportPage : Page
             }
         }
         plan["sources"] = sources;
+        NormalizeSameAccountGroups(sources);
         return JsonSerializer.Serialize(plan);
+    }
+
+    private static bool DictLooksLikeStatement(Dictionary<string, object?> d, string filename)
+    {
+        var act = Convert.ToString(d.GetValueOrDefault("action")) ?? "";
+        if (act.Equals("attach", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (d.TryGetValue("is_statement", out var st))
+        {
+            if (st is bool b && b) return true;
+            if (st is JsonElement { ValueKind: JsonValueKind.True }) return true;
+        }
+        var fmt = Convert.ToString(d.GetValueOrDefault("file_format")) ?? "";
+        if (fmt.Equals("pdf", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return filename.Contains("statement", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int DictLeadScore(Dictionary<string, object?> d)
+    {
+        var fmt = (Convert.ToString(d.GetValueOrDefault("file_format")) ?? "").ToLowerInvariant();
+        var order = fmt switch
+        {
+            "ofx" or "qfx" => 0,
+            "csv" or "txt" => 1,
+            "xlsx" => 2,
+            "qif" => 3,
+            "pdf" => 5,
+            _ => 4,
+        };
+        var stmt = DictLooksLikeStatement(d, "") ? 1 : 0;
+        var n = 0;
+        if (d.TryGetValue("transactions_found", out var t))
+        {
+            if (t is int i) n = i;
+            else if (t is long l) n = (int)l;
+            else if (t is JsonElement je && je.TryGetInt32(out var j)) n = j;
+            else int.TryParse(Convert.ToString(t), out n);
+        }
+        return stmt * 1000 + order * 10 - Math.Min(n, 99);
+    }
+
+    private static string? DictLast4(Dictionary<string, object?> d)
+    {
+        var s = Convert.ToString(d.GetValueOrDefault("last4"));
+        return string.IsNullOrWhiteSpace(s) || s is "?" or "—" ? null : s;
+    }
+
+    /// <summary>
+    /// If the user marks a QIF/CSV and a statement as the same account from either card,
+    /// the statement attaches to the transaction file (not the other way around).
+    /// </summary>
+    private static void NormalizeSameAccountGroups(List<Dictionary<string, object?>> sources)
+    {
+        var refs = new List<(int Fi, string Sk, string Fname, Dictionary<string, object?> Acc)>();
+        foreach (var src in sources)
+        {
+            var fi = Convert.ToInt32(src.GetValueOrDefault("file_index") ?? 0);
+            var fname = Convert.ToString(src.GetValueOrDefault("filename")) ?? "";
+            if (src.GetValueOrDefault("accounts") is not List<Dictionary<string, object?>> accs)
+                continue;
+            foreach (var acc in accs)
+            {
+                var sk = Convert.ToString(acc.GetValueOrDefault("source_key")) ?? "";
+                refs.Add((fi, sk, fname, acc));
+            }
+        }
+        if (refs.Count < 2)
+            return;
+
+        var parent = Enumerable.Range(0, refs.Count).ToArray();
+        int Find(int i)
+        {
+            while (parent[i] != i)
+            {
+                parent[i] = parent[parent[i]];
+                i = parent[i];
+            }
+            return i;
+        }
+        void Union(int i, int j)
+        {
+            var ri = Find(i);
+            var rj = Find(j);
+            if (ri != rj) parent[rj] = ri;
+        }
+
+        int IndexOf(int fi, string? sk)
+        {
+            if (string.IsNullOrEmpty(sk)) return -1;
+            for (var i = 0; i < refs.Count; i++)
+            {
+                if (refs[i].Fi == fi && refs[i].Sk == sk)
+                    return i;
+            }
+            return -1;
+        }
+
+        for (var i = 0; i < refs.Count; i++)
+        {
+            var acc = refs[i].Acc;
+            var act = Convert.ToString(acc.GetValueOrDefault("action")) ?? "";
+            if (!act.Equals("attach", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var toFi = -1;
+            var rawFi = acc.GetValueOrDefault("attach_to_file_index");
+            if (rawFi is int ii) toFi = ii;
+            else if (rawFi is long ll) toFi = (int)ll;
+            else if (rawFi is JsonElement je && je.TryGetInt32(out var ji)) toFi = ji;
+            else int.TryParse(Convert.ToString(rawFi), out toFi);
+            var toSk = Convert.ToString(acc.GetValueOrDefault("attach_to_source_key"));
+            var j = IndexOf(toFi, toSk);
+            if (j >= 0)
+                Union(i, j);
+        }
+
+        var groups = new Dictionary<int, List<int>>();
+        for (var i = 0; i < refs.Count; i++)
+        {
+            var r = Find(i);
+            if (!groups.TryGetValue(r, out var list))
+            {
+                list = new List<int>();
+                groups[r] = list;
+            }
+            list.Add(i);
+        }
+
+        foreach (var members in groups.Values)
+        {
+            if (members.Count < 2)
+                continue;
+            var lead = members.OrderBy(i => DictLeadScore(refs[i].Acc)).First();
+            var leadAcc = refs[lead].Acc;
+            foreach (var i in members)
+            {
+                if (i == lead)
+                {
+                    var leadAct = Convert.ToString(leadAcc.GetValueOrDefault("action")) ?? "create";
+                    if (leadAct.Equals("attach", StringComparison.OrdinalIgnoreCase))
+                    {
+                        leadAcc["action"] = "create";
+                        leadAcc.Remove("attach_to_file_index");
+                        leadAcc.Remove("attach_to_source_key");
+                    }
+                    continue;
+                }
+                var acc = refs[i].Acc;
+                acc["action"] = "attach";
+                acc["attach_to_file_index"] = refs[lead].Fi;
+                acc["attach_to_source_key"] = refs[lead].Sk;
+                var l4 = DictLast4(acc);
+                if (l4 is not null && DictLast4(leadAcc) is null)
+                    leadAcc["last4"] = l4;
+            }
+        }
     }
 
     private async void SmartImportCommit_Click(object sender, RoutedEventArgs e)
@@ -815,8 +1487,10 @@ public sealed partial class ImportPage : Page
         {
             if (_pendingFiles.Count == 0)
                 throw new InvalidOperationException("No files queued.");
+            SetImportBusy(true, "Importing…", "Writing transactions and applying statement facts to the linked accounts.");
+            await Task.Delay(40);
             var planJson = BuildPlanJsonFromUi();
-            using var api = new LedgerApiClient();
+            using var api = new LedgerApiClient(timeout: TimeSpan.FromMinutes(5));
             await api.EnsureBackendAsync();
             var streams = new List<(Stream Stream, string FileName)>();
             var opened = new List<IDisposable>();
@@ -871,6 +1545,7 @@ public sealed partial class ImportPage : Page
                 SuccessBar.IsOpen = true;
                 await ReviewPromosAfterImportAsync(api, res);
                 await LoadAsync();
+                await ContinueSetupAfterImportAsync(api);
             }
             finally
             {
@@ -882,6 +1557,10 @@ public sealed partial class ImportPage : Page
         {
             ErrorBar.Message = ex.Message;
             ErrorBar.IsOpen = true;
+        }
+        finally
+        {
+            SetImportBusy(false);
         }
     }
 
@@ -1510,6 +2189,40 @@ public sealed partial class ImportPage : Page
         if (neg)
             value = -Math.Abs(value);
         return true;
+    }
+
+    private async Task ContinueSetupAfterImportAsync(LedgerApiClient api)
+    {
+        var inSetup = AppState.ShowSetupNav;
+        if (!inSetup)
+        {
+            try
+            {
+                var st0 = await api.GetSetupStateAsync();
+                inSetup = st0.TryGetProperty("needs_setup", out var n) && n.ValueKind == JsonValueKind.True;
+            }
+            catch { /* stay on Import */ }
+        }
+        if (!inSetup)
+            return;
+
+        SetImportBusy(true, "Import complete", "Next: categorize spending, then set budgets.");
+        try
+        {
+            var st = await api.GetSetupStateAsync();
+            var path = JsonUi.Str(st, "path");
+            if (path is not "csv" and not "plaid" and not "manual")
+                await api.SetupAdvanceAsync("set_path", path: "csv");
+            await api.SetupAdvanceAsync("jump", targetPhase: "categorize");
+            AppState.PostImportGuide = true;
+            AppState.ShowSetupNav = true;
+        }
+        catch
+        {
+            AppState.PostImportGuide = true;
+        }
+        if (App.MainWindowInstance is MainWindow mw)
+            mw.NavigatePublic("setup");
     }
 
     private void GoSort_Click(object sender, RoutedEventArgs e)

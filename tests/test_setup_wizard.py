@@ -49,6 +49,16 @@ def test_advance_welcome_to_storage(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_cannot_skip_welcome_storage_or_security(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    assert sw.advance_setup(s, action="skip_phase")["phase"] == "welcome"
+    sw.advance_setup(s, action="next")
+    assert sw.advance_setup(s, action="skip_phase")["phase"] == "storage"
+    sw.advance_setup(s, action="next")
+    assert sw.advance_setup(s, action="skip_phase")["phase"] == "security"
+    s.close()
+
+
 def _to_path(s):
     """welcome → storage → security → path"""
     sw.advance_setup(s, action="next")
@@ -114,6 +124,18 @@ def test_manual_path_and_complete(tmp_path: Path, monkeypatch):
     assert st["onboarding_complete"] is True
     row = s.get(AppSettings, 1)
     assert row.onboarding_complete is True
+    s.close()
+
+
+def test_after_import_can_jump_to_categorize_then_budgets(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    _to_path(s)
+    st = sw.advance_setup(s, action="set_path", path="csv")
+    assert st["phase"] == "cash_loop"
+    st = sw.advance_setup(s, action="jump", target_phase="categorize")
+    assert st["phase"] == "categorize"
+    st = sw.advance_setup(s, action="jump", target_phase="budgets")
+    assert st["phase"] == "budgets"
     s.close()
 
 

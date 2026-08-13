@@ -81,7 +81,7 @@
                         <FontIcon Glyph="&#xE710;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Get started" Tag="setup">
+                <NavigationViewItem x:Name="SetupNavItem" Content="Get started" Tag="setup" Visibility="Collapsed">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE7AD;" />
                     </NavigationViewItem.Icon>

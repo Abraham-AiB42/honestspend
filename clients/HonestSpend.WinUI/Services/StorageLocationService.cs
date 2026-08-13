@@ -17,6 +17,78 @@ public static class StorageLocationService
 
     public static string DefaultLocalPath() => WinUiPaths.DefaultLocalDataDir();
 
+    /// <summary>True when this PC has no books yet — show Get started without waiting on the engine.</summary>
+    public static bool LooksLikeFirstRun()
+    {
+        try
+        {
+            var dir = string.IsNullOrWhiteSpace(AppConfig.DataDir)
+                ? DefaultLocalPath()
+                : AppConfig.DataDir!;
+            var db = Path.Combine(dir, "honestspend.db");
+            var sealedDb = Path.Combine(dir, "honestspend.db.sealed");
+            if (!File.Exists(db) && !File.Exists(sealedDb))
+                return true;
+        }
+        catch
+        {
+            return true;
+        }
+        try
+        {
+            var ls = ApplicationData.Current.LocalSettings.Values;
+            if (ls["SetupComplete"] is true)
+                return false;
+            if (ls["SetupPhase"] is string p && p == "done")
+                return false;
+        }
+        catch { /* unpackaged */ }
+        return false;
+    }
+
+    public static void PersistSetupPhase(string? phase)
+    {
+        try
+        {
+            var ls = ApplicationData.Current.LocalSettings.Values;
+            ls["SetupPhase"] = phase ?? "";
+            if (phase == "done")
+                ls["SetupComplete"] = true;
+        }
+        catch { /* unpackaged */ }
+    }
+
+    public static void ResetLocalSetupFlags()
+    {
+        try
+        {
+            var dir = AppConfig.DataDir;
+            if (!string.IsNullOrWhiteSpace(dir))
+            {
+                var db = Path.Combine(dir, "honestspend.db");
+                var sealedDb = Path.Combine(dir, "honestspend.db.sealed");
+                if (!File.Exists(db) && !File.Exists(sealedDb))
+                    PersistDataDir(DefaultLocalPath());
+            }
+            var ls = ApplicationData.Current.LocalSettings.Values;
+            ls.Remove("SetupComplete");
+            ls["SetupPhase"] = "welcome";
+        }
+        catch { /* unpackaged */ }
+    }
+
+    public static string? ReadLocalSetupPhase()
+    {
+        try
+        {
+            if (ApplicationData.Current.LocalSettings.Values["SetupPhase"] is string p
+                && !string.IsNullOrWhiteSpace(p))
+                return p;
+        }
+        catch { /* unpackaged */ }
+        return null;
+    }
+
     public static void PersistDataDir(string? path)
     {
         var trimmed = string.IsNullOrWhiteSpace(path) ? null : path.Trim();

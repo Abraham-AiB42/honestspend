@@ -106,6 +106,15 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // First launch: show Get started now. Engine can catch up during steps 1–3.
+        if (StorageLocationService.LooksLikeFirstRun() && !AppLockService.NeedsUnlock)
+        {
+            AppLockService.MarkUnlocked();
+            RefreshLockChip();
+            await ContinueAfterUnlockAsync();
+            return;
+        }
+
         // Encryption may require unlock even if UI lock mode is none (desync / crash recovery)
         try
         {
@@ -153,6 +162,16 @@ public sealed partial class MainWindow : Window
     {
         await LoadShellEntitiesAsync();
         ApplySimpleChrome();
+
+        if (StorageLocationService.LooksLikeFirstRun())
+        {
+            StorageLocationService.ResetLocalSetupFlags();
+            AppState.ShowSetupNav = true;
+            ApplySimpleChrome();
+            SelectNav("setup");
+            NavFrame.Navigate(typeof(FirstRunPage));
+            return;
+        }
 
         // Wait for engine + books ready so we don't land on 423 Home
         JsonElement? ob = null;
@@ -281,32 +300,44 @@ public sealed partial class MainWindow : Window
 
     private void ApplySimpleChrome()
     {
+        var inWizard = AppState.ShowSetupNav;
+        try
+        {
+            NavView.IsPaneVisible = !inWizard;
+            NavView.IsSettingsVisible = !inWizard;
+            NavView.IsPaneToggleButtonVisible = false;
+            AppTitleBar.IsPaneToggleButtonVisible = !inWizard;
+            if (NavView.Header is UIElement hdr)
+                hdr.Visibility = inWizard ? Visibility.Collapsed : Visibility.Visible;
+        }
+        catch { /* chrome optional during first paint */ }
+
         foreach (var item in NavView.MenuItems)
         {
             if (item is not NavigationViewItem nvi || nvi.Tag is not string tag)
                 continue;
             if (AppState.ReadOnlySession)
                 continue; // ApplyReadOnlyChrome owns visibility
+            // Get started is the full-window wizard — never a sidebar item
+            if (tag == "setup")
+            {
+                nvi.Visibility = Visibility.Collapsed;
+                continue;
+            }
             if (AppState.SimpleMode)
-            {
-                var show = SimpleNavTags.Contains(tag);
-                if (tag == "setup" && !AppState.ShowSetupNav)
-                    show = false;
-                nvi.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-            }
+                nvi.Visibility = SimpleNavTags.Contains(tag) ? Visibility.Visible : Visibility.Collapsed;
             else
-            {
-                // Full books: hide Get started once accounts exist
-                if (tag == "setup" && !AppState.ShowSetupNav)
-                    nvi.Visibility = Visibility.Collapsed;
-                else
-                    nvi.Visibility = Visibility.Visible;
-            }
+                nvi.Visibility = Visibility.Visible;
         }
-        ApplySimpleShellHeader();
-        ShellModeText.Text = AppState.SimpleMode
-            ? "Simple · safe to spend first"
-            : "Full books · every tool";
+        if (!inWizard)
+            ApplySimpleShellHeader();
+        try
+        {
+            ShellModeText.Text = AppState.SimpleMode
+                ? "Simple · safe to spend first"
+                : "Full books · every tool";
+        }
+        catch { /* header may be collapsed */ }
     }
 
     /// <summary>Quiet Simple chrome: hide Who / All money / CPA for single-pile households.</summary>

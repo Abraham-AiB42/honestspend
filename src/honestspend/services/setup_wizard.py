@@ -56,6 +56,9 @@ PATH_PHASES: dict[str, list[str]] = {
 # Depth modules reachable from power_menu (jump only within this set + done)
 POWER_DEPTH = ("discover", "recurring", "categorize", "budgets", "buffers", "ai_keys")
 
+# Welcome / storage / security must be completed — no Skip this step
+REQUIRED_EARLY_PHASES = frozenset({"welcome", "storage", "security"})
+
 VALID_PATHS = frozenset({"plaid", "csv", "manual"})
 
 
@@ -268,6 +271,9 @@ def advance_setup(
     if action == "complete" or target_phase == "done":
         force = bool((payload or {}).get("force_empty") or (payload or {}).get("force"))
         return mark_setup_done(session, note=(payload or {}).get("note"), force_empty=force)
+
+    if action == "skip_phase" and phase in REQUIRED_EARLY_PHASES:
+        return get_setup_state(session)
 
     if action == "set_path" or (action == "next" and phase == "path"):
         chosen = (path or (payload or {}).get("path") or cur_path or "").strip().lower()

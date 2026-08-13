@@ -16,12 +16,12 @@ public sealed class LedgerApiClient : IDisposable
 
     private readonly HttpClient _http;
 
-    public LedgerApiClient(string? baseUrl = null, string? apiKey = null)
+    public LedgerApiClient(string? baseUrl = null, string? apiKey = null, TimeSpan? timeout = null)
     {
         _http = new HttpClient
         {
             BaseAddress = new Uri((baseUrl ?? AppConfig.BaseUrl).TrimEnd('/') + "/"),
-            Timeout = TimeSpan.FromSeconds(60),
+            Timeout = timeout ?? TimeSpan.FromSeconds(60),
         };
         var key = apiKey ?? AppConfig.ApiKey;
         if (!string.IsNullOrWhiteSpace(key))

@@ -54,6 +54,53 @@ _INTRO_BAL_FIRST = re.compile(
     re.I,
 )
 
+# Home Depot / Citi deferred interest
+_DEFERRED_PAYOFF = re.compile(
+    r"promotional\s+balance\s+of\s+\$?\s*(?P<bal>[\d,]+\.\d{2})\s+"
+    r"in\s+full\s+by\s+(?P<end>\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+    re.I,
+)
+
+# Wells Fargo: PROMOTIONAL RATE EXPIRES 05/07/27 0.00% … $8,189.34
+_WF_PROMO = re.compile(
+    r"PROMOTIONAL\s+RATE\s+EXPIRES\s+(?P<end>\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+"
+    r"(?P<apr>[\d.]+)\s*%"
+    r"(?:[^\n$]*\$[\d,]+\.\d{2}){0,3}"
+    r"[^\n$]*\$(?P<bal>[\d,]+\.\d{2})",
+    re.I,
+)
+
+# Amex: Introductory Purchase / Rate Expires 03/22/2027 / 0.00% $6,997.17
+_AMEX_INTRO = re.compile(
+    r"Introductory\s+Purchase.{0,120}?"
+    r"Rate\s+Expires\s+(?P<end>\d{1,2}[/-]\d{1,2}[/-]\d{2,4})"
+    r".{0,80}?(?P<apr>[\d.]+)\s*%\s+\$?(?P<bal>[\d,]+\.\d{2})",
+    re.I | re.S,
+)
+
+# Chase Amazon / Prime Visa Equal Pay Promo 0.00% (d) 07/15/26 $164.45
+_EQUAL_PAY = re.compile(
+    r"Equal\s+Pay\s+Promo\s+(?P<apr>[\d.]+)\s*%[^\n$]{0,40}?"
+    r"(?:(?P<end>\d{1,2}/\d{1,2}/\d{2,4})\s+)?"
+    r"\$?(?P<bal>[\d,]+\.\d{2})",
+    re.I,
+)
+
+# Chase Interest Saving Balance: $1,229.45  (pay this cycle to keep grace)
+_ISB_LUMP = re.compile(
+    r"Interest\s+Saving\s+Balance\s*:\s*\$?\s*(?P<bal>[\d,]+\.\d{2})",
+    re.I,
+)
+
+# Pending BT offer with a rate + duration (not boilerplate "interest on balance transfers")
+_BT_OFFER = re.compile(
+    r"(?:special\s+offer|limited\s+time|you(?:'re| are)\s+(?:pre-)?approved|"
+    r"balance\s+transfer\s+offer)"
+    r".{0,120}?(?P<apr>[\d.]+)\s*%"
+    r".{0,60}?(?P<months>\d{1,2})\s*(?:months?|mos\.?|billing\s+cycles?)",
+    re.I | re.S,
+)
+
 _HEADER_NAMES = re.compile(
     r"^(plan|remaining|monthly\s*payment|payments?\s*left|interest\s*saving\s*balance)$",
     re.I,
@@ -163,6 +210,142 @@ def _extract_card_intros(text: str) -> list[dict[str, Any]]:
     return out
 
 
+def extract_interest_saving_balance(text: str) -> Decimal | None:
+    """Chase-style ISB: pay this amount this cycle to keep purchase grace."""
+    if not text:
+        return None
+    m = _ISB_LUMP.search(str(text).replace("\xa0", " "))
+    return _money(m.group("bal")) if m else None
+
+
+def _extract_deferred_payoffs(text: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for m in _DEFERRED_PAYOFF.finditer(text):
+        bal = _money(m.group("bal"))
+        end = _parse_date(m.group("end"))
+        if bal is None or bal <= 0 or end is None:
+            continue
+        out.append(
+            {
+                "kind": "card_intro",
+                "name": f"Deferred interest · due {end.isoformat()}",
+                "principal_remaining": bal,
+                "monthly_payment": Decimal("0.00"),
+                "end_date": end,
+                "apr": Decimal("0"),
+            }
+        )
+    return out
+
+
+def _extract_wf_promos(text: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for m in _WF_PROMO.finditer(text):
+        bal = _money(m.group("bal"))
+        end = _parse_date(m.group("end"))
+        if bal is None or bal <= 0 or end is None:
+            continue
+        try:
+            apr_disp = Decimal(str(m.group("apr")))
+        except (InvalidOperation, ValueError):
+            apr_disp = Decimal("0")
+        out.append(
+            {
+                "kind": "card_intro",
+                "name": f"Promotional {apr_disp}% through {end.isoformat()}",
+                "principal_remaining": bal,
+                "monthly_payment": Decimal("0.00"),
+                "end_date": end,
+                "apr": _apr_rate(apr_disp),
+            }
+        )
+    return out
+
+
+def _extract_amex_intro(text: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for m in _AMEX_INTRO.finditer(text):
+        bal = _money(m.group("bal"))
+        end = _parse_date(m.group("end"))
+        if bal is None or bal <= 0 or end is None:
+            continue
+        try:
+            apr_disp = Decimal(str(m.group("apr")))
+        except (InvalidOperation, ValueError):
+            apr_disp = Decimal("0")
+        out.append(
+            {
+                "kind": "card_intro",
+                "name": f"Introductory purchase {apr_disp}%",
+                "principal_remaining": bal,
+                "monthly_payment": Decimal("0.00"),
+                "end_date": end,
+                "apr": _apr_rate(apr_disp),
+            }
+        )
+    return out
+
+
+def _extract_equal_pay(text: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    n = 0
+    for m in _EQUAL_PAY.finditer(text):
+        bal = _money(m.group("bal"))
+        if bal is None or bal <= 0:
+            continue
+        n += 1
+        end = _parse_date(m.group("end")) if m.group("end") else None
+        try:
+            apr_disp = Decimal(str(m.group("apr")))
+        except (InvalidOperation, ValueError):
+            apr_disp = Decimal("0")
+        name = "Equal Pay Promo" if n == 1 else f"Equal Pay Promo {n}"
+        out.append(
+            {
+                "kind": "purchase_plan",
+                "name": name,
+                "principal_remaining": bal,
+                "monthly_payment": Decimal("0.00"),
+                "end_date": end,
+                "apr": _apr_rate(apr_disp),
+            }
+        )
+    return out
+
+
+def _extract_bt_offers(text: str) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    # Skip boilerplate legal ("interest on balance transfers beginning")
+    if not re.search(
+        r"(?i)(balance\s+transfer\s+offer|special\s+offer|limited\s+time|"
+        r"pre-?approved.{0,40}transfer)",
+        text,
+    ):
+        return out
+    for m in _BT_OFFER.finditer(text):
+        try:
+            apr_disp = Decimal(str(m.group("apr")))
+            months = int(m.group("months"))
+        except (InvalidOperation, ValueError, TypeError):
+            continue
+        if months < 3 or months > 36:
+            continue
+        if apr_disp < 0 or apr_disp > 30:
+            continue
+        out.append(
+            {
+                "kind": "offer",
+                "offer_type": "balance_transfer",
+                "name": f"Balance transfer {apr_disp}% · {months} months",
+                "principal_remaining": Decimal("0.00"),
+                "monthly_payment": Decimal("0.00"),
+                "apr": _apr_rate(apr_disp),
+                "months_left": months,
+            }
+        )
+    return out
+
+
 def extract_promo_terms(text: str) -> list[dict[str, Any]]:
     """Each dict: kind, name, principal_remaining, monthly_payment, end_date?, months_left?,
     apr?, offer_type?. Never invent rows from a lone '0%' word without a balance or table."""
@@ -173,4 +356,24 @@ def extract_promo_terms(text: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     rows.extend(_extract_isb_plans(t))
     rows.extend(_extract_card_intros(t))
-    return rows
+    rows.extend(_extract_deferred_payoffs(t))
+    rows.extend(_extract_wf_promos(t))
+    rows.extend(_extract_amex_intro(t))
+    rows.extend(_extract_equal_pay(t))
+    rows.extend(_extract_bt_offers(t))
+
+    # Dedupe by (kind, end, remaining)
+    seen: set[tuple[Any, ...]] = set()
+    uniq: list[dict[str, Any]] = []
+    for r in rows:
+        key = (
+            r.get("kind"),
+            str(r.get("principal_remaining") or ""),
+            r.get("end_date").isoformat() if r.get("end_date") else "",
+            r.get("name"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        uniq.append(r)
+    return uniq

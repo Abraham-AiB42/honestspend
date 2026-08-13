@@ -12,8 +12,14 @@ public static class AppState
     /// <summary>When true, hide write navigation (CPA / viewer session).</summary>
     public static bool ReadOnlySession { get; set; }
 
-    /// <summary>Show Get started nav (cold install / no cash yet).</summary>
-    public static bool ShowSetupNav { get; set; } = true;
+    /// <summary>True while Get started is unfinished. Hides the sidebar until the wizard is done.</summary>
+    public static bool ShowSetupNav { get; set; } = StorageLocationService.LooksLikeFirstRun();
+
+    /// <summary>After the first import, walk categorize → budgets instead of dumping them on Import.</summary>
+    public static bool PostImportGuide { get; set; }
+
+    /// <summary>Engine answered health. Wizard steps 1–3 can run before this is true.</summary>
+    public static bool EngineReady { get; set; }
 
     /// <summary>Simple mode = north-star daily UI; FullBooks = cockpit.</summary>
     public static bool SimpleMode { get; set; } = true;
