@@ -38,6 +38,8 @@ public sealed partial class ImportPage : Page
     private readonly HashSet<int> _createdThisSession = new();
     private string? _lastMergeId;
     private string? _lastMergeLabel;
+    private (int Fi, string Sk)? _parkedMerge;
+    private (int Fi, string Sk)? _alignedMergeTarget;
     private string? _inboxPath;
     private int? _setBooksAccountId;
     private int? _freezeAccountId;
@@ -942,6 +944,168 @@ public sealed partial class ImportPage : Page
         }
     }
 
+    private void ParkCardForMerge(int fi, string sk)
+    {
+        CancelMergePark();
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
+        if (src.Card is null)
+            return;
+        _parkedMerge = (fi, sk);
+        src.Card.Visibility = Visibility.Collapsed;
+        MergeDockCardHost.Child = new Border
+        {
+            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"],
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10),
+            Child = new StackPanel
+            {
+                Spacing = 4,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = src.TitleBlock.Text,
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        TextWrapping = TextWrapping.Wrap,
+                    },
+                    new TextBlock
+                    {
+                        Text = FilenameFor(fi),
+                        Opacity = 0.8,
+                        TextWrapping = TextWrapping.Wrap,
+                    },
+                    new TextBlock
+                    {
+                        Text = string.IsNullOrWhiteSpace(src.NickBox.Text) ? "" : src.NickBox.Text.Trim(),
+                        Opacity = 0.85,
+                        TextWrapping = TextWrapping.Wrap,
+                    },
+                },
+            },
+        };
+        MergeDock.Visibility = Visibility.Visible;
+        MergeAlignLabel.Text = "";
+        CompleteMergeBtn.IsEnabled = false;
+        _alignedMergeTarget = null;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            UpdateMergeDockSticky();
+            UpdateMergeAlignment();
+        });
+    }
+
+    private void CancelMergePark()
+    {
+        if (_parkedMerge is { } parked)
+        {
+            var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == parked.Fi && r.SourceKey == parked.Sk);
+            if (src.Card is not null)
+                src.Card.Visibility = Visibility.Visible;
+        }
+        _parkedMerge = null;
+        _alignedMergeTarget = null;
+        if (MergeDock is not null)
+        {
+            MergeDock.Visibility = Visibility.Collapsed;
+            MergeDock.Margin = new Thickness(16, 0, 0, 0);
+            MergeDockCardHost.Child = null;
+            MergeAlignLabel.Text = "";
+            CompleteMergeBtn.IsEnabled = false;
+        }
+    }
+
+    private void PageScroller_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+    {
+        if (_parkedMerge is null || MergeDock.Visibility != Visibility.Visible)
+            return;
+        UpdateMergeDockSticky();
+        UpdateMergeAlignment();
+    }
+
+    private void UpdateMergeDockSticky()
+    {
+        if (MergeDock.Parent is not FrameworkElement grid)
+            return;
+        try
+        {
+            var gridY = grid.TransformToVisual(PageScroller).TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+            var top = 24 - gridY;
+            if (top < 0)
+                top = 0;
+            var max = Math.Max(0, grid.ActualHeight - MergeDock.ActualHeight);
+            if (top > max)
+                top = max;
+            MergeDock.Margin = new Thickness(16, top, 0, 0);
+        }
+        catch
+        {
+            /* transform not ready */
+        }
+    }
+
+    private void UpdateMergeAlignment()
+    {
+        if (_parkedMerge is not { } parked)
+            return;
+        try
+        {
+            var dockMid = MergeDock.TransformToVisual(PageScroller)
+                .TransformPoint(new Windows.Foundation.Point(0, MergeDock.ActualHeight / 2)).Y;
+            (int Fi, string Sk)? best = null;
+            var bestDist = 72.0;
+            foreach (var row in _smartAccountRows)
+            {
+                if (row.FileIndex == parked.Fi && row.SourceKey == parked.Sk)
+                    continue;
+                if (row.Card.Visibility != Visibility.Visible || row.Card.ActualHeight < 8)
+                    continue;
+                var mid = row.Card.TransformToVisual(PageScroller)
+                    .TransformPoint(new Windows.Foundation.Point(0, row.Card.ActualHeight / 2)).Y;
+                var dist = Math.Abs(mid - dockMid);
+                if (dist < bestDist)
+                {
+                    bestDist = dist;
+                    best = (row.FileIndex, row.SourceKey);
+                }
+            }
+            _alignedMergeTarget = best;
+            foreach (var row in _smartAccountRows)
+            {
+                var isAlign = best is { } b && row.FileIndex == b.Fi && row.SourceKey == b.Sk;
+                row.Card.BorderThickness = new Thickness(isAlign ? 3 : 1);
+            }
+            if (best is { } hit)
+            {
+                var tgt = _smartAccountRows.First(r => r.FileIndex == hit.Fi && r.SourceKey == hit.Sk);
+                MergeAlignLabel.Text = $"Lined up with {tgt.TitleBlock.Text}";
+                CompleteMergeBtn.IsEnabled = true;
+            }
+            else
+            {
+                MergeAlignLabel.Text = "Scroll until this card sits next to the matching account.";
+                CompleteMergeBtn.IsEnabled = false;
+            }
+        }
+        catch
+        {
+            CompleteMergeBtn.IsEnabled = false;
+        }
+    }
+
+    private void CompleteMerge_Click(object sender, RoutedEventArgs e)
+    {
+        if (_parkedMerge is not { } src || _alignedMergeTarget is not { } tgt)
+            return;
+        MapCardOnto(src.Fi, src.Sk, tgt.Fi, tgt.Sk);
+        var parked = _parkedMerge;
+        CancelMergePark();
+        // MapCardOnto already collapsed the source onto the target
+        _ = parked;
+    }
+
+    private void CancelMerge_Click(object sender, RoutedEventArgs e)
+        => CancelMergePark();
+
     private void AddBusiness_Click(object sender, RoutedEventArgs e)
     {
         _addedBizSeq++;
@@ -1015,6 +1179,7 @@ public sealed partial class ImportPage : Page
         _statementLinks.Clear();
         _attachHosts.Clear();
         _collapsedOnto.Clear();
+        CancelMergePark();
 
         var entityCount = 0;
         if (plan.TryGetProperty("entities", out var ents) && ents.ValueKind == JsonValueKind.Array)
@@ -1284,10 +1449,14 @@ public sealed partial class ImportPage : Page
                         FontSize = 18,
                         TextWrapping = TextWrapping.Wrap,
                     };
+                    var mergeBtn = new Button { Content = "Merge", Margin = new Thickness(8, 0, 0, 0) };
                     var skipBtn = new Button { Content = "Skip this account", Margin = new Thickness(8, 0, 0, 0) };
-                    Grid.SetColumn(skipBtn, 1);
+                    var titleBtns = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                    titleBtns.Children.Add(mergeBtn);
+                    titleBtns.Children.Add(skipBtn);
+                    Grid.SetColumn(titleBtns, 1);
                     titleRow.Children.Add(titleBlock);
-                    titleRow.Children.Add(skipBtn);
+                    titleRow.Children.Add(titleBtns);
                     stack.Children.Add(titleRow);
                     stack.Children.Add(new TextBlock
                     {
@@ -1408,6 +1577,7 @@ public sealed partial class ImportPage : Page
                         SelectComboTag(actionBox, "skip");
                         row.Opacity = 0.45;
                     };
+                    mergeBtn.Click += (_, _) => ParkCardForMerge(fi, sk);
                     actionBox.SelectionChanged += async (_, _) =>
                     {
                         row.Opacity = (actionBox.SelectedItem is ComboBoxItem si && si.Tag as string == "skip")
@@ -1466,7 +1636,6 @@ public sealed partial class ImportPage : Page
                         }
                     }
                     row.Child = stack;
-                    WireCardDragDrop(row, fi, sk);
                     SmartAccountsPanel.Children.Add(row);
                     _smartAccountRows.Add((fi, sk, kindBox, entityBox, actionBox, nickBox, row, titleBlock, cardNum));
                 }
