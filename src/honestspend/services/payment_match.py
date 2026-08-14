@@ -358,8 +358,21 @@ def _pair_score(
             return 0
         if ao.kind not in CASH_KINDS or ai.kind not in CASH_KINDS:
             return 0
+        out_n = _share_num(out_pay)
+        in_n = _share_num(in_pay)
+        ai_tail = _acct_tail_digits(ai)
+        ao_tail = _acct_tail_digits(ao)
+        if out_n and ai_tail and out_n != ai_tail:
+            return 0
+        if in_n and ao_tail and in_n != ao_tail:
+            return 0
         gap = abs((o.txn_date - i.txn_date).days)
-        return 20 + max(0, 6 - gap) + _acct_quality(ai)
+        score = 20 + max(0, 6 - gap) + _acct_quality(ai)
+        if out_n and ai_tail and out_n == ai_tail:
+            score += 8
+        if in_n and ao_tail and in_n == ao_tail:
+            score += 8
+        return score
 
     dest_hint = payment_dest_hint(out_pay) or payment_dest_hint(in_pay)
     name = _payee_names_account(out_pay, ai) + _payee_names_account(in_pay, ao)
@@ -415,6 +428,8 @@ def _mark_unpaired_account_moves(
     marked: list[dict[str, Any]] = []
     for t in rows:
         if t.id in used or t.transfer_pair_id is not None:
+            continue
+        if "[skip-auto-link]" in (t.memo or ""):
             continue
         if len(marked) >= limit:
             break
@@ -512,6 +527,8 @@ def auto_link_account_payments(
             best: tuple[int, Transaction] | None = None
             for i in ins:
                 if i.id in used or i.account_id == o.account_id:
+                    continue
+                if "[skip-auto-link]" in (o.memo or "") or "[skip-auto-link]" in (i.memo or ""):
                     continue
                 if abs((o.txn_date - i.txn_date).days) > days:
                     continue

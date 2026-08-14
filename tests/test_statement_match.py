@@ -585,6 +585,48 @@ def test_cluster_discover_pdf_to_csv_by_transactions():
     assert sources[0]["accounts"][0].get("last4") == "4411"
 
 
+def test_cluster_does_not_attach_card_statement_to_checking_on_payments():
+    fps = [
+        _txn_fingerprint("2026-07-15", "-80.00", "PAYMENT"),
+        _txn_fingerprint("2026-06-15", "-80.00", "PAYMENT"),
+    ]
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "checking.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:chk",
+                    "file_format": "csv",
+                    "kind": "checking",
+                    "bank_label": "Discover",
+                    "txn_fps": fps,
+                    "action": "create",
+                    "transactions_found": 40,
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "card-statement.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:card",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "bank_label": "Discover",
+                    "is_statement": True,
+                    "txn_fps": fps,
+                    "action": "create",
+                    "transactions_found": 2,
+                }
+            ],
+        },
+    ]
+    cluster_batch_sources(sources)
+    assert sources[1]["accounts"][0]["action"] != "attach"
+
+
 def test_qif_analyze_includes_txn_fingerprints():
     qif = (
         "!Type:CCard\n"

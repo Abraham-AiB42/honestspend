@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from decimal import Decimal
 from typing import Any
@@ -64,6 +65,10 @@ def _void_promo_disclosure_txns(session: Session, *, profile_id: int | None) -> 
     for t in q.order_by(Transaction.id.desc()).limit(1500).all():
         if not is_promo_disclosure_line(t.payee or "", payee=t.payee):
             continue
+        # Only void disclosure fragments, never a normal merchant payee.
+        pay = (t.payee or "").strip()
+        if not is_promo_disclosure_line(pay, payee=pay):
+            continue
         try:
             void_transaction(session, t.id, reason="promo APR line, not a charge")
             n += 1
@@ -92,13 +97,8 @@ def auto_apply_high_confidence(
 ) -> dict[str, Any]:
     """Apply rule-based (and optional Grok) suggestions above confidence floor."""
     pid = _profile_id(session, profile_id)
-    pay_linked = 0
-    try:
-        from honestspend.services.payment_match import auto_link_account_payments
-
-        pay_linked = int(auto_link_account_payments(session).get("linked") or 0)
-    except Exception:
-        pay_linked = 0
+    prep = prepare_categorize(session, profile_id=pid)
+    pay_linked = int(prep.get("payments_linked") or 0)
     results = categorize_uncategorized(
         session,
         profile_id=pid,
@@ -108,6 +108,12 @@ def auto_apply_high_confidence(
         min_confidence=min_confidence,
     )
     applied = sum(1 for r in results if r.get("applied"))
+    applied_ids = [int(r["transaction_id"]) for r in results if r.get("applied") and r.get("transaction_id")]
+    pair_ids: list[int] = []
+    for p in prep.get("pairs") or []:
+        for k in ("out_txn_id", "in_txn_id"):
+            if p.get(k):
+                pair_ids.append(int(p[k]))
     return {
         "scanned": len(results),
         "applied": applied,
@@ -119,7 +125,30 @@ def auto_apply_high_confidence(
             + (f" · matched {pay_linked} payment(s) between accounts" if pay_linked else "")
             + "."
         ),
+        "status": categorize_status(
+            session,
+            profile_id=pid,
+            recent_txn_ids=applied_ids + pair_ids,
+            recent_pairs=list(prep.get("pairs") or []),
+        ),
     }
+
+
+def prepare_categorize(session: Session, *, profile_id: int | None = None) -> dict[str, Any]:
+    """Write-side setup: COA backfill, seed rules, payment pairs, void promo rows."""
+    pid = _profile_id(session, profile_id)
+    pairs: list[dict[str, Any]] = []
+    from honestspend.seed import ensure_coa_categories
+    from honestspend.services.categorizer import ensure_seed_rules
+    from honestspend.services.payment_match import auto_link_account_payments
+
+    ensure_coa_categories(session)
+    ensure_seed_rules(session)
+    linked = auto_link_account_payments(session)
+    pairs = list(linked.get("pairs") or [])
+    _void_promo_disclosure_txns(session, profile_id=pid)
+    session.flush()
+    return {"payments_linked": int(linked.get("linked") or 0), "pairs": pairs}
 
 
 def categorize_status(
@@ -127,26 +156,12 @@ def categorize_status(
     *,
     profile_id: int | None = None,
     confirm_cap: int = DEFAULT_CONFIRM_CAP,
+    recent_txn_ids: list[int] | None = None,
+    recent_pairs: list[dict[str, Any]] | None = None,
+    recent_rule_id: int | None = None,
 ) -> dict[str, Any]:
-    """Uncategorized counts + top payee groups for user confirm."""
+    """Uncategorized counts + top payee groups for user confirm. Read-only."""
     pid = _profile_id(session, profile_id)
-    pay_pairs: list[dict[str, Any]] = []
-    try:
-        from honestspend.seed import ensure_coa_categories
-        from honestspend.services.categorizer import ensure_seed_rules
-        from honestspend.services.payment_match import auto_link_account_payments
-
-        ensure_coa_categories(session)
-        ensure_seed_rules(session)
-        pay_pairs = list(auto_link_account_payments(session).get("pairs") or [])
-        session.flush()
-    except Exception:
-        pay_pairs = []
-    try:
-        _void_promo_disclosure_txns(session, profile_id=pid)
-        session.flush()
-    except Exception:
-        pass
     q = session.query(Transaction).filter(
         Transaction.category_id.is_(None),
         Transaction.is_transfer.is_(False),
@@ -276,7 +291,8 @@ def categorize_status(
         if name.lower() in hide_name:
             continue
         key = name.casefold()
-        if bg in hide_groups:
+        to_more = bg in hide_groups or (c.scope or "") == "business"
+        if to_more:
             if key in seen_more:
                 continue
             seen_more.add(key)
@@ -290,8 +306,13 @@ def categorize_status(
     more.sort(key=lambda x: (x.get("name") or "").casefold())
 
     recent = _merge_recent(
-        _pairs_as_recent(session, pay_pairs),
-        _recent_assignments(session, profile_id=pid),
+        _pairs_as_recent(session, recent_pairs or []),
+        _recent_assignments(
+            session,
+            profile_id=pid,
+            txn_ids=recent_txn_ids,
+            rule_id=recent_rule_id,
+        ),
     )
 
     pct = 100.0 if total_exp == 0 else round(100.0 * categorized / total_exp, 1)
@@ -343,14 +364,14 @@ def confirm_payee_category(
                 continue
             if t.category_id is not None and not reassign:
                 continue
-            if pid is not None and t.profile_id != pid:
-                continue
-            t.category_id = category_id
+            bound = _bind_category_to_txn(session, cat, t)
+            t.category_id = bound.id
             t.confidence = Decimal("1")
-            _sync_transfer_flag(t, cat, session)
+            _sync_transfer_flag(t, bound, session)
             updated += 1
             applied_ids.append(t.id)
             sample = sample or t
+            cat = bound
     elif payee_key:
         key = categorize_payee_key(payee_key) or payee_key.strip().lower()
         q = session.query(Transaction).filter(Transaction.status != "void")
@@ -360,13 +381,18 @@ def confirm_payee_category(
             q = q.filter(Transaction.profile_id == pid)
         for t in q.limit(500).all():
             nk = categorize_payee_key(t.payee) or (t.payee or "").strip().lower()
-            if nk == key:
-                t.category_id = category_id
-                t.confidence = Decimal("1")
-                _sync_transfer_flag(t, cat, session)
-                updated += 1
-                applied_ids.append(t.id)
-                sample = sample or t
+            if nk != key:
+                continue
+            bound = _bind_category_to_txn(session, cat, t)
+            if pid is not None and t.profile_id != pid and (bound.scope or "") != "business":
+                continue
+            t.category_id = bound.id
+            t.confidence = Decimal("1")
+            _sync_transfer_flag(t, bound, session)
+            updated += 1
+            applied_ids.append(t.id)
+            sample = sample or t
+            cat = bound
     else:
         raise ValueError("payee_key or transaction_ids required")
 
@@ -385,7 +411,12 @@ def confirm_payee_category(
         "rule_id": rule_id,
         "payee": (sample.payee if sample else payee_key) or "",
         "transaction_ids": applied_ids,
-        "status": categorize_status(session, profile_id=pid),
+        "status": categorize_status(
+            session,
+            profile_id=pid,
+            recent_txn_ids=applied_ids,
+            recent_rule_id=rule_id,
+        ),
     }
 
 
@@ -416,20 +447,22 @@ def undo_payee_category(
                 pair.transfer_pair_id = None
                 pair.is_transfer = False
                 pair.category_id = None
+                _mark_skip_auto_link(pair)
+            _mark_skip_auto_link(t)
+        _restore_orig_profile(t)
         cleared += 1
     if rule_id:
         rule = session.get(CategoryRule, rule_id)
         if rule and rule.source == "learned":
             session.delete(rule)
     if payee_key:
-        key = (normalize_payee(payee_key) or payee_key).lower()
+        key = categorize_payee_key(payee_key)
         for rule in (
             session.query(CategoryRule)
             .filter(CategoryRule.source == "learned", CategoryRule.active.is_(True))
             .all()
         ):
-            pat = (normalize_payee(rule.pattern) or rule.pattern or "").lower()
-            if pat == key or key in pat or pat in key:
+            if categorize_payee_key(rule.pattern) == key:
                 session.delete(rule)
     session.flush()
     return {
@@ -490,11 +523,54 @@ def _merge_recent(head: list[dict[str, Any]], tail: list[dict[str, Any]]) -> lis
     return out
 
 
+_SKIP_AUTO_LINK = "[skip-auto-link]"
+_ORIG_PROF = re.compile(r"\[orig-profile:(\d+)\]")
+
+
+def _mark_skip_auto_link(t: Transaction) -> None:
+    memo = t.memo or ""
+    if _SKIP_AUTO_LINK not in memo:
+        t.memo = f"{memo} {_SKIP_AUTO_LINK}".strip()
+
+
+def _clear_skip_auto_link(t: Transaction) -> None:
+    if t.memo and _SKIP_AUTO_LINK in t.memo:
+        t.memo = t.memo.replace(_SKIP_AUTO_LINK, "").strip() or None
+
+
+def _restore_orig_profile(t: Transaction) -> None:
+    m = _ORIG_PROF.search(t.memo or "")
+    if not m:
+        return
+    t.profile_id = int(m.group(1))
+    t.memo = _ORIG_PROF.sub("", t.memo or "").strip() or None
+
+
+def _bind_category_to_txn(session: Session, cat: Category, t: Transaction) -> Category:
+    """If the user picks a business category, move the txn onto that entity."""
+    if (cat.scope or "") == "business":
+        if t.profile_id != cat.profile_id and cat.profile_id is not None:
+            if not _ORIG_PROF.search(t.memo or ""):
+                t.memo = f"{t.memo or ''} [orig-profile:{t.profile_id}]".strip()
+            t.profile_id = cat.profile_id
+        return cat
+    _restore_orig_profile(t)
+    if cat.profile_id is None or cat.profile_id == t.profile_id:
+        return cat
+    alt = (
+        session.query(Category)
+        .filter(Category.profile_id == t.profile_id, Category.display_name == cat.display_name)
+        .first()
+    )
+    return alt or cat
+
+
 def _sync_transfer_flag(t: Transaction, cat: Category, session: Session) -> None:
     code = (cat.code or "").upper()
     is_xfer = code.startswith("SYS_TRANSFER") or code.startswith("SYS_CC")
     if is_xfer:
         t.is_transfer = True
+        _clear_skip_auto_link(t)
         return
     t.is_transfer = False
     pair_id = t.transfer_pair_id
@@ -507,14 +583,21 @@ def _sync_transfer_flag(t: Transaction, cat: Category, session: Session) -> None
                 pair.is_transfer = False
 
 
-def _recent_assignments(session: Session, *, profile_id: int | None, limit: int = 20) -> list[dict[str, Any]]:
+def _recent_assignments(
+    session: Session,
+    *,
+    profile_id: int | None,
+    limit: int = 20,
+    txn_ids: list[int] | None = None,
+    rule_id: int | None = None,
+) -> list[dict[str, Any]]:
+    if not txn_ids:
+        return []
     q = session.query(Transaction).filter(
-        Transaction.category_id.is_not(None),
+        Transaction.id.in_(txn_ids),
         Transaction.status != "void",
         Transaction.amount < 0,
     )
-    if profile_id is not None:
-        q = q.filter(Transaction.profile_id == profile_id)
     rows = q.order_by(Transaction.id.desc()).limit(400).all()
     grouped: dict[tuple[str, int], dict[str, Any]] = {}
     order: list[tuple[str, int]] = []
@@ -545,6 +628,7 @@ def _recent_assignments(session: Session, *, profile_id: int | None, limit: int 
                 "transaction_ids": [],
                 "from_account": from_acct,
                 "to_account": to_acct,
+                "rule_id": rule_id,
             }
             order.append(gk)
         grouped[gk]["count"] += 1

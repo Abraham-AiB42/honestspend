@@ -1362,7 +1362,8 @@ def setup_categorize_auto(body: SetupCategorizeAutoIn | None = None, db: Session
         use_grok=body.use_grok,
         limit=body.limit,
     )
-    res["status"] = categorize_status(db, profile_id=body.profile_id)
+    if "status" not in res:
+        res["status"] = categorize_status(db, profile_id=body.profile_id)
     return res
 
 

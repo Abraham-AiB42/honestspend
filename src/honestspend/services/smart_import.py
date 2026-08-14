@@ -1474,6 +1474,28 @@ def _kinds_compatible(a: dict[str, Any], b: dict[str, Any]) -> bool:
     return ka == kb
 
 
+def _kinds_ok_for_attach(stmt: dict[str, Any], primary: dict[str, Any]) -> bool:
+    """Same kind required; do not assume blank kind is checking."""
+    ka = (stmt.get("kind") or "").lower()
+    kb = (primary.get("kind") or "").lower()
+    if not ka or not kb:
+        return False
+    cash = {"checking", "savings", "cash"}
+    dest = {"credit", "loan"}
+    if (ka in dest and kb in cash) or (kb in dest and ka in cash):
+        return False
+    return ka == kb
+
+
+def _banks_ok_for_attach(stmt: dict[str, Any], primary: dict[str, Any]) -> bool:
+    """When both sides named a bank, they must match. Missing label is allowed."""
+    ba = (stmt.get("brand") or stmt.get("bank_label") or stmt.get("org") or "").strip()
+    bb = (primary.get("brand") or primary.get("bank_label") or primary.get("org") or "").strip()
+    if not ba or not bb:
+        return True
+    return _banks_compatible(stmt, primary)
+
+
 def _account_header_text(raw: str, *, max_lines: int = 16) -> str:
     """Identity lines only — stop at the first dated register row."""
     lines: list[str] = []
@@ -1769,8 +1791,14 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
         hit_roots: list[int] = []
         best = 0
         for i in primaries:
-            hits = _head_line_item_hits(stmt, refs[i]["acc"], head=4)
-            if hits < need:
+            pri = refs[i]["acc"]
+            if not _kinds_ok_for_attach(stmt, pri):
+                continue
+            hits = _head_line_item_hits(stmt, pri, head=4)
+            local_need = need
+            if len(head) >= 4 and len(_ordered_date_amounts(pri)) >= 8:
+                local_need = max(need, 3)
+            if hits < local_need:
                 continue
             root = find(i)
             if hits > best:
@@ -1793,6 +1821,8 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
         for i in primaries:
             overlap = sfps & _fp_cores(refs[i]["acc"])
             if len(overlap) < 2:
+                continue
+            if not _kinds_ok_for_attach(refs[si]["acc"], refs[i]["acc"]):
                 continue
             if not _banks_compatible(refs[si]["acc"], refs[i]["acc"]):
                 continue
@@ -1835,9 +1865,12 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
             ]
             if len(kind_hits) == 1:
                 union(si, kind_hits[0])
-        # Shared member-number tails (8888 on every CU share) stay unmatched
         elif len(via_tail) == 1:
-            union(si, via_tail[0])
+            ti = via_tail[0]
+            if _kinds_ok_for_attach(refs[si]["acc"], refs[ti]["acc"]) and _banks_ok_for_attach(
+                refs[si]["acc"], refs[ti]["acc"]
+            ):
+                union(si, ti)
 
     groups: dict[int, list[int]] = {}
     for i in range(len(refs)):

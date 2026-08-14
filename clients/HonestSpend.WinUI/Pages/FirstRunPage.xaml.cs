@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using HonestSpend_WinUI.Helpers;
 using HonestSpend_WinUI.Services;
 using Microsoft.UI.Xaml;
@@ -68,6 +69,8 @@ public sealed partial class FirstRunPage : Page
     private string _pendingPayeeLabel = "";
     private readonly HashSet<string> _skippedPayees = new(StringComparer.OrdinalIgnoreCase);
     private bool _categorizeAutoRan;
+    private JsonElement? _pendingCatStatus;
+    private readonly List<JsonElement> _sessionRecent = new();
     private readonly Dictionary<int, NumberBox> _budgetAmountBoxes = new();
     private NumberBox? _totalBufferBox;
     private readonly Dictionary<int, NumberBox> _acctBufferBoxes = new();
@@ -2606,9 +2609,18 @@ public sealed partial class FirstRunPage : Page
                 InfoBar.Title = "Auto-categorize";
                 InfoBar.Message = JsonUi.Str(auto, "message");
                 InfoBar.IsOpen = true;
+                if (auto.TryGetProperty("status", out var autoSt))
+                {
+                    _pendingCatStatus = autoSt.Clone();
+                    AbsorbSessionRecent(autoSt);
+                }
             }
 
-            var st = await api.GetSetupCategorizeAsync();
+            JsonElement st;
+            if (_pendingCatStatus is JsonElement cached)
+                st = cached;
+            else
+                st = await api.GetSetupCategorizeAsync();
             Fields.Children.Add(new TextBlock
             {
                 Text = JsonUi.Str(st, "message") + $" ({JsonUi.Str(st, "categorized_pct")}%)",
@@ -2642,6 +2654,19 @@ public sealed partial class FirstRunPage : Page
                 }
             }
 
+            var usable = _catChips
+                .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            moreCats = moreCats
+                .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var allCats = usable
+                .Concat(moreCats)
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
             if (first is null)
             {
                 Fields.Children.Add(new TextBlock
@@ -2652,6 +2677,7 @@ public sealed partial class FirstRunPage : Page
                 _pendingPayeeKey = null;
                 if (AppState.PostImportGuide)
                     NextBtn.Content = "Continue to budgets";
+                AddRecentAssignments(allCats);
                 return;
             }
 
@@ -2690,18 +2716,6 @@ public sealed partial class FirstRunPage : Page
                 Margin = new Thickness(0, 0, 0, 8),
             });
 
-            var usable = _catChips
-                .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
-                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            moreCats = moreCats
-                .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
-                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            var allCats = usable
-                .Concat(moreCats)
-                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
             var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -2781,7 +2795,7 @@ public sealed partial class FirstRunPage : Page
                 Render();
             };
             Fields.Children.Add(skipPayee);
-            AddRecentAssignments(st, allCats);
+            AddRecentAssignments(allCats);
         }
         catch (Exception ex)
         {
@@ -2789,11 +2803,70 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
-    private void AddRecentAssignments(JsonElement st, List<(int Id, string Name)> allCats)
+    private static List<int> RecentIdsOf(JsonElement item)
+    {
+        var ids = new List<int>();
+        if (item.TryGetProperty("transaction_ids", out var el) && el.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var id in el.EnumerateArray())
+                if (id.TryGetInt32(out var n)) ids.Add(n);
+        }
+        return ids;
+    }
+
+    private void AbsorbSessionRecent(JsonElement st)
     {
         if (!st.TryGetProperty("recent_assignments", out var arr)
-            || arr.ValueKind != JsonValueKind.Array
-            || arr.GetArrayLength() == 0)
+            || arr.ValueKind != JsonValueKind.Array)
+            return;
+        foreach (var item in arr.EnumerateArray())
+        {
+            var incoming = RecentIdsOf(item);
+            if (incoming.Count > 0)
+                DropSessionRecent(incoming);
+            var key = JsonUi.Str(item, "payee_key");
+            var cid = JsonUi.Int(item, "category_id", 0);
+            var merged = incoming.ToList();
+            var idx = _sessionRecent.FindIndex(x =>
+                JsonUi.Str(x, "payee_key") == key && JsonUi.Int(x, "category_id", 0) == cid);
+            if (idx >= 0)
+            {
+                foreach (var n in RecentIdsOf(_sessionRecent[idx]))
+                    if (!merged.Contains(n)) merged.Add(n);
+                _sessionRecent.RemoveAt(idx);
+            }
+            _sessionRecent.Insert(0, WithRecentIds(item, merged));
+        }
+    }
+
+    private static JsonElement WithRecentIds(JsonElement src, List<int> ids)
+    {
+        var node = JsonNode.Parse(src.GetRawText())?.AsObject() ?? new JsonObject();
+        var arr = new JsonArray();
+        foreach (var id in ids)
+            arr.Add(id);
+        node["transaction_ids"] = arr;
+        node["count"] = ids.Count;
+        return JsonSerializer.SerializeToElement(node);
+    }
+
+    private void DropSessionRecent(IEnumerable<int> ids)
+    {
+        var set = ids.ToHashSet();
+        _sessionRecent.RemoveAll(item =>
+        {
+            if (!item.TryGetProperty("transaction_ids", out var el) || el.ValueKind != JsonValueKind.Array)
+                return false;
+            foreach (var id in el.EnumerateArray())
+                if (id.TryGetInt32(out var n) && set.Contains(n))
+                    return true;
+            return false;
+        });
+    }
+
+    private void AddRecentAssignments(List<(int Id, string Name)> allCats)
+    {
+        if (_sessionRecent.Count == 0)
             return;
 
         Fields.Children.Add(new TextBlock
@@ -2805,7 +2878,7 @@ public sealed partial class FirstRunPage : Page
 
         var byCat = new Dictionary<string, List<JsonElement>>(StringComparer.OrdinalIgnoreCase);
         var catOrder = new List<string>();
-        foreach (var item in arr.EnumerateArray())
+        foreach (var item in _sessionRecent)
         {
             var cat = JsonUi.Str(item, "category_name", "Category");
             if (!byCat.ContainsKey(cat))
@@ -2831,6 +2904,7 @@ public sealed partial class FirstRunPage : Page
                 var payeeKey = JsonUi.Str(item, "payee_key");
                 var count = JsonUi.Int(item, "count", 0);
                 var catId = JsonUi.Int(item, "category_id", 0);
+                var ruleId = JsonUi.Int(item, "rule_id", 0);
                 var ids = new List<int>();
                 if (item.TryGetProperty("transaction_ids", out var idEl) && idEl.ValueKind == JsonValueKind.Array)
                 {
@@ -2885,7 +2959,7 @@ public sealed partial class FirstRunPage : Page
                 var undo = new Button { Content = "Undo" };
                 undo.Click += async (_, _) =>
                 {
-                    try { await UndoPayeeCategoryAsync(ids, payeeKey); }
+                    try { await UndoPayeeCategoryAsync(ids, payeeKey, ruleId > 0 ? ruleId : null); }
                     catch (Exception ex)
                     {
                         ErrorBar.Message = ex.Message;
@@ -2927,10 +3001,15 @@ public sealed partial class FirstRunPage : Page
         InfoBar.IsOpen = true;
         _pendingPayeeKey = null;
         _pendingTxnIds = null;
+        if (res.TryGetProperty("status", out var st0))
+        {
+            _pendingCatStatus = st0.Clone();
+            AbsorbSessionRecent(st0);
+        }
         Render();
     }
 
-    private async Task UndoPayeeCategoryAsync(List<int> txnIds, string payeeKey)
+    private async Task UndoPayeeCategoryAsync(List<int> txnIds, string payeeKey, int? ruleId = null)
     {
         if (txnIds.Count == 0 && string.IsNullOrEmpty(payeeKey))
             return;
@@ -2940,10 +3019,17 @@ public sealed partial class FirstRunPage : Page
         {
             transaction_ids = txnIds,
             payee_key = payeeKey,
+            rule_id = ruleId,
         });
         InfoBar.Title = "Undone";
         InfoBar.Message = $"Cleared {JsonUi.Int(res, "cleared", 0)} match(es). That payee is back in the queue.";
         InfoBar.IsOpen = true;
+        DropSessionRecent(txnIds);
+        if (res.TryGetProperty("status", out var st0))
+        {
+            _pendingCatStatus = st0.Clone();
+            AbsorbSessionRecent(st0);
+        }
         Render();
     }
 

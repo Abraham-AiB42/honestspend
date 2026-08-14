@@ -155,17 +155,20 @@ def ensure_coa_categories(session: Session) -> int:
                 existing.add(row.code)
                 added += 1
     session.flush()
+    legacy_names = {
+        "Advertising": "Marketing",
+        "Contract labor": "Services",
+        "Business meals": "Meals 50%",
+        "Rent": "Rent (office / property)",
+    }
     for cat in session.query(Category).filter(Category.scope == "business").all():
         item = biz_by_code.get(_coa_base_code(cat.code))
         if not item:
             continue
-        name = item.get("display_name")
-        if name and cat.display_name != name:
-            cat.display_name = name
-        if item.get("partial_rule") and cat.partial_rule != item.get("partial_rule"):
+        if cat.display_name in legacy_names:
+            cat.display_name = legacy_names[cat.display_name]
+        if item.get("partial_rule") and not cat.partial_rule:
             cat.partial_rule = item.get("partial_rule")
-        if item.get("notes") and cat.notes != item.get("notes"):
-            cat.notes = item.get("notes")
     if added:
         session.flush()
     return added

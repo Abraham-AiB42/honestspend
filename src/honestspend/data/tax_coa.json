@@ -147,13 +147,23 @@
     },
     {
       "code": "BIZ_RENT",
-      "display_name": "Rent",
+      "display_name": "Rent (office / property)",
       "tax_form": "1120S",
       "tax_line": "11",
       "sch_c_line": "20b",
       "deductibility": "full",
       "budget_group": "ops",
-      "examples": ["Office rent", "Equipment lease"]
+      "examples": ["Office rent", "Coworking"]
+    },
+    {
+      "code": "BIZ_RENT_EQUIP",
+      "display_name": "Rent (vehicles / equipment)",
+      "tax_form": "1120S",
+      "tax_line": "11",
+      "sch_c_line": "20a",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "examples": ["Vehicle lease", "Copier lease"]
     },
     {
       "code": "BIZ_TAXES_LICENSES",
@@ -271,7 +281,83 @@
       "deductibility": "full",
       "budget_group": "ops",
       "other_deduction_detail": true,
-      "notes": "Business phone/internet portion only"
+      "notes": "Electric, gas, water for business property. Phone/internet has its own category."
+    },
+    {
+      "code": "BIZ_OTHER_PHONE",
+      "display_name": "Phone / internet (business)",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "25",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Business line 100%. Shared personal cell/internet — business-use % only."
+    },
+    {
+      "code": "BIZ_OTHER_POSTAGE",
+      "display_name": "Postage / shipping",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "18",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "examples": ["USPS", "UPS", "FedEx", "Stamps.com"]
+    },
+    {
+      "code": "BIZ_HOME_OFFICE",
+      "display_name": "Home office",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "30",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "S-corp: reimburse via accountable plan. Sole prop: Form 8829 / simplified $5 sq ft. Not a personal 1040 write-off of the company's bills."
+    },
+    {
+      "code": "BIZ_OTHER_GIFTS",
+      "display_name": "Client gifts",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "27b",
+      "deductibility": "partial",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Generally $25 per recipient per year (IRC §274(b)). Shipping/engraving extra."
+    },
+    {
+      "code": "BIZ_ENTERTAINMENT",
+      "display_name": "Entertainment (nondeductible)",
+      "tax_form": "1120S",
+      "tax_line": "nondeductible",
+      "sch_c_line": null,
+      "deductibility": "none",
+      "budget_group": "ops",
+      "notes": "Tickets, golf, clubs — generally $0 after TCJA. Do not mix with Meals 50%."
+    },
+    {
+      "code": "BIZ_OTHER_CONFERENCES",
+      "display_name": "Conferences / events",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "27b",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Registration and booth fees. Airfare/hotel → Travel. Meals at the event → Meals 50%."
+    },
+    {
+      "code": "BIZ_OTHER_PARKING",
+      "display_name": "Parking / tolls",
+      "tax_form": "1120S",
+      "tax_line": "20",
+      "sch_c_line": "9",
+      "deductibility": "full",
+      "budget_group": "ops",
+      "other_deduction_detail": true,
+      "notes": "Business trips and client visits. Commute to a regular office is not deductible."
     },
     {
       "code": "BIZ_OTHER_INSURANCE",

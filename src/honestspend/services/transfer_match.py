@@ -132,6 +132,9 @@ def confirm_transfer_pair(
     inn.is_transfer = True
     out.transfer_pair_id = inn.id
     inn.transfer_pair_id = out.id
+    for leg in (out, inn):
+        if leg.memo and "[skip-auto-link]" in leg.memo:
+            leg.memo = leg.memo.replace("[skip-auto-link]", "").strip() or None
     if transfer_cat:
         out.category_id = transfer_cat.id
         inn.category_id = transfer_cat.id

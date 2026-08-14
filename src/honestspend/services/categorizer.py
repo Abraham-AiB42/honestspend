@@ -494,7 +494,7 @@ DEFAULT_RULE_SEEDS: list[tuple[str, str, str, int]] = [
     ("city of loveland", "contains", "PER_UTILITIES", 90),
     ("cvs", "contains", "PER_HEALTHCARE", 90),
     ("walgreens", "contains", "PER_HEALTHCARE", 90),
-    ("farmers", "contains", "PER_INSURANCE", 90),
+    ("farmers insurance", "contains", "PER_INSURANCE", 90),
 ]
 
 
@@ -502,6 +502,16 @@ def ensure_seed_rules(session: Session) -> int:
     """Idempotent: add any new seed rules that were not in the original install."""
     personal = session.query(Profile).filter(Profile.slug == "personal").one_or_none()
     created = 0
+    for stale in (
+        session.query(CategoryRule)
+        .filter(
+            CategoryRule.source == "seed",
+            CategoryRule.pattern == "farmers",
+            CategoryRule.match_type == "contains",
+        )
+        .all()
+    ):
+        stale.pattern = "farmers insurance"
     existing = {
         (r.pattern or "").lower()
         for r in session.query(CategoryRule).filter(CategoryRule.source == "seed").all()
@@ -560,7 +570,16 @@ BUSINESS_RULE_SEEDS: list[tuple[str, str, str, int]] = [
     ("lift local", "contains", "BIZ_ADVERTISING", 180),
     ("docusign", "contains", "BIZ_OTHER_SOFTWARE", 120),
     ("vestwell", "contains", "BIZ_PENSION", 180),
-    ("microsoft", "contains", "BIZ_OTHER_SOFTWARE", 90),
+    ("usps", "contains", "BIZ_OTHER_POSTAGE", 120),
+    ("united states postal", "contains", "BIZ_OTHER_POSTAGE", 120),
+    ("stamps.com", "contains", "BIZ_OTHER_POSTAGE", 120),
+    ("fedex", "contains", "BIZ_OTHER_POSTAGE", 110),
+    ("ups store", "contains", "BIZ_OTHER_POSTAGE", 100),
+    ("ups ", "contains", "BIZ_OTHER_POSTAGE", 80),
+    ("parking", "contains", "BIZ_OTHER_PARKING", 80),
+    ("parkwhiz", "contains", "BIZ_OTHER_PARKING", 120),
+    ("ez pass", "contains", "BIZ_OTHER_PARKING", 110),
+    ("e-zpass", "contains", "BIZ_OTHER_PARKING", 110),
 ]
 
 

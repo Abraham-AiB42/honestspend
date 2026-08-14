@@ -603,10 +603,21 @@ public sealed partial class ImportPage : Page
             else if (ch.Mode == "create")
             {
                 SetCardSkipped(fileIndex, sourceKey, false);
-                ExpandCollapsedCard(fileIndex, sourceKey, resetAction: false);
+                ExpandCollapsedCard(fileIndex, sourceKey, resetAction: true);
             }
             else if (ch.Mode == "skip")
+            {
+                if (_collapsedOnto.ContainsKey((fileIndex, sourceKey)))
+                    ExpandCollapsedCard(fileIndex, sourceKey, resetAction: false);
+                var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == fileIndex && r.SourceKey == sourceKey);
+                if (src.ActionBox is not null)
+                {
+                    _inAttachUi = true;
+                    try { SelectComboTag(src.ActionBox, "skip"); }
+                    finally { _inAttachUi = false; }
+                }
                 SetCardSkipped(fileIndex, sourceKey, true);
+            }
         };
         _statementLinks.Add((fileIndex, sourceKey, box));
         return box;
@@ -879,9 +890,49 @@ public sealed partial class ImportPage : Page
                 && ch.SourceKey == tgtSk)
             {
                 src.ActionBox.SelectedItem = item;
+                SelectAttachOnSource(srcFi, srcSk, tgtFi, tgtSk);
                 CollapseCardOnto(srcFi, srcSk, tgtFi, tgtSk);
                 return;
             }
+        }
+    }
+
+    private static void SelectLinkMode(ComboBox box, string mode)
+    {
+        foreach (var item in box.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is StmtLinkChoice ch && ch.Mode == mode)
+            {
+                box.SelectedItem = item;
+                return;
+            }
+        }
+    }
+
+    private static void SelectAttachChoice(ComboBox box, int tgtFi, string? tgtSk)
+    {
+        foreach (var item in box.Items.OfType<ComboBoxItem>())
+        {
+            if (item.Tag is StmtLinkChoice ch
+                && ch.Mode == "attach"
+                && ch.FileIndex == tgtFi
+                && string.Equals(ch.SourceKey, tgtSk, StringComparison.Ordinal))
+            {
+                box.SelectedItem = item;
+                return;
+            }
+        }
+    }
+
+    private void SelectAttachOnSource(int srcFi, string srcSk, int tgtFi, string tgtSk)
+    {
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == srcFi && r.SourceKey == srcSk);
+        if (src.ActionBox is not null)
+            SelectAttachChoice(src.ActionBox, tgtFi, tgtSk);
+        foreach (var (fi, sk, box) in _statementLinks)
+        {
+            if (fi == srcFi && sk == srcSk && box is not null)
+                SelectAttachChoice(box, tgtFi, tgtSk);
         }
     }
 
@@ -956,10 +1007,20 @@ public sealed partial class ImportPage : Page
             }
         }
         _collapsedOnto.Remove((srcFi, srcSk));
-        if (resetAction && src.ActionBox is not null)
+        if (!resetAction)
+            return;
+        if (src.ActionBox is not null)
         {
             _inAttachUi = true;
             try { SelectComboTag(src.ActionBox, "create"); }
+            finally { _inAttachUi = false; }
+        }
+        foreach (var (fi, sk, box) in _statementLinks)
+        {
+            if (fi != srcFi || sk != srcSk || box is null)
+                continue;
+            _inAttachUi = true;
+            try { SelectLinkMode(box, "create"); }
             finally { _inAttachUi = false; }
         }
     }
@@ -1450,6 +1511,12 @@ public sealed partial class ImportPage : Page
                     });
                     if (action == "skip")
                         SelectComboTag(actionBox, "skip");
+                    else if (action == "attach")
+                    {
+                        var tgtFi0 = JsonUi.Int(a, "attach_to_file_index", -1);
+                        var tgtSk0 = JsonUi.Str(a, "attach_to_source_key");
+                        SelectAttachChoice(actionBox, tgtFi0, tgtSk0);
+                    }
                     else if (matchedId > 0)
                     {
                         foreach (var item in actionBox.Items.OfType<ComboBoxItem>())
@@ -1684,7 +1751,10 @@ public sealed partial class ImportPage : Page
                 }
             }
             foreach (var job in pendingAttach)
+            {
+                SelectAttachOnSource(job.SrcFi, job.SrcSk, job.TgtFi, job.TgtSk);
                 CollapseCardOnto(job.SrcFi, job.SrcSk, job.TgtFi, job.TgtSk);
+            }
         }
 
         if (SmartAccountsPanel.Children.Count == 0)
@@ -1912,24 +1982,29 @@ public sealed partial class ImportPage : Page
                         if (!string.IsNullOrWhiteSpace(row.NickBox.Text))
                             dict["suggested_nickname"] = row.NickBox.Text.Trim();
                     }
+                    var boxAction = Convert.ToString(dict.GetValueOrDefault("action")) ?? "";
                     var link = _statementLinks.FirstOrDefault(r => r.FileIndex == fi && r.SourceKey == sk);
-                    if (link.LinkBox?.SelectedItem is ComboBoxItem { Tag: StmtLinkChoice choice2 })
+                    var linkMode = link.LinkBox?.SelectedItem is ComboBoxItem { Tag: StmtLinkChoice lm } ? lm.Mode : "";
+                    if (boxAction == "skip" || linkMode == "skip")
                     {
-                        if (choice2.Mode == "attach" && !string.IsNullOrEmpty(choice2.SourceKey))
+                        dict["action"] = "skip";
+                        dict.Remove("attach_to_file_index");
+                        dict.Remove("attach_to_source_key");
+                    }
+                    else if (_collapsedOnto.TryGetValue((fi, sk), out var onto))
+                    {
+                        dict["action"] = "attach";
+                        dict["attach_to_file_index"] = onto.TgtFi;
+                        dict["attach_to_source_key"] = onto.TgtSk;
+                    }
+                    else if (link.LinkBox?.SelectedItem is ComboBoxItem { Tag: StmtLinkChoice choice2 })
+                    {
+                        var boxLocked = boxAction is "match";
+                        if (choice2.Mode == "attach" && !string.IsNullOrEmpty(choice2.SourceKey) && !boxLocked)
                         {
                             dict["action"] = "attach";
                             dict["attach_to_file_index"] = choice2.FileIndex;
                             dict["attach_to_source_key"] = choice2.SourceKey;
-                        }
-                        else if (choice2.Mode == "skip")
-                        {
-                            dict["action"] = "skip";
-                        }
-                        else if (choice2.Mode == "create")
-                        {
-                            dict["action"] = "create";
-                            dict.Remove("attach_to_file_index");
-                            dict.Remove("attach_to_source_key");
                         }
                     }
                     accounts.Add(dict);

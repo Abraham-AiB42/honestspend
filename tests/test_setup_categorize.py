@@ -16,6 +16,7 @@ from honestspend.services.setup_categorize import (
     auto_apply_high_confidence,
     categorize_status,
     confirm_payee_category,
+    prepare_categorize,
 )
 from honestspend.services.setup_recurring_finalize import (
     apply_recurring_choices,
@@ -131,8 +132,9 @@ def test_categorize_status_links_account_payments(tmp_path: Path, monkeypatch):
     s.add_all([out, inn])
     s.commit()
 
-    st = categorize_status(s, profile_id=p.id)
+    auto = auto_apply_high_confidence(s, profile_id=p.id, use_grok=False)
     s.commit()
+    st = auto["status"]
     s.refresh(out)
     s.refresh(inn)
     assert out.is_transfer and inn.is_transfer
@@ -145,6 +147,85 @@ def test_categorize_status_links_account_payments(tmp_path: Path, monkeypatch):
         r.get("to_account") == "AiB42 Amex" and "american express" in (r.get("payee") or "").lower()
         for r in recent
     )
+    # Undo must not be re-linked by a following status GET
+    from honestspend.services.setup_categorize import undo_payee_category
+
+    undo_payee_category(s, transaction_ids=[out.id], profile_id=p.id)
+    s.commit()
+    categorize_status(s, profile_id=p.id)
+    s.commit()
+    s.refresh(out)
+    s.refresh(inn)
+    assert out.transfer_pair_id is None
+    assert inn.transfer_pair_id is None
+    assert "[skip-auto-link]" in (out.memo or "")
+    s.close()
+
+
+def test_business_chip_remap_restores_on_undo(tmp_path: Path, monkeypatch):
+    from honestspend.services.profiles import create_profile
+
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    biz = create_profile(s, display_name="AP Agency", entity_type="business")
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Agency Checking",
+        is_cash_for_ifpp=True,
+        current_balance=Decimal("5000"),
+    )
+    s.add(cash)
+    s.flush()
+    marketing = (
+        s.query(Category)
+        .filter(Category.profile_id == biz.id, Category.display_name == "Marketing")
+        .one()
+    )
+    food = (
+        s.query(Category)
+        .filter(Category.profile_id == p.id, Category.budget_group == "food")
+        .first()
+    )
+    txn = Transaction(
+        profile_id=p.id,
+        account_id=cash.id,
+        txn_date=date.today(),
+        amount=Decimal("-40"),
+        payee="LIFT LOCAL",
+    )
+    s.add(txn)
+    s.commit()
+    confirm_payee_category(
+        s,
+        transaction_ids=[txn.id],
+        category_id=marketing.id,
+        profile_id=p.id,
+    )
+    s.commit()
+    s.refresh(txn)
+    assert txn.profile_id == biz.id
+    assert txn.category_id == marketing.id
+
+    from honestspend.services.setup_categorize import undo_payee_category
+
+    undo_payee_category(s, transaction_ids=[txn.id], profile_id=p.id)
+    s.commit()
+    s.refresh(txn)
+    assert txn.profile_id == p.id
+    assert txn.category_id is None
+    assert "[skip-auto-link]" not in (txn.memo or "")
+
+    confirm_payee_category(
+        s,
+        transaction_ids=[txn.id],
+        category_id=food.id,
+        profile_id=p.id,
+    )
+    s.commit()
+    s.refresh(txn)
+    assert txn.profile_id == p.id
+    assert txn.category_id == food.id
     s.close()
 
 
@@ -175,8 +256,13 @@ def test_promo_apr_lines_are_voided_not_queued(tmp_path: Path, monkeypatch):
     )
     s.add_all([fake, real])
     s.commit()
-    st = categorize_status(s, profile_id=p.id)
+    categorize_status(s, profile_id=p.id)
     s.commit()
+    s.refresh(fake)
+    assert fake.status != "void"
+    prepare_categorize(s, profile_id=p.id)
+    s.commit()
+    st = categorize_status(s, profile_id=p.id)
     s.refresh(fake)
     s.refresh(real)
     assert fake.status == "void"
@@ -249,7 +335,9 @@ def test_business_chips_include_everyday_labels(tmp_path: Path, monkeypatch):
     create_profile(s, display_name="AP Agency", entity_type="business")
     s.commit()
     st = categorize_status(s)
-    names = {c["name"] for c in st["category_chips"]}
+    chip_names = {c["name"] for c in st["category_chips"]}
+    more_names = {c["name"] for c in st["more_chips"]}
+    assert "Groceries" in chip_names
     for need in (
         "Marketing",
         "Services",
@@ -258,8 +346,26 @@ def test_business_chips_include_everyday_labels(tmp_path: Path, monkeypatch):
         "Travel",
         "Meals 50%",
         "Meals 100%",
+        "Home office",
+        "Phone / internet (business)",
+        "Postage / shipping",
+        "Client gifts",
+        "Entertainment (nondeductible)",
+        "Conferences / events",
+        "Parking / tolls",
+        "Rent (office / property)",
+        "Rent (vehicles / equipment)",
+        "Legal and professional services",
+        "Car and truck (business)",
+        "Software / SaaS / cloud",
+        "Education / CE",
+        "Insurance (other than health)",
+        "Taxes and licenses",
+        "Salaries and wages",
+        "Officer compensation",
     ):
-        assert need in names, need
+        assert need in more_names, need
+        assert need not in chip_names, need
     s.close()
 
 
