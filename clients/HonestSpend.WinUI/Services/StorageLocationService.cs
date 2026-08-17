@@ -17,6 +17,62 @@ public static class StorageLocationService
 
     public static string DefaultLocalPath() => WinUiPaths.DefaultLocalDataDir();
 
+    /// <summary>Start the money engine on launch only after books exist.</summary>
+    public static bool ShouldStartEngineOnLaunch() => !LooksLikeFirstRun();
+
+    /// <summary>Suggested books folders without talking to the engine.</summary>
+    public static List<(string Kind, string Label, string Path)> ListSuggestedPlaces()
+    {
+        var list = new List<(string Kind, string Label, string Path)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string kind, string label, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !seen.Add(path.Trim()))
+                return;
+            list.Add((kind, label, path.Trim()));
+        }
+
+        Add("local", "This PC only (default)", DefaultLocalPath());
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var odEnv = new[] { "OneDrive", "OneDriveConsumer", "OneDriveCommercial" };
+        var odRoots = new List<string>();
+        foreach (var key in odEnv)
+        {
+            var raw = Environment.GetEnvironmentVariable(key);
+            if (!string.IsNullOrWhiteSpace(raw) && Directory.Exists(raw))
+                odRoots.Add(raw);
+        }
+        foreach (var name in new[] { "OneDrive", "OneDrive - Personal" })
+        {
+            var p = Path.Combine(home, name);
+            if (Directory.Exists(p))
+                odRoots.Add(p);
+        }
+        foreach (var od in odRoots.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var leaf = Path.GetFileName(od.TrimEnd('\\', '/'));
+            Add("onedrive", $"OneDrive · {leaf}", Path.Combine(od, "HonestSpend", "data"));
+            Add("onedrive_docs", $"OneDrive Documents · {leaf}", Path.Combine(od, "Documents", "HonestSpend"));
+        }
+
+        foreach (var name in new[] { "Dropbox", "Dropbox (Personal)", "Dropbox (Business)" })
+        {
+            var p = Path.Combine(home, name);
+            if (Directory.Exists(p))
+                Add("dropbox", $"Dropbox · {name}", Path.Combine(p, "HonestSpend", "data"));
+        }
+
+        foreach (var name in new[] { "iCloudDrive", "iCloud Drive" })
+        {
+            var p = Path.Combine(home, name);
+            if (Directory.Exists(p))
+                Add("icloud", $"iCloud Drive · {name}", Path.Combine(p, "HonestSpend", "data"));
+        }
+
+        return list;
+    }
+
     /// <summary>True when this PC has no books yet — show Get started without waiting on the engine.</summary>
     public static bool LooksLikeFirstRun()
     {

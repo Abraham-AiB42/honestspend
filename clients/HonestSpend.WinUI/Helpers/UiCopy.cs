@@ -48,6 +48,7 @@ public static class UiCopy
     {
         "cash" => "Cash / checking",
         "card" or "credit" => "Card (interest-free when safe)",
+        "bnpl" => "Buy now, pay later",
         "auto" => "Best available",
         _ => string.IsNullOrEmpty(method) ? "—" : method,
     };

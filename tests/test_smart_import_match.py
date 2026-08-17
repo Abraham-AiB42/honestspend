@@ -26,6 +26,38 @@ def _session(tmp_path: Path, monkeypatch):
     return s
 
 
+def test_guess_checking_export_not_credit_from_posting_type():
+    """Bank 'Posting Date' + 'Transaction Type' (Debit/Credit) is checking, not a card."""
+    kind = guess_account_kind(
+        filename="ExportedTransactions.csv",
+        raw_text='Posting Date,Transaction Type,Amount,Description\n8/6/2026,Debit,-130.00,STORE\n',
+        headers=["Posting Date", "Transaction Type", "Amount", "Description"],
+    )
+    assert kind == "checking"
+
+
+def test_guess_card_activity_still_credit():
+    kind = guess_account_kind(
+        filename="Chase8209_Activity_20260813.csv",
+        raw_text="Card,Transaction Date,Post Date,Description,Category,Type,Amount\n8209,08/05/2026,08/06/2026,STORE,Shopping,Sale,-20.00\n",
+        headers=["Card", "Transaction Date", "Post Date", "Description", "Category", "Type", "Amount"],
+    )
+    assert kind == "credit"
+
+
+def test_guess_chase_activity_without_card_column_is_credit():
+    """Chase personal card exports Type=Sale but no Card column."""
+    kind = guess_account_kind(
+        filename="Chase4411_Activity_20260813.csv",
+        raw_text=(
+            "Transaction Date,Post Date,Description,Category,Type,Amount,Memo\n"
+            "08/09/2026,08/10/2026,STORE,Shopping,Sale,-51.19,\n"
+        ),
+        headers=["Transaction Date", "Post Date", "Description", "Category", "Type", "Amount", "Memo"],
+    )
+    assert kind == "credit"
+
+
 def test_guess_loan_kind_from_transaction_details_filename():
     kind = guess_account_kind(
         filename="hyundai_motor_finance_transaction_details.xls",
@@ -68,6 +100,64 @@ def test_discover_personal_loan_statement_is_loan():
     )
     assert label == "Personal loan"
     assert detail == "Discover"
+
+
+def test_card_file_does_not_match_payment_payee_account(tmp_path, monkeypatch):
+    """Wells Fargo Reflect must not glue to an account named like a payment payee."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    payee_acct = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Payment to Apple Card",
+        current_balance=Decimal("0"),
+    )
+    s.add(payee_acct)
+    s.commit()
+    csv = (
+        b"Date,Description,Amount\n"
+        b"08/01/2026,ONLINE ACH PAYMENT THANK YOU,-183.00\n"
+        b"08/05/2026,AUTOMATIC PAYMENT - THANK YOU,-97.00\n"
+    )
+    plan = build_smart_plan(s, [("CreditCard.csv", csv)])
+    acc = plan["sources"][0]["accounts"][0]
+    assert acc.get("action") != "match" or acc.get("account_id") != payee_acct.id
+    assert acc.get("matched_nickname") != "Payment to Apple Card"
+    s.close()
+
+
+def test_wells_reflect_matches_same_named_card_not_apple_payment(tmp_path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    apple = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Payment to Apple Card",
+        current_balance=Decimal("10"),
+    )
+    wells = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Wells Fargo Reflect · …9690",
+        institution="Wells Fargo",
+        current_balance=Decimal("200"),
+    )
+    s.add_all([apple, wells])
+    s.commit()
+    from honestspend.services.smart_import import _match_account
+
+    hit = _match_account(
+        s,
+        external_key=None,
+        acctid="9690",
+        nickname_hint="Wells Fargo Reflect",
+        kind="credit",
+        bank_label="Wells Fargo",
+        last4="9690",
+    )
+    assert hit is not None
+    assert hit.id == wells.id
+    s.close()
 
 
 def test_loan_txn_file_matches_existing_loan_not_card(tmp_path, monkeypatch):

@@ -424,6 +424,99 @@ def test_suggest_funding_ignores_card_name_without_payment_phrasing(
     s.commit()
 
     assert suggest_funding_from_payment_history(s, p.id, "Amazon Card") is None
+
+
+def test_suggest_funding_from_amount_pair(tmp_path: Path, monkeypatch):
+    """Cash outflow that matches a card payment (amount + date) is pay-from."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Everyday checking",
+        current_balance=Decimal("2000"),
+        is_cash_for_ifpp=True,
+    )
+    other = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Side",
+        current_balance=Decimal("100"),
+        is_cash_for_ifpp=True,
+    )
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Ink Business · …4411",
+        institution="Chase",
+        current_balance=Decimal("400"),
+    )
+    s.add_all([cash, other, card])
+    s.flush()
+    s.add(
+        Transaction(
+            profile_id=p.id,
+            account_id=cash.id,
+            txn_date=date(2026, 7, 14),
+            amount=Decimal("-556.08"),
+            payee="ONLINE TRANSFER TO CHASE CARD",
+        )
+    )
+    s.add(
+        Transaction(
+            profile_id=p.id,
+            account_id=card.id,
+            txn_date=date(2026, 7, 14),
+            amount=Decimal("556.08"),
+            payee="AUTOMATIC PAYMENT - THANK YOU",
+        )
+    )
+    s.commit()
+    from honestspend.services.cycle_config import learn_card_funding_after_import
+
+    hit = suggest_funding_from_payment_history(
+        s, p.id, card.nickname, card_account_id=card.id, institution="Chase"
+    )
+    assert hit == cash.id
+    learned = learn_card_funding_after_import(s)
+    s.commit()
+    s.refresh(card)
+    assert learned["filled"] == 1
+    assert card.payment_funding_account_id == cash.id
+    s.close()
+    s.close()
+
+
+def test_directpay_full_balance_sets_statement_policy(tmp_path: Path, monkeypatch):
+    from honestspend.services.cycle_config import learn_statement_autopay_from_payees
+
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Discover",
+        current_balance=Decimal("400"),
+        autopay_policy="min",
+    )
+    s.add(card)
+    s.flush()
+    for i in range(2):
+        s.add(
+            Transaction(
+                profile_id=p.id,
+                account_id=card.id,
+                txn_date=date.today() - timedelta(days=30 * i),
+                amount=Decimal("200.00"),
+                payee="DIRECTPAY FULL BALANCE",
+            )
+        )
+    s.commit()
+    out = learn_statement_autopay_from_payees(s)
+    s.commit()
+    s.refresh(card)
+    assert out["updated"] == 1
+    assert card.autopay_policy == "statement"
     s.close()
 
 

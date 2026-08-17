@@ -21,7 +21,8 @@ _PAYMENT_STRONG = re.compile(
     r"pmt|pymt|"
     r"bill\s*pay|mobile\s*pay|web\s*pay|"
     r"card\s*payment|payment\s*received|"
-    r"payment\s*[\-–—]\s*thank|payment\s*thank"
+    r"payment\s*[\-–—]\s*thank|payment\s*thank|"
+    r"direct\s*pay|full\s+balance"
     r")\b"
 )
 _PAYMENT_WORD = re.compile(r"(?i)\bpayment\b")

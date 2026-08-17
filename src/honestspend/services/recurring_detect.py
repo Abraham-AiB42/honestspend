@@ -28,7 +28,9 @@ _LIABILITY_PAY = re.compile(
     r"discover\s*card|apple\s*card|synchrony|barclays|"
     r"autopay.*card|cardmember|"
     r"mortgage|home\s*loan|heloc|auto\s*loan|car\s*payment|"
-    r"student\s*loan|loan\s*payment|personal\s*loan"
+    r"student\s*loan|loan\s*payment|personal\s*loan|"
+    r"klarna|affirm|afterpay|sezzle|quadpay|"
+    r"pay[\s\-]*in[\s\-]*4|payin4"
     r")\b",
     re.I,
 )
@@ -71,6 +73,80 @@ def categorize_payee_key(payee: str | None) -> str:
     if m:
         return f"check #{m.group(1)}"
     return normalize_payee(raw) or raw.lower()[:40]
+
+
+_PAY_PREFIX = re.compile(
+    r"^(payment|pymt|pay|autopay|ach|online pmt|web pmt|bill pay)\s+(to\s+)?",
+    re.I,
+)
+_EZPAY = re.compile(r"\b(ez\s*pay|ezpay|autopay|billpay|onlinepay)\b")
+_CITY_OF = re.compile(r"\bcity of ([a-z]+)\b")
+# Trailing USPS state / DC only — not as mid-string filler (OR, ME, IN are words).
+_US_STATES = frozenset(
+    {
+        "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id", "il",
+        "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms", "mo", "mt",
+        "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri",
+        "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv", "wi", "wy", "dc",
+    }
+)
+_VENDOR_FILLER = frozenset(
+    {
+        "web",
+        "ez",
+        "pay",
+        "payment",
+        "pymt",
+        "www",
+        "com",
+        "inc",
+        "llc",
+        "ltd",
+        "the",
+        "to",
+        "and",
+        "usa",
+        "energy",  # "Xcel Energy" / "Duke Energy" still collapse on first token
+    }
+)
+
+
+def vendor_budget_key(payee: str | None) -> str:
+    """US-generic vendor stem: Payment to X, EZ-PAY, City of X, trailing state.
+
+    Same utility posted as 'Payment to Acme Energy' and 'ACME EZ-PAY WEB DENVER CO'
+    must land on one key. No household-specific nicknames.
+    """
+    raw = categorize_payee_key(payee)
+    if not raw:
+        return ""
+    stripped = _PAY_PREFIX.sub("", raw).strip() or raw
+    stripped = _EZPAY.sub(" ", stripped)
+    stripped = _MULTI_SPACE.sub(" ", stripped).strip()
+    city = _CITY_OF.search(stripped) or _CITY_OF.search(raw)
+    if city:
+        return f"city of {city.group(1)}"
+    parts = [p for p in stripped.split() if p]
+    while parts and parts[-1] in _US_STATES:
+        parts.pop()
+    parts = [p for p in parts if p not in _VENDOR_FILLER]
+    rebuilt: list[str] = []
+    i = 0
+    while i < len(parts):
+        p = parts[i]
+        if len(p) == 1 and i + 1 < len(parts) and len(parts[i + 1]) >= 2:
+            rebuilt.append(f"{p} {parts[i + 1]}")
+            i += 2
+            continue
+        if len(p) > 1:
+            rebuilt.append(p)
+        i += 1
+    if not rebuilt:
+        rebuilt = stripped.split()
+    # Brand token (comcast, xcel) or letter-brand (t mobile, pg e).
+    if rebuilt and len(rebuilt[0].replace(" ", "")) >= 4:
+        return rebuilt[0]
+    return " ".join(rebuilt[:2]) or stripped
 
 
 def _guess_cadence(dates: list[date]) -> str | None:

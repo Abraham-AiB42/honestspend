@@ -150,6 +150,74 @@ def test_chase_equal_pay_and_isb():
     assert extract_interest_saving_balance(CHASE_ISB) == Decimal("200.00")
 
 
+APPLE_INSTALLMENTS = """
+Transaction Date,Clearing Date,Description,Merchant,Category,Type,Amount (USD)
+07/31/2026,07/31/2026,"MONTHLY INSTALLMENTS (4 OF 6)","Monthly Installments (4 Of 6)","Installment","Installment","24.83"
+07/31/2026,07/31/2026,"MONTHLY INSTALLMENTS (4 OF 6)","Monthly Installments (4 Of 6)","Installment","Installment","24.83"
+07/31/2026,07/31/2026,"MONTHLY INSTALLMENTS (11 OF 24)","Monthly Installments (11 Of 24)","Installment","Installment","41.62"
+07/31/2026,07/31/2026,"MONTHLY INSTALLMENTS (11 OF 24)","Monthly Installments (11 Of 24)","Installment","Installment","58.29"
+06/30/2026,06/30/2026,"MONTHLY INSTALLMENTS (3 OF 6)","Monthly Installments (3 Of 6)","Installment","Installment","24.83"
+06/30/2026,06/30/2026,"MONTHLY INSTALLMENTS (10 OF 24)","Monthly Installments (10 Of 24)","Installment","Installment","41.62"
+"""
+
+
+def test_apple_monthly_installments_are_purchase_plans():
+    from honestspend.services.promo_statement_parse import parse_monthly_installment
+
+    row = parse_monthly_installment("MONTHLY INSTALLMENTS (11 OF 24)", Decimal("41.62"))
+    assert row is not None
+    assert row["kind"] == "purchase_plan"
+    assert row["name"] == "Monthly installments · 24 mo"
+    assert row["monthly_payment"] == Decimal("41.62")
+    assert row["months_left"] == 14
+    assert row["principal_remaining"] == Decimal("41.62") * 14
+
+
+def test_apple_csv_groups_parallel_same_amount_plans():
+    rows = extract_promo_terms(APPLE_INSTALLMENTS)
+    plans = [r for r in rows if r.get("source_kind") == "monthly_installment"]
+    by_monthly = {r["monthly_payment"]: r for r in plans}
+    # Two 6-mo $24.83 plans on the latest month → one $49.66 plan, 3 left
+    six = by_monthly[Decimal("49.66")]
+    assert six["months_left"] == 3
+    assert six["principal_remaining"] == Decimal("49.66") * 3
+    assert by_monthly[Decimal("41.62")]["months_left"] == 14
+    assert by_monthly[Decimal("41.62")]["principal_remaining"] == Decimal("41.62") * 14
+    assert by_monthly[Decimal("58.29")]["months_left"] == 14
+    # History (10 of 24 / 3 of 6) must not invent extra plans
+    assert len(plans) == 3
+
+
+def test_merge_keeps_combined_plan_when_dedupe_drops_a_twin():
+    from honestspend.services.promo_statement_parse import merge_installment_terms
+
+    from_file = extract_promo_terms(APPLE_INSTALLMENTS)
+    from_txns = extract_promo_terms(
+        '07/31/2026 "MONTHLY INSTALLMENTS (4 OF 6)" 24.83\n'
+        '07/31/2026 "MONTHLY INSTALLMENTS (11 OF 24)" 41.62\n'
+        '07/31/2026 "MONTHLY INSTALLMENTS (11 OF 24)" 58.29\n'
+    )
+    merged = merge_installment_terms(
+        [r for r in from_file if r.get("source_kind") == "monthly_installment"],
+        [r for r in from_txns if r.get("source_kind") == "monthly_installment"],
+    )
+    by_monthly = {r["monthly_payment"] for r in merged}
+    assert Decimal("49.66") in by_monthly
+    assert Decimal("24.83") not in by_monthly
+    assert Decimal("41.62") in by_monthly
+    assert Decimal("58.29") in by_monthly
+
+
+def test_plan_it_payments_of_is_purchase_plan():
+    rows = extract_promo_terms(
+        "Plan It\n4 payments of $37.50\nPayment 2 of 4\n"
+    )
+    plans = [r for r in rows if r["kind"] == "purchase_plan"]
+    assert any(
+        r["monthly_payment"] == Decimal("37.50") and r.get("months_left") == 3 for r in plans
+    )
+
+
 def test_capone_new_balance_and_month_name_due():
     text = (
         "Payment Due Date: Aug 17, 2026 Account ending in 4411 "

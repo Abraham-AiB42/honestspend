@@ -421,6 +421,7 @@ class BudgetRule(Base):
     week_starts_on: Mapped[int] = mapped_column(Integer, default=0)  # 0=Mon … 6=Sun
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     source: Mapped[str] = mapped_column(String(32), default="manual")  # manual|suggested|accepted_suggestion
+    extra_category_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON list of extra category ids
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(tz=None)

@@ -66,6 +66,7 @@
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <ComboBox x:Name="ProfileBox" Header="Entity" MinWidth="200" Grid.Row="0" Grid.Column="0" />
@@ -85,6 +86,8 @@
 
                 <NumberBox x:Name="LimitBox" Header="Credit limit" Grid.Row="3" Grid.Column="0" />
                 <NumberBox x:Name="DueBox" Header="Payment due day (1–31)" Maximum="31" Minimum="1" Grid.Row="3" Grid.Column="1" />
+                <ComboBox x:Name="CreateFundingBox" Header="Pay from (cash)" Grid.Row="5" Grid.Column="0"
+                          HorizontalAlignment="Stretch" />
 
                 <NumberBox x:Name="PromoAprBox" Header="Promo APR (0 for 0%)" Grid.Row="4" Grid.Column="0" />
                 <CalendarDatePicker x:Name="PromoEndBox" Header="Promo end" Grid.Row="4" Grid.Column="1" />

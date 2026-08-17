@@ -81,11 +81,12 @@ _PERSONAL_CATEGORY = re.compile(
     re.I,
 )
 _CREDIT_FILE_HINT = re.compile(
-    r"\b("
+    r"(?:^|[^A-Za-z0-9])("
     r"card|creditcard|visa|amex|american\s*express|mastercard|\bmc\b|"
     r"discover|credit|ccard|sapphire|freedom|reserve|"
-    r"surpass|hilton\s*honors|activity_\d{8}|_activity_"
-    r")\b",
+    r"surpass|hilton\s*honors|"
+    r"activity[_-]?\d{6,8}|[_-]activity[_-]"
+    r")(?:[^A-Za-z]|$)",
     re.I,
 )
 _CREDIT_CONTENT_HINT = re.compile(
@@ -290,9 +291,24 @@ def guess_account_kind(
         return "savings"
     header_blob = " ".join(headers or []).lower()
     if header_blob:
-        if re.search(r"\bcard\b", header_blob) and "transaction date" in header_blob:
+        # Card number column is a strong credit signal.
+        if re.search(r"\bcard\s*(no\.?|number|#)\b", header_blob):
             return "credit"
-        if "post date" in header_blob and "type" in header_blob:
+        # Chase/Amex activity: Type = Sale / Payment. Do NOT treat bank
+        # "Posting Date" + "Transaction Type" (Debit/Credit) as a card.
+        sample = (raw_text or "")[:4000]
+        sale_type = bool(re.search(r"(?:,|\t)Sale(?:,|\t|$)|Type,Sale|\bSale\b\s*,\s*-?\d", sample, re.I))
+        bank_type_col = bool(re.search(r"transaction\s+type", header_blob))
+        if re.search(r"\btype\b", header_blob) and (
+            sale_type
+            or (
+                re.search(r"\b(sale|payment)\b", sample, re.I)
+                and not re.search(r"\b(debit|withdrawal|deposit)\b", header_blob)
+                and not bank_type_col
+            )
+        ):
+            return "credit"
+        if re.search(r"\bcard\b", header_blob) and "transaction date" in header_blob:
             return "credit"
     if re.search(r"student\s*loan|loan\s+agreement|principal\s+balance", blob, re.I) and re.search(
         r"\bloan\b", blob, re.I
@@ -543,6 +559,26 @@ def last4_from_id(acctid: str | None) -> str | None:
     return None
 
 
+def _last4_norm(value: Any) -> str:
+    digits = re.sub(r"\D+", "", str(value or ""))
+    return digits[-4:] if len(digits) >= 4 else ""
+
+
+def _same_last4(a: Any, b: Any) -> bool:
+    ta, tb = _last4_norm(a), _last4_norm(b)
+    return bool(ta and ta == tb)
+
+
+def _blob_has_tail(blob: str, last4: str) -> bool:
+    """True when nickname / institution / external id carries this last-4."""
+    tail = _last4_norm(last4)
+    if not tail or not blob:
+        return False
+    if tail in blob:
+        return True
+    return any(_last4_norm(x) == tail for x in re.findall(r"\d{4,}", blob))
+
+
 def match_tails_from_acctid(acctid: str | None) -> list[str]:
     """Last-4 candidates from OFX ids like 010108888-0002 → 0002 and 8888."""
     if not acctid:
@@ -641,7 +677,7 @@ def _fmt_money(amount: Any) -> str | None:
     except Exception:
         return None
     if d < 0:
-        return f"-${abs(d):,.2f}"
+        return f"(${abs(d):,.2f})"
     return f"${d:,.2f}"
 
 
@@ -854,6 +890,13 @@ def enrich_review_fields(
     return acc
 
 
+_PAYMENT_NICK = re.compile(
+    r"^(payment\s+to|payment\s+from|ach\s+payment|automatic\s+payment|"
+    r"online\s+ach|pmt\s+to|pymt\s+to)\b",
+    re.I,
+)
+
+
 def _score_account(
     a: Account,
     *,
@@ -864,40 +907,54 @@ def _score_account(
     loan_detail: str | None,
     nickname_hint: str,
 ) -> int:
-    """Higher is better. Kind-aware so a loan file does not glue to a card last-4."""
+    """Higher is better. Kind alone is not enough — need last-4, bank+name, or exact nick."""
     nick = (a.nickname or "").lower()
     inst = (a.institution or "").lower()
     blob = f"{nick} {inst} {a.external_id or ''}".lower()
     ak = (a.kind or "").lower()
     score = 0
+    identity = 0
     if kind and ak == kind:
-        score += 22
-    elif kind == "loan" and ak == "credit":
-        score -= 18
-    elif kind == "credit" and ak == "loan":
-        score -= 18
-    if last4 and last4 in blob:
-        score += 36 if (not kind or ak == kind) else 6
+        score += 8
+    elif kind and ak and ak != kind:
+        score -= 12
+    if last4 and _blob_has_tail(blob, last4):
+        # Last-4 is identity even when kind was guessed wrong (CSV vs statement).
+        score += 36
+        identity += 1
+        if kind and ak and ak != kind:
+            score -= 10
     if loan_detail and loan_detail.lower() in blob:
         score += 32
+        identity += 1
     if loan_label:
         tokens = [t for t in re.split(r"\W+", loan_label.lower()) if t and t not in ("loan", "a", "the")]
         if tokens and all(t in blob for t in tokens):
             score += 24
+            identity += 1
         elif any(t in blob for t in tokens):
             score += 12
     if bank_label:
         bl = bank_label.lower()
         if bl in blob:
             score += 8 if bl in _GENERIC_LABELS else 16
+            if bl not in _GENERIC_LABELS and (not kind or ak == kind):
+                identity += 1
     hint = (nickname_hint or "").lower()
     if hint and hint == nick:
         score += 26
+        identity += 1
     elif hint:
         words = [w for w in re.split(r"\W+", hint) if len(w) > 3]
         hits = sum(1 for w in words if w in blob)
         if words and hits:
             score += 6 + 4 * hits
+            if hits >= 2:
+                identity += 1
+    if _PAYMENT_NICK.search(a.nickname or "") and identity == 0:
+        score -= 40
+    if identity == 0:
+        return min(score, 19)
     return score
 
 
@@ -1070,7 +1127,7 @@ def _analyze_csv_bytes(content: bytes, filename: str) -> list[dict[str, Any]]:
     for m in re.finditer(r"(?i)(?:office\s*&\s*shipping|professional\s*services|restaurants?|gasoline|shopping|entertainment)", raw_snip):
         categories.append(m.group(0))
     header = _account_header_text(raw_snip)
-    kind = guess_account_kind(filename=filename, raw_text=header, headers=headers)
+    kind = guess_account_kind(filename=filename, raw_text=raw_snip[:4000], headers=headers)
     bank = guess_bank_label(filename, header)
     if not bank:
         for p in payees[:4]:
@@ -1440,13 +1497,25 @@ def _is_statement_acc(acc: dict[str, Any], filename: str = "") -> bool:
     """PDF / thin statement files vs activity exports (even if the bank named them 'statement')."""
     fmt = (acc.get("file_format") or "").lower()
     n = int(acc.get("transactions_found") or 0)
-    if fmt in _ACTIVITY_FMTS and n >= 8:
+    # CSV / QIF / OFX / XLSX are always the live list — never a statement to attach.
+    if fmt in _ACTIVITY_FMTS:
         return False
     if fmt == "pdf" and n >= 4 and _looks_like_activity_pdf(filename or "", acc):
         return False
     if fmt == "pdf" or acc.get("is_statement"):
         return True
     return bool(re.search(r"statement", filename or "", re.I))
+
+
+def _kinds_block_last4(stmt: dict[str, Any], primary: dict[str, Any]) -> bool:
+    """Only block last-4 attach when both sides named opposite families."""
+    ka = (stmt.get("kind") or "").lower()
+    kb = (primary.get("kind") or "").lower()
+    if not ka or not kb:
+        return False
+    cash = {"checking", "savings", "cash"}
+    dest = {"credit", "loan"}
+    return (ka in dest and kb in cash) or (kb in dest and ka in cash)
 
 
 def _looks_like_activity_pdf(filename: str, acc: dict[str, Any]) -> bool:
@@ -1837,37 +1906,48 @@ def cluster_batch_sources(sources: list[dict[str, Any]]) -> None:
     for si in statements:
         if find(si) != si:
             continue
-        sl4 = refs[si]["acc"].get("last4")
+        sl4 = _last4_norm(refs[si]["acc"].get("last4"))
         if not sl4:
             continue
-        sl4 = str(sl4)
         own: list[int] = []
         via_tail: list[int] = []
         for i in primaries:
             acc = refs[i]["acc"]
             root = find(i)
-            if str(acc.get("last4") or "") == sl4:
+            if _same_last4(acc.get("last4"), sl4):
                 if root not in own:
                     own.append(root)
-            elif sl4 in {str(t) for t in (acc.get("match_tails") or []) if t}:
+            elif sl4 in {_last4_norm(t) for t in (acc.get("match_tails") or []) if t}:
                 if root not in via_tail:
                     via_tail.append(root)
         if len(own) == 1:
+            # Unique last-4 wins even when kind was guessed wrong (card
+            # activity CSV often looks like checking). Only refuse when both
+            # sides named incompatible banks (Amex …1009 vs Scheels …1009).
             oi = own[0]
-            if _kinds_compatible(refs[si]["acc"], refs[oi]["acc"]):
+            if _banks_ok_for_attach(refs[si]["acc"], refs[oi]["acc"]):
                 union(si, oi)
         elif len(own) > 1:
-            kind_hits = [
+            exact = [
                 i
                 for i in own
                 if _kinds_compatible(refs[si]["acc"], refs[i]["acc"])
-                and _banks_compatible(refs[si]["acc"], refs[i]["acc"])
+                and _banks_ok_for_attach(refs[si]["acc"], refs[i]["acc"])
             ]
-            if len(kind_hits) == 1:
-                union(si, kind_hits[0])
+            if len(exact) == 1:
+                union(si, exact[0])
+            else:
+                kind_hits = [
+                    i
+                    for i in own
+                    if not _kinds_block_last4(refs[si]["acc"], refs[i]["acc"])
+                    and _banks_ok_for_attach(refs[si]["acc"], refs[i]["acc"])
+                ]
+                if len(kind_hits) == 1:
+                    union(si, kind_hits[0])
         elif len(via_tail) == 1:
             ti = via_tail[0]
-            if _kinds_ok_for_attach(refs[si]["acc"], refs[ti]["acc"]) and _banks_ok_for_attach(
+            if not _kinds_block_last4(refs[si]["acc"], refs[ti]["acc"]) and _banks_ok_for_attach(
                 refs[si]["acc"], refs[ti]["acc"]
             ):
                 union(si, ti)
@@ -2008,6 +2088,8 @@ def assign_plan_entities(session: Session, sources: list[dict[str, Any]]) -> lis
             if acc.get("profile_id") is None:
                 acc["profile_id"] = buckets[key].get("profile_id")
 
+    _inherit_attach_entity_from_target(sources)
+
     # Stable order: Personal, named businesses, generic Business last
     ordered: list[dict[str, Any]] = []
     if "personal" in buckets:
@@ -2019,6 +2101,27 @@ def assign_plan_entities(session: Session, sources: list[dict[str, Any]]) -> lis
     if generic:
         ordered.append(generic)
     return ordered
+
+
+def _inherit_attach_entity_from_target(sources: list[dict[str, Any]]) -> None:
+    """Attached files adopt the book/type of the account they fold into."""
+    index: dict[tuple[Any, Any], dict[str, Any]] = {}
+    for src in sources:
+        fi = src.get("file_index")
+        for acc in src.get("accounts") or []:
+            index[(fi, acc.get("source_key"))] = acc
+    for acc in index.values():
+        if (acc.get("action") or "") != "attach":
+            continue
+        tgt = index.get((acc.get("attach_to_file_index"), acc.get("attach_to_source_key")))
+        if not tgt:
+            continue
+        for key in ("entity_key", "suggested_entity_type", "kind"):
+            if tgt.get(key) not in (None, "", "—"):
+                acc[key] = tgt[key]
+        acc.pop("profile_id", None)
+        if tgt.get("profile_id") not in (None, "", "—"):
+            acc["profile_id"] = tgt["profile_id"]
 
 
 def build_smart_plan(
@@ -2181,6 +2284,26 @@ def _ensure_entities(session: Session, entities: list[dict[str, Any]]) -> dict[s
     return key_to_id
 
 
+def _profile_id_for_decision(
+    dec: dict[str, Any],
+    key_to_profile: dict[str, int],
+) -> int:
+    """Book the user picked wins over a leftover analyze profile_id."""
+    ekey = dec.get("entity_key") or "personal"
+    if ekey == "individual":
+        ekey = "personal"
+    if ekey in key_to_profile:
+        return int(key_to_profile[ekey])
+    if str(ekey).startswith("business"):
+        for k, pid in key_to_profile.items():
+            if str(k).startswith("business"):
+                return int(pid)
+    raw = dec.get("profile_id")
+    if raw not in (None, "", "—"):
+        return int(raw)
+    return int(next(iter(key_to_profile.values())))
+
+
 def commit_smart_plan(
     session: Session,
     *,
@@ -2245,7 +2368,7 @@ def commit_smart_plan(
                 action = (dec.get("action") or "create").lower()
                 if action == "skip":
                     continue
-                profile_id = int(dec.get("profile_id") or key_to_profile.get(ekey) or next(iter(key_to_profile.values())))
+                profile_id = _profile_id_for_decision(dec, key_to_profile)
                 acct_id = dec.get("account_id")
                 if action == "match" and acct_id:
                     account_map[stmt.get("acctid") or sk] = int(acct_id)
@@ -2315,11 +2438,7 @@ def commit_smart_plan(
                 action = (dec.get("action") or "create").lower()
                 if action == "skip":
                     continue
-                profile_id = int(
-                    dec.get("profile_id")
-                    or key_to_profile.get(ekey)
-                    or next(iter(key_to_profile.values()))
-                )
+                profile_id = _profile_id_for_decision(dec, key_to_profile)
                 acct_id = dec.get("account_id")
                 name = stmt.get("name") or sk
                 if action == "match" and acct_id:
@@ -2401,11 +2520,7 @@ def commit_smart_plan(
                     }
                 )
                 continue
-            profile_id = int(
-                dec.get("profile_id")
-                or key_to_profile.get(ekey)
-                or next(iter(key_to_profile.values()))
-            )
+            profile_id = _profile_id_for_decision(dec, key_to_profile)
             acct_id = dec.get("account_id")
             if action == "attach":
                 afi = int(dec.get("attach_to_file_index") or -1)

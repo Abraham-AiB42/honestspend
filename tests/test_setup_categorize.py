@@ -10,12 +10,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from honestspend.config import settings
-from honestspend.db import Account, Category, Profile, Transaction, init_db
+from honestspend.db import Account, Category, Profile, PromoInstallmentLine, Transaction, init_db
 from honestspend.seed import seed_all
 from honestspend.services.setup_categorize import (
     auto_apply_high_confidence,
     categorize_status,
     confirm_payee_category,
+    create_custom_category,
     prepare_categorize,
 )
 from honestspend.services.setup_recurring_finalize import (
@@ -162,6 +163,75 @@ def test_categorize_status_links_account_payments(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_directpay_on_card_from_is_cash_to_is_card(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=p.id,
+        kind="checking",
+        nickname="Checking",
+        is_cash_for_ifpp=True,
+        current_balance=Decimal("2000"),
+    )
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Discover",
+        current_balance=Decimal("400"),
+        payment_funding_account_id=None,
+    )
+    s.add_all([cash, card])
+    s.flush()
+    card.payment_funding_account_id = cash.id
+    s.add(
+        Transaction(
+            profile_id=p.id,
+            account_id=card.id,
+            txn_date=date.today(),
+            amount=Decimal("-467.68"),
+            payee="DIRECTPAY FULL BALANCE",
+        )
+    )
+    s.commit()
+    st = categorize_status(s, profile_id=p.id)
+    hit = next((g for g in st["confirm_queue"] if "DIRECTPAY" in (g.get("payee") or "")), None)
+    assert hit is not None
+    assert hit.get("to_account") == "Discover"
+    assert "Checking" in (hit.get("from_accounts") or [])
+    s.close()
+
+
+def test_prepare_moves_txn_onto_account_book(tmp_path: Path, monkeypatch):
+    from honestspend.services.profiles import create_profile
+
+    s = _session(tmp_path, monkeypatch)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    biz = create_profile(s, display_name="North Studio LLC", entity_type="business")
+    card = Account(
+        profile_id=biz.id,
+        kind="credit",
+        nickname="Ink Business",
+        current_balance=Decimal("0"),
+    )
+    s.add(card)
+    s.flush()
+    txn = Transaction(
+        profile_id=personal.id,
+        account_id=card.id,
+        txn_date=date.today(),
+        amount=Decimal("-12.50"),
+        payee="OFFICE SUPPLY CO",
+    )
+    s.add(txn)
+    s.commit()
+    prepare_categorize(s, profile_id=biz.id)
+    s.refresh(txn)
+    assert txn.profile_id == biz.id
+    st = categorize_status(s, profile_id=biz.id)
+    assert st["profile_id"] == biz.id
+    s.close()
+
+
 def test_business_chip_remap_restores_on_undo(tmp_path: Path, monkeypatch):
     from honestspend.services.profiles import create_profile
 
@@ -271,6 +341,55 @@ def test_promo_apr_lines_are_voided_not_queued(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_monthly_installments_become_purchase_plan_not_queued(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Apple Card",
+        current_balance=Decimal("400"),
+    )
+    s.add(card)
+    s.flush()
+    inst = Transaction(
+        profile_id=p.id,
+        account_id=card.id,
+        txn_date=date.today(),
+        amount=Decimal("-41.62"),
+        payee="MONTHLY INSTALLMENTS (11 OF 24)",
+    )
+    coffee = Transaction(
+        profile_id=p.id,
+        account_id=card.id,
+        txn_date=date.today(),
+        amount=Decimal("-4.50"),
+        payee="COFFEE SHOP DOWNTOWN",
+    )
+    s.add_all([inst, coffee])
+    s.commit()
+    prepare_categorize(s, profile_id=p.id)
+    s.commit()
+    s.refresh(inst)
+    s.refresh(coffee)
+    st = categorize_status(s, profile_id=p.id)
+    assert inst.status == "void"
+    assert coffee.status != "void"
+    assert not any("MONTHLY INSTALLMENTS" in (g.get("payee") or "") for g in st["confirm_queue"])
+    lines = (
+        s.query(PromoInstallmentLine)
+        .filter(PromoInstallmentLine.account_id == card.id)
+        .all()
+    )
+    assert any(
+        ln.kind == "purchase_plan"
+        and ln.monthly_payment == Decimal("41.62")
+        and ln.principal_remaining == Decimal("41.62") * 14
+        for ln in lines
+    )
+    s.close()
+
+
 def test_checks_stay_separate(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()
@@ -328,16 +447,87 @@ def test_checks_stay_separate(tmp_path: Path, monkeypatch):
     s.close()
 
 
+def test_books_listed_and_scoped_to_accounts(tmp_path: Path, monkeypatch):
+    from honestspend.services.profiles import create_profile
+
+    s = _session(tmp_path, monkeypatch)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    cash = Account(
+        profile_id=personal.id,
+        kind="checking",
+        nickname="Personal checking",
+        is_cash_for_ifpp=True,
+        current_balance=Decimal("500"),
+    )
+    biz = create_profile(s, display_name="AP Agency", entity_type="business")
+    card = Account(
+        profile_id=biz.id,
+        kind="credit",
+        nickname="Agency card",
+        current_balance=Decimal("100"),
+    )
+    s.add_all([cash, card])
+    s.flush()
+    s.add(
+        Transaction(
+            profile_id=personal.id,
+            account_id=cash.id,
+            txn_date=date.today(),
+            amount=Decimal("-12.00"),
+            payee="SAFEWAY",
+        )
+    )
+    s.add(
+        Transaction(
+            profile_id=biz.id,
+            account_id=card.id,
+            txn_date=date.today(),
+            amount=Decimal("-88.00"),
+            payee="ADOBE CREATIVE",
+        )
+    )
+    s.commit()
+
+    st_p = categorize_status(s, profile_id=personal.id)
+    names = {b["display_name"] for b in st_p["books"]}
+    assert "Personal" in names or any("personal" in n.lower() for n in names)
+    assert "AP Agency" in names
+    payees_p = {g["payee"] for g in st_p["confirm_queue"]}
+    assert any("SAFEWAY" in p for p in payees_p)
+    assert not any("ADOBE" in p for p in payees_p)
+    chips_p = {c["name"] for c in st_p["category_chips"]}
+    assert "Groceries" in chips_p
+    assert "Marketing" not in chips_p
+
+    st_b = categorize_status(s, profile_id=biz.id)
+    payees_b = {g["payee"] for g in st_b["confirm_queue"]}
+    assert any("ADOBE" in p for p in payees_b)
+    assert not any("SAFEWAY" in p for p in payees_b)
+    chips_b = {c["name"] for c in st_b["category_chips"]}
+    more_b = {c["name"] for c in st_b["more_chips"]}
+    assert "Groceries" not in chips_b
+    assert "Marketing" in chips_b or "Marketing" in more_b
+    s.close()
+
+
 def test_business_chips_include_everyday_labels(tmp_path: Path, monkeypatch):
     from honestspend.services.profiles import create_profile
 
     s = _session(tmp_path, monkeypatch)
-    create_profile(s, display_name="AP Agency", entity_type="business")
+    biz = create_profile(s, display_name="AP Agency", entity_type="business")
+    s.add(
+        Account(
+            profile_id=biz.id,
+            kind="credit",
+            nickname="Agency card",
+            current_balance=Decimal("10"),
+        )
+    )
     s.commit()
-    st = categorize_status(s)
+    st = categorize_status(s, profile_id=biz.id)
     chip_names = {c["name"] for c in st["category_chips"]}
     more_names = {c["name"] for c in st["more_chips"]}
-    assert "Groceries" in chip_names
+    assert "Groceries" not in chip_names
     for need in (
         "Marketing",
         "Services",
@@ -364,8 +554,7 @@ def test_business_chips_include_everyday_labels(tmp_path: Path, monkeypatch):
         "Salaries and wages",
         "Officer compensation",
     ):
-        assert need in more_names, need
-        assert need not in chip_names, need
+        assert need in chip_names or need in more_names, need
     s.close()
 
 
@@ -376,6 +565,42 @@ def test_category_lists_are_alphabetical(tmp_path: Path, monkeypatch):
     more = [c["name"] for c in st["more_chips"]]
     assert chips == sorted(chips, key=str.casefold)
     assert more == sorted(more, key=str.casefold)
+    s.close()
+
+
+def test_create_custom_category_personal_and_reuse(tmp_path: Path, monkeypatch):
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    first = create_custom_category(s, name="Kids activities", profile_id=p.id)
+    s.commit()
+    assert first["existed"] is False
+    assert first["scope"] == "personal"
+    assert first["id"] > 0
+    again = create_custom_category(s, name="kids activities", profile_id=p.id)
+    assert again["existed"] is True
+    assert again["id"] == first["id"]
+    try:
+        create_custom_category(s, name="x", profile_id=p.id)
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+    s.close()
+
+
+def test_create_custom_category_business_scope(tmp_path: Path, monkeypatch):
+    from honestspend.services.profiles import create_profile
+
+    s = _session(tmp_path, monkeypatch)
+    biz = create_profile(s, display_name="Studio LLC", entity_type="business")
+    s.commit()
+    out = create_custom_category(s, name="Prop rental", profile_id=biz.id)
+    s.commit()
+    assert out["existed"] is False
+    assert out["scope"] == "business"
+    cat = s.get(Category, out["id"])
+    assert cat is not None
+    assert cat.profile_id == biz.id
     s.close()
 
 

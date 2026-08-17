@@ -34,10 +34,8 @@ public sealed partial class ImportPage : Page
     private int _addedBizSeq;
 
     private sealed record StmtLinkChoice(string Mode, int FileIndex = -1, string? SourceKey = null);
-    private sealed record BooksMatchChoice(int AccountId, string Nickname);
     private readonly HashSet<int> _createdThisSession = new();
     private string? _lastMergeId;
-    private string? _lastMergeLabel;
     private (int Fi, string Sk)? _parkedMerge;
     private readonly Dictionary<(int Fi, string Sk), Button> _mergeButtons = new();
     private readonly Dictionary<(int Fi, string Sk), (StackPanel Details, Button SkipBtn, Button MergeBtn)> _skipChrome = new();
@@ -108,6 +106,7 @@ public sealed partial class ImportPage : Page
             await LoadBankGuidesAsync(api);
             await RefreshInboxAsync(api);
             await RefreshPlaidAsync(api);
+            SetReviewChrome(mapped: SmartPlanPanel?.Visibility == Visibility.Visible);
         }
         catch (Exception ex)
         {
@@ -504,6 +503,22 @@ public sealed partial class ImportPage : Page
     private async void SmartImportPlan_Click(object sender, RoutedEventArgs e)
         => await RunSmartPlanAsync();
 
+    private async void AddMoreFiles_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var files = await PickFilesAsync(AllImportExt);
+            if (files.Count == 0) return;
+            QueueFiles(files);
+            await RunSmartPlanAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorBar.Message = ex.Message;
+            ErrorBar.IsOpen = true;
+        }
+    }
+
     private void SetImportBusy(bool busy, string? title = null, string? detail = null)
     {
         if (AnalyzeBusyPanel is not null)
@@ -659,6 +674,7 @@ public sealed partial class ImportPage : Page
                 SmartPlanPanel.Visibility = Visibility.Visible;
                 if (PreMapActions is not null)
                     PreMapActions.Visibility = Visibility.Collapsed;
+                SetReviewChrome(mapped: true);
                 PreviewText.Text = "";
             }
             finally
@@ -756,8 +772,6 @@ public sealed partial class ImportPage : Page
             if (string.IsNullOrEmpty(name))
                 continue;
             row.TitleBlock.Text = $"{row.CardNum}. {name}";
-            if (row.ActionBox.SelectedItem is ComboBoxItem { Tag: BooksMatchChoice bm })
-                _booksNames[bm.AccountId] = name;
         }
 
         foreach (var row in _smartAccountRows)
@@ -778,13 +792,6 @@ public sealed partial class ImportPage : Page
                         tb.Text = line;
                     else
                         item.Content = line;
-                }
-                else if (item.Tag is BooksMatchChoice bm
-                         && _booksNames.TryGetValue(bm.AccountId, out var bname)
-                         && !string.IsNullOrWhiteSpace(bname))
-                {
-                    item.Content = $"Use books: {bname}";
-                    item.Tag = bm with { Nickname = bname };
                 }
             }
         }
@@ -869,19 +876,6 @@ public sealed partial class ImportPage : Page
         if (src.ActionBox is null || tgt.ActionBox is null)
             return;
 
-        if (tgt.ActionBox.SelectedItem is ComboBoxItem { Tag: BooksMatchChoice books })
-        {
-            foreach (var item in src.ActionBox.Items.OfType<ComboBoxItem>())
-            {
-                if (item.Tag is BooksMatchChoice bm && bm.AccountId == books.AccountId)
-                {
-                    src.ActionBox.SelectedItem = item;
-                    CollapseCardOnto(srcFi, srcSk, tgtFi, tgtSk);
-                    return;
-                }
-            }
-        }
-
         foreach (var item in src.ActionBox.Items.OfType<ComboBoxItem>())
         {
             if (item.Tag is StmtLinkChoice ch
@@ -891,6 +885,7 @@ public sealed partial class ImportPage : Page
             {
                 src.ActionBox.SelectedItem = item;
                 SelectAttachOnSource(srcFi, srcSk, tgtFi, tgtSk);
+                AdoptMergedIntoSettings(srcFi, srcSk, tgtFi, tgtSk);
                 CollapseCardOnto(srcFi, srcSk, tgtFi, tgtSk);
                 return;
             }
@@ -941,6 +936,23 @@ public sealed partial class ImportPage : Page
         if (fi >= 0 && fi < _pendingFiles.Count)
             return _pendingFiles[fi].Name;
         return $"file {fi + 1}";
+    }
+
+    /// <summary>Folded-in card takes book / type / name from the card it merged into.</summary>
+    private void AdoptMergedIntoSettings(int srcFi, string srcSk, int tgtFi, string tgtSk)
+    {
+        var src = _smartAccountRows.FirstOrDefault(r => r.FileIndex == srcFi && r.SourceKey == srcSk);
+        var tgt = _smartAccountRows.FirstOrDefault(r => r.FileIndex == tgtFi && r.SourceKey == tgtSk);
+        if (src.EntityBox is null || tgt.EntityBox is null)
+            return;
+        if (tgt.EntityBox.SelectedItem is ComboBoxItem { Tag: string ek })
+            SelectComboTag(src.EntityBox, ek);
+        if (src.KindBox is not null && tgt.KindBox?.SelectedItem is ComboBoxItem { Tag: string kind })
+            SelectComboTag(src.KindBox, kind);
+        if (src.NickBox is not null && tgt.NickBox is not null
+            && string.IsNullOrWhiteSpace(src.NickBox.Text)
+            && !string.IsNullOrWhiteSpace(tgt.NickBox.Text))
+            src.NickBox.Text = tgt.NickBox.Text;
     }
 
     private void CollapseCardOnto(int srcFi, string srcSk, int tgtFi, string tgtSk)
@@ -1384,8 +1396,10 @@ public sealed partial class ImportPage : Page
                     continue;
                 foreach (var a in accs.EnumerateArray())
                 {
-                    cardNum++;
-                    if (JsonUi.Str(a, "action") == "attach")
+                    var isAttach = JsonUi.Str(a, "action") == "attach";
+                    if (!isAttach)
+                        cardNum++;
+                    if (isAttach)
                     {
                         var tgtFi = JsonUi.Int(a, "attach_to_file_index", -1);
                         var tgtSk = JsonUi.Str(a, "attach_to_source_key");
@@ -1419,7 +1433,7 @@ public sealed partial class ImportPage : Page
                         if (!string.IsNullOrEmpty(last4)) reviewBits.Add($"Ending …{last4}");
                         reviewBits.Add($"Type: {kind} · {JsonUi.Str(a, "transactions_found")} transactions");
                         if (!string.IsNullOrEmpty(JsonUi.Str(a, "ledger_balance")))
-                            reviewBits.Add($"Balance: ${JsonUi.Str(a, "ledger_balance")}");
+                            reviewBits.Add("Balance: " + MoneyUi.FormatLoose(JsonUi.Str(a, "ledger_balance")));
                         if (!string.IsNullOrEmpty(JsonUi.Str(a, "date_from")))
                             reviewBits.Add($"Dates: {JsonUi.Str(a, "date_from")} → {JsonUi.Str(a, "date_to")}");
                     }
@@ -1449,7 +1463,7 @@ public sealed partial class ImportPage : Page
 
                     var entityBox = new ComboBox
                     {
-                        Header = "Personal or business?",
+                        Header = "Which book?",
                         MinWidth = 220,
                         Width = 240,
                         HorizontalAlignment = HorizontalAlignment.Left,
@@ -1474,41 +1488,28 @@ public sealed partial class ImportPage : Page
                         });
                     }
                     var canMatch = a.TryGetProperty("account_id", out var aid) && aid.ValueKind == JsonValueKind.Number;
-                    var matchedId = canMatch ? JsonUi.Int(a, "account_id", 0) : 0;
-                    var listedBooks = new HashSet<int>();
-                    if (plan.TryGetProperty("existing_accounts", out var books) && books.ValueKind == JsonValueKind.Array)
+                    var matchLabel = !string.IsNullOrEmpty(JsonUi.Str(a, "matched_nickname"))
+                        ? "Match existing account: " + JsonUi.Str(a, "matched_nickname")
+                        : "Match an account already in this book";
+                    actionBox.Items.Add(new ComboBoxItem
                     {
-                        foreach (var b in books.EnumerateArray())
-                        {
-                            var bid = JsonUi.Int(b, "id", 0);
-                            if (bid <= 0) continue;
-                            var bnick = _booksNames.TryGetValue(bid, out var liveNick) && !string.IsNullOrWhiteSpace(liveNick)
-                                ? liveNick
-                                : JsonUi.Str(b, "nickname", $"Account {bid}");
-                            var bkind = JsonUi.Str(b, "kind", "");
-                            actionBox.Items.Add(new ComboBoxItem
-                            {
-                                Content = $"Use books: {bnick}" + (string.IsNullOrEmpty(bkind) ? "" : $" ({bkind})"),
-                                Tag = new BooksMatchChoice(bid, bnick),
-                            });
-                            listedBooks.Add(bid);
-                        }
-                    }
-                    foreach (var kv in _booksNames)
-                    {
-                        if (listedBooks.Contains(kv.Key) || kv.Key <= 0)
-                            continue;
-                        actionBox.Items.Add(new ComboBoxItem
-                        {
-                            Content = $"Use books: {kv.Value}",
-                            Tag = new BooksMatchChoice(kv.Key, kv.Value),
-                        });
-                    }
+                        Content = matchLabel,
+                        Tag = "match",
+                        IsEnabled = canMatch,
+                    });
                     actionBox.Items.Add(new ComboBoxItem
                     {
                         Content = "Skip — don't import this one",
                         Tag = "skip",
                     });
+                    // Empty books: default Create. If last-4 (or nick) already hit a
+                    // books account, keep Match even during Get started.
+                    var firstCreate = AppState.ShowSetupNav && !canMatch;
+                    if (firstCreate && action is "match" or "" or null)
+                    {
+                        action = "create";
+                        willDo = $"We will create “{nick}” — pick a match only if this account already exists.";
+                    }
                     if (action == "skip")
                         SelectComboTag(actionBox, "skip");
                     else if (action == "attach")
@@ -1517,17 +1518,8 @@ public sealed partial class ImportPage : Page
                         var tgtSk0 = JsonUi.Str(a, "attach_to_source_key");
                         SelectAttachChoice(actionBox, tgtFi0, tgtSk0);
                     }
-                    else if (matchedId > 0)
-                    {
-                        foreach (var item in actionBox.Items.OfType<ComboBoxItem>())
-                        {
-                            if (item.Tag is BooksMatchChoice bm && bm.AccountId == matchedId)
-                            {
-                                actionBox.SelectedItem = item;
-                                break;
-                            }
-                        }
-                    }
+                    else if (action == "match" && canMatch)
+                        SelectComboTag(actionBox, "match");
                     else
                         SelectComboTag(actionBox, "create");
 
@@ -1546,7 +1538,7 @@ public sealed partial class ImportPage : Page
                     titleRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
                     var titleBlock = new TextBlock
                     {
-                        Text = $"{cardNum}. {title}",
+                        Text = isAttach ? title : $"{cardNum}. {title}",
                         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                         FontSize = 18,
                         TextWrapping = TextWrapping.Wrap,
@@ -1591,7 +1583,7 @@ public sealed partial class ImportPage : Page
                     if (LooksLikeStatement(a))
                     {
                         var stmtHint = kind == "loan"
-                            ? "This looks like a loan statement. Tap Merge, then Merge here on the loan card — or pick Use books / Same account as…"
+                            ? "This looks like a loan statement. Tap Merge, then Merge here on the loan card — or pick Same account as…"
                             : linkTargets.Count > 1
                                 ? "Tap Merge, then Merge here on the matching account — or use What to do → Same account as…"
                                 : "This looks like a statement. Tap Merge, then Merge here on the matching account — or skip it.";
@@ -1621,9 +1613,16 @@ public sealed partial class ImportPage : Page
                                 if (string.IsNullOrWhiteSpace(line) || line is "?" or "—")
                                 {
                                     var pay = JsonUi.Str(p, "payee");
-                                    var amt = JsonUi.Str(p, "amount");
+                                    var amt = MoneyUi.FormatLoose(JsonUi.Str(p, "amount"));
                                     var dt = JsonUi.Str(p, "date");
                                     line = string.Join("  ", new[] { dt, pay, amt }.Where(s =>
+                                        !string.IsNullOrWhiteSpace(s) && s is not "?" and not "—"));
+                                }
+                                else if (MoneyUi.TryParse(JsonUi.Str(p, "amount"), out var posted))
+                                {
+                                    var pay = JsonUi.Str(p, "payee");
+                                    var dt = JsonUi.Str(p, "date");
+                                    line = string.Join("  ", new[] { dt, pay, MoneyUi.Format(posted) }.Where(s =>
                                         !string.IsNullOrWhiteSpace(s) && s is not "?" and not "—"));
                                 }
                                 if (!string.IsNullOrWhiteSpace(line) && line is not "?" and not "—")
@@ -1698,7 +1697,6 @@ public sealed partial class ImportPage : Page
                             else if (_collapsedOnto.ContainsKey((fi, sk)))
                                 ExpandCollapsedCard(fi, sk, resetAction: false);
                         }
-                        await MaybeRemapLiveAsync(actionBox, matchedId, title);
                     };
                     if (a.TryGetProperty("attachments", out var atts) && atts.ValueKind == JsonValueKind.Array
                         && atts.GetArrayLength() > 0)
@@ -1789,38 +1787,6 @@ public sealed partial class ImportPage : Page
                         TakeId(a);
                 }
             }
-        }
-    }
-
-    private async Task MaybeRemapLiveAsync(ComboBox actionBox, int previousMatchId, string title)
-    {
-        if (actionBox.SelectedItem is not ComboBoxItem { Tag: BooksMatchChoice pick })
-            return;
-        if (previousMatchId <= 0 || previousMatchId == pick.AccountId)
-            return;
-        if (!_createdThisSession.Contains(previousMatchId))
-            return;
-        var sourceId = previousMatchId;
-        try
-        {
-            using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
-            var res = await api.RemapAccountAsync(sourceId, pick.AccountId);
-            _lastMergeId = JsonUi.Str(res, "merge_id");
-            var n = JsonUi.Str(res, "moved_count", "0");
-            _lastMergeLabel = $"{title} → {pick.Nickname}";
-            SuccessBar.Title = "Merged";
-            SuccessBar.Message = $"Moved {n} transaction(s) into {pick.Nickname}. Tap Undo merge if that was wrong.";
-            var undoBtn = new Button { Content = "Undo merge" };
-            undoBtn.Click += UndoRemap_Click;
-            SuccessBar.ActionButton = undoBtn;
-            SuccessBar.IsOpen = true;
-            _createdThisSession.Remove(sourceId);
-        }
-        catch (Exception ex)
-        {
-            ErrorBar.Message = ex.Message;
-            ErrorBar.IsOpen = true;
         }
     }
 
@@ -1959,6 +1925,17 @@ public sealed partial class ImportPage : Page
                                 : ek;
                             if (ek is "individual")
                                 dict["entity_key"] = "personal";
+                            // Stale analyze profile_id must not beat the book the user picked.
+                            dict.Remove("profile_id");
+                            foreach (var ent in entities)
+                            {
+                                if (!string.Equals(Convert.ToString(ent.GetValueOrDefault("key")),
+                                        Convert.ToString(dict["entity_key"]), StringComparison.OrdinalIgnoreCase))
+                                    continue;
+                                if (ent.GetValueOrDefault("profile_id") is { } epid)
+                                    dict["profile_id"] = epid;
+                                break;
+                            }
                         }
                         if (row.ActionBox.SelectedItem is ComboBoxItem ai)
                         {
@@ -1969,12 +1946,6 @@ public sealed partial class ImportPage : Page
                                 dict["action"] = "attach";
                                 dict["attach_to_file_index"] = choice.FileIndex;
                                 dict["attach_to_source_key"] = choice.SourceKey;
-                            }
-                            else if (ai.Tag is BooksMatchChoice books)
-                            {
-                                dict["action"] = "match";
-                                dict["account_id"] = books.AccountId;
-                                dict["matched_nickname"] = books.Nickname;
                             }
                             else if (ai.Tag is string act)
                                 dict["action"] = act;
@@ -2073,7 +2044,7 @@ public sealed partial class ImportPage : Page
     /// If the user marks a QIF/CSV and a statement as the same account from either card,
     /// the statement attaches to the transaction file (not the other way around).
     /// </summary>
-    private static void NormalizeSameAccountGroups(List<Dictionary<string, object?>> sources)
+    private void NormalizeSameAccountGroups(List<Dictionary<string, object?>> sources)
     {
         var refs = new List<(int Fi, string Sk, string Fname, Dictionary<string, object?> Acc)>();
         foreach (var src in sources)
@@ -2153,7 +2124,38 @@ public sealed partial class ImportPage : Page
         {
             if (members.Count < 2)
                 continue;
-            var lead = members.OrderBy(i => DictLeadScore(refs[i].Acc)).First();
+            // User's Merge here / Same account as is the surviving account.
+            // Do not flip that onto the activity file — that dropped the book.
+            var attachTargets = new List<int>();
+            foreach (var i in members)
+            {
+                var acc = refs[i].Acc;
+                var act = Convert.ToString(acc.GetValueOrDefault("action")) ?? "";
+                if (!act.Equals("attach", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var toFi = -1;
+                var rawFi = acc.GetValueOrDefault("attach_to_file_index");
+                if (rawFi is int ii2) toFi = ii2;
+                else if (rawFi is long ll2) toFi = (int)ll2;
+                else if (rawFi is JsonElement je2 && je2.TryGetInt32(out var ji2)) toFi = ji2;
+                else int.TryParse(Convert.ToString(rawFi), out toFi);
+                var toSk = Convert.ToString(acc.GetValueOrDefault("attach_to_source_key"));
+                var ti = IndexOf(toFi, toSk);
+                if (ti >= 0 && members.Contains(ti) && !attachTargets.Contains(ti))
+                    attachTargets.Add(ti);
+            }
+            int lead;
+            if (attachTargets.Count == 1)
+                lead = attachTargets[0];
+            else
+            {
+                var mergeHere = members.FirstOrDefault(i =>
+                    _collapsedOnto.Values.Any(v => v.TgtFi == refs[i].Fi && v.TgtSk == refs[i].Sk),
+                    -1);
+                lead = mergeHere >= 0
+                    ? mergeHere
+                    : members.OrderBy(i => DictLeadScore(refs[i].Acc)).First();
+            }
             var leadAcc = refs[lead].Acc;
             foreach (var i in members)
             {
@@ -2176,6 +2178,42 @@ public sealed partial class ImportPage : Page
                 if (l4 is not null && DictLast4(leadAcc) is null)
                     leadAcc["last4"] = l4;
             }
+            // Activity file often stays the data lead; book/type come from
+            // the card the user merged into (or the statement / business card).
+            var donor = members
+                .OrderBy(i =>
+                {
+                    var fi = refs[i].Fi;
+                    var sk = refs[i].Sk;
+                    if (_collapsedOnto.Values.Any(v => v.TgtFi == fi && v.TgtSk == sk))
+                        return 0;
+                    var ek = Convert.ToString(refs[i].Acc.GetValueOrDefault("entity_key")) ?? "";
+                    if (ek.StartsWith("business", StringComparison.OrdinalIgnoreCase))
+                        return 1;
+                    if (DictLooksLikeStatement(refs[i].Acc, refs[i].Fname))
+                        return 2;
+                    return 3;
+                })
+                .First();
+            CopyMergedIntoSettings(refs[donor].Acc, leadAcc);
+            foreach (var i in members)
+                CopyMergedIntoSettings(leadAcc, refs[i].Acc);
+        }
+    }
+
+    private static void CopyMergedIntoSettings(
+        Dictionary<string, object?> from,
+        Dictionary<string, object?> into)
+    {
+        if (ReferenceEquals(from, into))
+            return;
+        foreach (var key in new[] { "entity_key", "suggested_entity_type", "profile_id", "kind" })
+        {
+            if (!from.TryGetValue(key, out var val) || val is null)
+                continue;
+            if (val is string s && string.IsNullOrWhiteSpace(s))
+                continue;
+            into[key] = val;
         }
     }
 
@@ -2256,6 +2294,17 @@ public sealed partial class ImportPage : Page
         }
     }
 
+    private void SetReviewChrome(bool mapped)
+    {
+        var firstRun = AppState.ShowSetupNav;
+        if (PreMapActions is not null)
+            PreMapActions.Visibility = mapped ? Visibility.Collapsed : Visibility.Visible;
+        if (ImportThenMoreBtn is not null)
+            ImportThenMoreBtn.Visibility = firstRun ? Visibility.Collapsed : Visibility.Visible;
+        if (AdvancedImportOptions is not null)
+            AdvancedImportOptions.Visibility = (mapped || firstRun) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
     private void ReadyForMoreFiles()
     {
         CancelMergePark();
@@ -2263,8 +2312,7 @@ public sealed partial class ImportPage : Page
         PendingFilesList.ItemsSource = null;
         _smartPlanJson = null;
         SmartPlanPanel.Visibility = Visibility.Collapsed;
-        if (PreMapActions is not null)
-            PreMapActions.Visibility = Visibility.Visible;
+        SetReviewChrome(mapped: false);
         CsvPathText.Text = "Imported. Drop more statements or lists to attach.";
         DropZoneHint.Text = "Drop more files — we match them to the books you just imported";
     }

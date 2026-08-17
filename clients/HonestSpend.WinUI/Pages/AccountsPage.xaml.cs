@@ -23,8 +23,11 @@ public sealed partial class AccountsPage : Page
         UpdateRewardsVisibility();
     }
 
-    private void KindBox_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+    private void KindBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
         UpdateRewardsVisibility();
+        UpdateCreateFundingVisibility();
+    }
 
     private void UpdateRewardsVisibility()
     {
@@ -32,6 +35,60 @@ public sealed partial class AccountsPage : Page
         if (KindBox.SelectedItem is ComboBoxItem k && k.Tag is string kt)
             kind = kt;
         RewardsHost.Visibility = kind == "credit" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void UpdateCreateFundingVisibility()
+    {
+        if (CreateFundingBox is null) return;
+        var kind = "checking";
+        if (KindBox.SelectedItem is ComboBoxItem k && k.Tag is string kt)
+            kind = kt;
+        CreateFundingBox.Visibility = kind == "credit" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private string CashNickname(int id)
+    {
+        if (id <= 0 || _accountsRaw.ValueKind != JsonValueKind.Array)
+            return "";
+        foreach (var a in _accountsRaw.EnumerateArray())
+        {
+            if (a.GetProperty("id").GetInt32() != id) continue;
+            var kind = JsonUi.Str(a, "kind");
+            if (kind is not ("checking" or "savings" or "cash"))
+                return "";
+            return JsonUi.Str(a, "nickname");
+        }
+        return "";
+    }
+
+    private void FillCashCombo(ComboBox box, int selectedId, int? profileId = null)
+    {
+        box.Items.Clear();
+        box.Items.Add(new ComboBoxItem { Content = "(not set)", Tag = 0 });
+        var idx = 0;
+        var i = 1;
+        if (_accountsRaw.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var a in _accountsRaw.EnumerateArray())
+            {
+                var kind = JsonUi.Str(a, "kind");
+                if (kind is not ("checking" or "savings" or "cash"))
+                    continue;
+                var pid = a.GetProperty("profile_id").GetInt32();
+                if (profileId is int want && pid != want)
+                    continue;
+                var id = a.GetProperty("id").GetInt32();
+                box.Items.Add(new ComboBoxItem
+                {
+                    Content = $"{JsonUi.Str(a, "nickname")} · {kind}",
+                    Tag = id,
+                });
+                if (id == selectedId)
+                    idx = i;
+                i++;
+            }
+        }
+        box.SelectedIndex = box.Items.Count > 0 ? idx : 0;
     }
 
     protected override async void OnNavigatedTo(NavigationEventArgs e)
@@ -88,6 +145,11 @@ public sealed partial class AccountsPage : Page
                     sub +=
                         $" · close {JsonUi.Str(a, "statement_close_day", "?")} · " +
                         $"due day {JsonUi.Str(a, "payment_due_day", "?")} · limit {JsonUi.Money(a, "credit_limit")}";
+                    var fundId = JsonUi.Int(a, "payment_funding_account_id");
+                    var fundName = CashNickname(fundId);
+                    sub += string.IsNullOrEmpty(fundName)
+                        ? " · pay from (not set)"
+                        : $" · pays from {fundName}";
                     if (a.TryGetProperty("promo_end_date", out var pe) && pe.ValueKind != JsonValueKind.Null)
                         sub += $" · promo ends {pe.GetString()}";
                 }
@@ -116,6 +178,8 @@ public sealed partial class AccountsPage : Page
                 rows.Add(new AccountRow(id, title, sub, meta, kind));
             }
             AccountList.ItemsSource = rows;
+            FillCashCombo(CreateFundingBox, 0);
+            UpdateCreateFundingVisibility();
             MsgText.Text = $"{rows.Count} accounts";
         }
         catch (Exception ex)
@@ -236,11 +300,21 @@ public sealed partial class AccountsPage : Page
             panel.Children.Add(apyBox);
             panel.Children.Add(ifppBox);
         }
+        ComboBox? fundBox = null;
         if (row.Kind == "credit")
         {
             panel.Children.Add(limitBox);
             panel.Children.Add(closeBox);
             panel.Children.Add(dueBox);
+            fundBox = new ComboBox
+            {
+                Header = "Pay from (cash)",
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                MinWidth = 280,
+            };
+            var pid = a0.GetProperty("profile_id").GetInt32();
+            FillCashCombo(fundBox, JsonUi.Int(a0, "payment_funding_account_id"), pid);
+            panel.Children.Add(fundBox);
             panel.Children.Add(promoAprBox);
             panel.Children.Add(promoEndBox);
             if (editRewards is not null)
@@ -334,6 +408,8 @@ public sealed partial class AccountsPage : Page
                     cycleBody["statement_close_day"] = (int)closeBox.Value;
                 if (!double.IsNaN(dueBox.Value) && dueBox.Value is >= 1 and <= 31)
                     cycleBody["payment_due_day"] = (int)dueBox.Value;
+                if (fundBox?.SelectedItem is ComboBoxItem { Tag: int fundId })
+                    cycleBody["payment_funding_account_id"] = fundId > 0 ? fundId : null;
                 if (cycleBody.Count > 0)
                     await api.PutAccountCycleConfigAsync(row.Id, cycleBody);
 
@@ -401,10 +477,18 @@ public sealed partial class AccountsPage : Page
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             var created = await api.CreateAccountAsync(body);
-            if (kind == "credit" && _createRewards is not null && _createRewards.HasRates())
+            if (kind == "credit")
             {
                 var id = created.GetProperty("id").GetInt32();
-                await api.PutRewardsRatesAsync(id, _createRewards.CollectRates());
+                if (CreateFundingBox.SelectedItem is ComboBoxItem { Tag: int fundId } && fundId > 0)
+                {
+                    await api.PutAccountCycleConfigAsync(id, new Dictionary<string, object?>
+                    {
+                        ["payment_funding_account_id"] = fundId,
+                    });
+                }
+                if (_createRewards is not null && _createRewards.HasRates())
+                    await api.PutRewardsRatesAsync(id, _createRewards.CollectRates());
             }
             MsgText.Text = "Account saved.";
             NameBox.Text = "";

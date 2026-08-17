@@ -417,6 +417,70 @@ def enrich_account_from_text(
     )
 
 
+def _installment_terms_from_account(session: Session, account_id: int) -> list[dict[str, Any]]:
+    """Apple-style MONTHLY INSTALLMENTS (n of m) activity rows → purchase_plan terms."""
+    from honestspend.db import Transaction
+    from honestspend.services.promo_statement_parse import (
+        extract_installment_terms_from_payee_amounts,
+    )
+
+    rows = (
+        session.query(Transaction.payee, Transaction.amount)
+        .filter(
+            Transaction.account_id == int(account_id),
+            Transaction.status != "void",
+        )
+        .all()
+    )
+    return extract_installment_terms_from_payee_amounts([(p or "", a) for p, a in rows])
+
+
+def _existing_installment_terms(session: Session, account_id: int) -> list[dict[str, Any]]:
+    """Open Monthly installments · N mo lines already on the card (survive re-apply)."""
+    from honestspend.db import PromoInstallmentLine
+    from honestspend.services.promo_statement_parse import monthly_installment_plan_name
+
+    out: list[dict[str, Any]] = []
+    lines = (
+        session.query(PromoInstallmentLine)
+        .filter(
+            PromoInstallmentLine.account_id == int(account_id),
+            PromoInstallmentLine.kind == "purchase_plan",
+        )
+        .all()
+    )
+    for ln in lines:
+        name = (ln.name or "").strip()
+        if not name.lower().startswith("monthly installments"):
+            continue
+        monthly = _d(ln.monthly_payment) or ZERO
+        if monthly <= ZERO:
+            continue
+        prin = _d(ln.principal_remaining) or ZERO
+        months_left = int((prin / monthly).quantize(Decimal("1"))) if monthly else 0
+        if months_left < 1:
+            months_left = 1
+        total = None
+        m = re.search(r"(\d+)\s*mo\b", name, re.I)
+        if m:
+            try:
+                total = int(m.group(1))
+            except ValueError:
+                total = None
+        out.append(
+            {
+                "kind": "purchase_plan",
+                "name": name or monthly_installment_plan_name(total or months_left),
+                "principal_remaining": prin,
+                "monthly_payment": monthly,
+                "months_left": months_left,
+                "total_payments": total,
+                "source_kind": "monthly_installment",
+            }
+        )
+    return out
+
+
 def apply_statement_promos(
     session: Session,
     account_id: int,
@@ -424,7 +488,7 @@ def apply_statement_promos(
     *,
     as_of: date | None = None,
 ) -> dict[str, Any]:
-    """extract_promo_terms → upsert_promo_term(source='statement').
+    """extract_promo_terms + Apple N-of-M activity → upsert_promo_term(source='statement').
 
     Then recompute_card_payment_schedule. Returns
     {created, updated, conflicts, lines, promos_found, promo_conflicts}.
@@ -439,6 +503,18 @@ def apply_statement_promos(
     lines: list[Any] = []
 
     terms = extract_promo_terms(text or "")
+    txn_terms = _installment_terms_from_account(session, account_id)
+    existing_terms = _existing_installment_terms(session, account_id)
+    if (
+        txn_terms
+        or existing_terms
+        or any(t.get("source_kind") == "monthly_installment" for t in terms)
+    ):
+        from honestspend.services.promo_statement_parse import merge_installment_terms
+
+        text_install = [t for t in terms if t.get("source_kind") == "monthly_installment"]
+        other = [t for t in terms if t.get("source_kind") != "monthly_installment"]
+        terms = other + merge_installment_terms(text_install, txn_terms, existing_terms)
     if not any(t.get("kind") in ("purchase_plan", "card_intro") for t in terms):
         from honestspend.services.promo_statement_parse import extract_interest_saving_balance
 
@@ -461,6 +537,8 @@ def apply_statement_promos(
         )
         prin = term.get("principal_remaining")
         monthly = term.get("monthly_payment")
+        if kind == "bnpl":
+            continue
         if prin is None:
             if kind != "offer":
                 continue
@@ -510,6 +588,13 @@ def apply_statement_promos(
     except Exception:
         pass
 
+    try:
+        from honestspend.services.bnpl import apply_bnpl_for_account
+
+        bnpl_out = apply_bnpl_for_account(session, account_id, text or "", as_of=as_of)
+    except Exception:
+        bnpl_out = {"created": 0, "updated": 0, "ended": 0}
+
     session.flush()
     return {
         "created": created,
@@ -518,6 +603,8 @@ def apply_statement_promos(
         "lines": lines,
         "promos_found": created + updated,
         "promo_conflicts": len(conflicts),
+        "bnpl_created": int(bnpl_out.get("created") or 0),
+        "bnpl_updated": int(bnpl_out.get("updated") or 0),
     }
 
 
@@ -603,18 +690,31 @@ def bootstrap_books_after_import(
 
         if auto_categorize:
             try:
-                applied = categorize_uncategorized(
-                    session,
-                    profile_id=pid,
-                    limit=800,
-                    apply=True,
-                    use_grok=False,
-                    min_confidence=0.82,
-                )
-                n = sum(1 for x in applied if x.get("applied"))
-                categorized += n
+                for _ in range(12):
+                    applied = categorize_uncategorized(
+                        session,
+                        profile_id=pid,
+                        limit=500,
+                        apply=True,
+                        use_grok=False,
+                        min_confidence=0.82,
+                    )
+                    n = sum(1 for x in applied if x.get("applied"))
+                    categorized += n
+                    if n == 0 or len(applied) < 500:
+                        break
             except Exception:
                 pass
+
+    try:
+        from honestspend.services.cycle_config import learn_card_funding_after_import
+
+        learned = learn_card_funding_after_import(session)
+        n_fund = int((learned or {}).get("filled") or 0)
+        if n_fund:
+            details.append(f"Linked {n_fund} card(s) to the cash account that pays them")
+    except Exception:
+        n_fund = 0
 
     # Recompute card payment schedules when possible
     try:
@@ -643,6 +743,8 @@ def bootstrap_books_after_import(
         parts.append(f"{bills_added} bill(s)/recurring")
     if categorized:
         parts.append(f"{categorized} categorized")
+    if n_fund:
+        parts.append(f"{n_fund} card pay-from")
     customer = (
         "Also set up from your history: " + ", ".join(parts) + "."
         if parts

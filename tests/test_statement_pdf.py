@@ -11,6 +11,7 @@ from honestspend.db import Account, Transaction, init_db
 from honestspend.seed import seed_all
 from honestspend.services.onboarding import apply_first_run
 from honestspend.services.statement_pdf import (
+    is_promo_disclosure_line,
     parse_statement_ending_balance,
     parse_statement_lines,
 )
@@ -37,6 +38,12 @@ def test_parse_skips_headers():
     text = "Previous Balance $1,234.56\nCredit Limit $5,000.00\n"
     rows = parse_statement_lines(text)
     assert rows == []
+
+
+def test_promo_amount_table_and_monthly_installment_are_disclosure():
+    assert is_promo_disclosure_line("$7,360.92  $74.00- - - $7,286.92", payee="$7,360.92  $74.00- - - $7,286.92")
+    assert is_promo_disclosure_line("MONTHLY INSTALLMENTS (11 OF 24)", payee="MONTHLY INSTALLMENTS (11 OF 24)")
+    assert not is_promo_disclosure_line("HOME DEPOT #1842", payee="HOME DEPOT #1842")
 
 
 def test_parse_skips_promo_apr_table_lines():

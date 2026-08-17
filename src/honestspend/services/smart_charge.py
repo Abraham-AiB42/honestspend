@@ -45,7 +45,7 @@ def _q(v: Decimal) -> Decimal:
 
 @dataclass
 class ChargeOption:
-    method: str  # cash | card
+    method: str  # cash | card | bnpl
     account_id: int | None
     account_name: str
     safe: bool
@@ -53,8 +53,17 @@ class ChargeOption:
     float_days: int
     rewards_rate: Decimal  # percent points
     next_payment_after: Decimal | None
-    promo_used: str | None  # none | card_intro | purchase_plan
+    promo_used: str | None  # none | card_intro | purchase_plan | bnpl
     remaining_spendable: Decimal | None
+    first_due: Decimal | None = None
+    installment: Decimal | None = None
+    finance_charge: Decimal | None = None
+    total_cost: Decimal | None = None
+    extra_cost: Decimal | None = None
+    payments: int | None = None
+    cadence: str | None = None
+    late_fee_typical: Decimal | None = None
+    bnpl_provider: str | None = None
 
 
 def _promo_mode(promo: dict | None) -> str:
@@ -111,6 +120,8 @@ def _utilization(acct: Account, extra_balance: Decimal) -> Decimal:
 
 def _promo_used_for_card(acct: Account, *, promo: dict | None, as_of: date) -> str:
     mode = _promo_mode(promo)
+    if mode == "bnpl":
+        return "bnpl"
     if mode == "purchase_plan":
         return "purchase_plan"
     if mode == "card_intro":
@@ -342,6 +353,83 @@ def _card_option(
     return opt, util, increase
 
 
+def _bnpl_option(
+    acct: Account,
+    *,
+    quote: dict[str, Any],
+    effective_safe: Decimal,
+    existing_remaining: Decimal,
+    card_safe: Decimal | None,
+) -> ChargeOption:
+    first = _d(quote.get("first_due"))
+    installment = _d(quote.get("installment"))
+    remaining = _d(quote.get("remaining_total"))
+    fees = _d(quote.get("fees"))
+    extra = _d(quote.get("extra_cost"))
+    late = _d(quote.get("late_fee_typical"))
+    n = int(quote.get("payments") or 4)
+    cadence = str(quote.get("cadence") or "biweekly")
+    name = str(quote.get("provider_name") or "BNPL")
+    kind = (acct.kind or "").lower()
+    if kind in CASH_KINDS or acct.is_cash_for_ifpp:
+        bal = _d(acct.current_balance)
+        abuf = _d(getattr(acct, "safety_buffer", None) or 0)
+        avail = max(ZERO, bal - abuf)
+        cap = min(avail, effective_safe)
+        ok = first <= cap
+        leftover = cap - first if ok else cap
+    else:
+        cap = card_safe if card_safe is not None else ZERO
+        ok = first <= cap
+        leftover = cap - first if ok else cap
+    tight = ok and leftover <= remaining
+    parts = [
+        f"{name}: ${first} due today, then {n - 1}×${installment} {cadence}.",
+        f"Total ${quote.get('total_cost')} (fees ${fees}"
+        + (f", ${extra} more than paying now" if extra > ZERO else ", no extra if on time")
+        + ").",
+    ]
+    if late > ZERO:
+        parts.append(f"Typical late fee ${late} if you miss (not included).")
+    if existing_remaining > ZERO:
+        parts.append(f"You already have ${existing_remaining} in BNPL still coming due.")
+    if not ok:
+        parts.insert(0, f"First payment ${first} does not fit (need ${first}, have ${cap}).")
+        reason = " ".join(parts)
+        remaining_spendable = cap
+    elif tight:
+        parts.append(
+            f"Tight: after ${first} today, ${remaining} more is due on this plan "
+            f"and only ${leftover} Safe is left."
+        )
+        reason = " ".join(parts)
+        remaining_spendable = leftover
+    else:
+        reason = " ".join(parts)
+        remaining_spendable = leftover
+    return ChargeOption(
+        method="bnpl",
+        account_id=acct.id,
+        account_name=f"{name} · {acct.nickname}",
+        safe=ok,
+        reason=reason,
+        float_days=0,
+        rewards_rate=ZERO,
+        next_payment_after=first,
+        promo_used="bnpl",
+        remaining_spendable=remaining_spendable,
+        first_due=first,
+        installment=installment,
+        finance_charge=_d(quote.get("finance_charge")),
+        total_cost=_d(quote.get("total_cost")),
+        extra_cost=extra,
+        payments=n,
+        cadence=cadence,
+        late_fee_typical=late if late > ZERO else None,
+        bnpl_provider=str(quote.get("provider") or ""),
+    )
+
+
 def rank_charge(
     session: Session,
     *,
@@ -355,8 +443,10 @@ def rank_charge(
     budget_category_id: int | None = None,
     allow_envelope_raid: bool = False,
 ) -> dict:
-    """promo = {mode: none|card_intro|purchase_plan, months?: int, monthly?: str}
-    Returns {proposed, recommended, options, verdict, why, budget_check, envelope_raid, safe_to_spend}.
+    """promo = {mode: none|card_intro|purchase_plan|bnpl, months?: int, monthly?: str,
+    provider?, plan?, payments?, apr?, origination_fee?, service_fee?}
+    Returns {proposed, recommended, options, verdict, why, budget_check, envelope_raid,
+    safe_to_spend, bnpl_quote, existing_bnpl}.
     """
     as_of = as_of or date.today()
     amount = abs(_d(amount))
@@ -425,9 +515,69 @@ def rank_charge(
             util_by_id[acct.id] = util
             increase_by_id[acct.id] = increase
 
+    from honestspend.services.bnpl import existing_bnpl_burden, quote_bnpl
+
+    existing_bnpl = existing_bnpl_burden(
+        session, profile_id=pid if pid is not None else profile_id, as_of=as_of
+    )
+    existing_rem = _d(existing_bnpl.get("remaining_total"))
+    bnpl_quote: dict[str, Any] | None = None
+    if _promo_mode(promo) == "bnpl" and proposed_acct is not None:
+        try:
+            bnpl_quote = quote_bnpl(
+                amount,
+                provider=(promo or {}).get("provider"),
+                plan=(promo or {}).get("plan"),
+                payments=(promo or {}).get("payments"),
+                apr=(promo or {}).get("apr"),
+                origination_fee=(promo or {}).get("origination_fee"),
+                service_fee=(promo or {}).get("service_fee"),
+                as_of=as_of,
+            )
+        except ValueError:
+            bnpl_quote = None
+        if bnpl_quote:
+            first = _d(bnpl_quote.get("first_due"))
+            if cash_raw >= first and safe_to_spend < first and reserve > ZERO:
+                raid_amt = (first - safe_to_spend).quantize(CENT)
+                envelope_raid = {
+                    "available": True,
+                    "raid_amount": str(raid_amt),
+                    "safe_to_spend": str(_q(safe_to_spend)),
+                    "cash_before_budgets": str(_q(cash_raw)),
+                    "budget_reserve": str(_q(reserve)),
+                    "message": (
+                        f"First BNPL payment ${first} needs a ${raid_amt} envelope raid "
+                        f"(Safe to spend is only ${safe_to_spend})."
+                    ),
+                }
+            bnpl_safe_cap = (
+                cash_raw if allow_envelope_raid and cash_raw >= first else safe_to_spend
+            )
+            card_safe = None
+            if (proposed_acct.kind or "").lower() == "credit":
+                card_safe = _safe_to_charge_for(
+                    session,
+                    proposed_acct,
+                    as_of=as_of,
+                    card_plans=card_plans,
+                    cash_for_payoff=cash_for_payoff,
+                )
+            bnpl_opt = _bnpl_option(
+                proposed_acct,
+                quote=bnpl_quote,
+                effective_safe=bnpl_safe_cap,
+                existing_remaining=existing_rem,
+                card_safe=card_safe,
+            )
+            options.append(bnpl_opt)
+            util_by_id[proposed_acct.id] = util_by_id.get(proposed_acct.id, ZERO)
+            increase_by_id[proposed_acct.id] = first
+
     def _rank_key(opt: ChargeOption) -> tuple:
         proposed_first = 0 if opt.account_id == proposed_account_id else 1
         return (
+            0 if opt.method != "bnpl" else 1,
             -int(opt.float_days),
             -_d(opt.rewards_rate),
             proposed_first,
@@ -445,6 +595,10 @@ def rank_charge(
         (o for o in ordered if o.account_id == proposed_account_id), None
     )
     rec = safe_opts[0] if safe_opts else proposed_opt
+    if _promo_mode(promo) == "bnpl":
+        bnpl_safe = next((o for o in safe_opts if o.method == "bnpl"), None)
+        if bnpl_safe is not None:
+            rec = bnpl_safe
 
     if rec and rec.safe:
         if rec.account_id == proposed_account_id:
@@ -470,11 +624,18 @@ def rank_charge(
         ):
             verdict = "safe_budget_tight"
 
-    if allow_envelope_raid and rec and rec.safe and safe_to_spend < amount:
+    raid_need = (
+        _d(bnpl_quote.get("first_due"))
+        if bnpl_quote is not None
+        else amount
+    )
+    if allow_envelope_raid and rec and rec.safe and safe_to_spend < raid_need:
         verdict = "safe_raid_envelope"
 
     if rec and rec.safe:
-        if rec.method == "card":
+        if rec.method == "bnpl":
+            why = rec.reason
+        elif rec.method == "card":
             why = (
                 f"Charge {rec.account_name} — {rec.float_days} interest-free days, "
                 f"{rec.rewards_rate}% {reward_category}."
@@ -485,6 +646,8 @@ def rank_charge(
             )
     else:
         why = "Do not buy — no account is safe for this amount."
+    if existing_rem > ZERO and rec and rec.method != "bnpl":
+        why += f" You already have ${existing_rem} in BNPL still coming due."
 
     return {
         "proposed": asdict(proposed_opt) if proposed_opt else None,
@@ -495,4 +658,6 @@ def rank_charge(
         "budget_check": budget_check,
         "envelope_raid": envelope_raid,
         "safe_to_spend": str(_q(safe_to_spend)),
+        "bnpl_quote": bnpl_quote,
+        "existing_bnpl": existing_bnpl,
     }

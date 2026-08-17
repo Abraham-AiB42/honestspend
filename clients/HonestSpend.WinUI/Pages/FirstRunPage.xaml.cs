@@ -8,6 +8,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using Windows.Globalization;
+using Windows.Globalization.NumberFormatting;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
@@ -70,8 +72,18 @@ public sealed partial class FirstRunPage : Page
     private readonly HashSet<string> _skippedPayees = new(StringComparer.OrdinalIgnoreCase);
     private bool _categorizeAutoRan;
     private JsonElement? _pendingCatStatus;
+    private int? _catBookId;
     private readonly List<JsonElement> _sessionRecent = new();
     private readonly Dictionary<int, NumberBox> _budgetAmountBoxes = new();
+    private int? _budgetProfileId;
+    private ComboBox? _budgetAddCat;
+    private ComboBox? _budgetAddPeriod;
+    private NumberBox? _budgetAddAmt;
+    private readonly List<(int Id, string Name)> _budgetReassignCats = new();
+    private readonly List<(int Id, string Name)> _budgetBooks = new();
+    private readonly HashSet<int> _budgetWhyOpen = new();
+    private string _budgetPlanStep = "income";
+    private readonly List<BudgetPlanDraft> _budgetPlanDraft = new();
     private NumberBox? _totalBufferBox;
     private readonly Dictionary<int, NumberBox> _acctBufferBoxes = new();
 
@@ -141,12 +153,35 @@ public sealed partial class FirstRunPage : Page
                 EngineChip.Text = text;
         }
         catch { /* ignore */ }
+        ApplyPathContinueState();
+    }
+
+    /// <summary>Path step: Continue to import stays off until Health + books are ready.</summary>
+    private void ApplyPathContinueState()
+    {
+        if (_phase != "path" || _loading) return;
+        try
+        {
+            var ready = AppState.EngineReady;
+            NextBtn.IsEnabled = ready;
+            NextBtn.Content = ready
+                ? "Continue with Import bank files"
+                : "Waiting for engine…";
+        }
+        catch { /* ignore */ }
     }
 
     private async Task RefreshStateAsync()
     {
         ErrorBar.IsOpen = false;
         var early = _phase is "welcome" or "storage" or "security";
+        // First run: don't boot the engine just to paint Welcome / Where books live.
+        if (early && StorageLocationService.LooksLikeFirstRun()
+            && App.Backend is not { IsRunning: true })
+        {
+            SetEngineChip("Engine starts after you pick a books folder.", false);
+            return;
+        }
         try
         {
             using var api = new LedgerApiClient();
@@ -207,6 +242,10 @@ public sealed partial class FirstRunPage : Page
     {
         try
         {
+            if (StorageLocationService.LooksLikeFirstRun()
+                && _phase is "welcome" or "storage"
+                && App.Backend is not { IsRunning: true })
+                return;
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
             if (!await api.HealthAsync())
@@ -297,7 +336,17 @@ public sealed partial class FirstRunPage : Page
         {
             var allowBack = !busy && _phase is not ("welcome" or "done");
             BackBtn.IsEnabled = allowBack;
-            NextBtn.IsEnabled = !busy;
+            if (_phase == "path")
+            {
+                NextBtn.IsEnabled = !busy && AppState.EngineReady;
+                NextBtn.Content = AppState.EngineReady
+                    ? "Continue with Import bank files"
+                    : "Waiting for engine…";
+            }
+            else
+            {
+                NextBtn.IsEnabled = !busy;
+            }
             if (SkipBtn is not null)
             {
                 SkipBtn.IsEnabled = !busy && PhaseAllowsSkip(_phase);
@@ -391,7 +440,7 @@ public sealed partial class FirstRunPage : Page
             QuestionText.Text = "What can you safely spend?";
             HintText.Text =
                 "Three required steps first: where books live, then app lock (None is fine), then how to connect money. " +
-                "You can answer these while the engine starts in the background. After import we’ll categorize spend and set budgets.\n\n" +
+                "The money engine starts when you pick a books folder. After import we’ll categorize spend and set budgets.\n\n" +
                 "We never store bank passwords. Setup stays open until you finish.";
             NextBtn.Content = "Get started";
             return;
@@ -472,8 +521,13 @@ public sealed partial class FirstRunPage : Page
                 "Type balances only (limited)",
                 "Skips real history. Fine for a smoke test — not for running the household. Prefer Import.");
             // Bottom button always continues the recommended import path (was a dead disabled control)
-            NextBtn.IsEnabled = true;
-            NextBtn.Content = "Continue with Import bank files";
+            var engineUp = AppState.EngineReady;
+            NextBtn.IsEnabled = engineUp;
+            NextBtn.Content = engineUp
+                ? "Continue with Import bank files"
+                : "Waiting for engine…";
+            if (!engineUp)
+                SetEngineChip("Continue to import stays off until the engine finishes restarting.", false);
             return;
         }
 
@@ -1234,33 +1288,30 @@ public sealed partial class FirstRunPage : Page
 
         try
         {
-            using var api = new LedgerApiClient();
-            if (gen != _storageRenderGen) return;
-            var info = await api.GetSetupStorageAsync();
-            if (gen != _storageRenderGen) return;
-
             _storageCandidates.Clear();
-            var warn = JsonUi.Str(info, "warning");
-            if (!string.IsNullOrEmpty(warn) && warn is not "—" and not "?")
+            _storageCandidates.AddRange(StorageLocationService.ListSuggestedPlaces());
+            if (App.Backend is { IsRunning: true })
             {
-                Fields.Children.Add(new TextBlock
+                using var api = new LedgerApiClient();
+                if (gen != _storageRenderGen) return;
+                if (await api.HealthAsync())
                 {
-                    Text = warn,
-                    TextWrapping = TextWrapping.Wrap,
-                    Opacity = 0.85,
-                    Margin = new Thickness(0, 0, 0, 8),
-                });
-            }
-
-            if (info.TryGetProperty("candidates", out var arr) && arr.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var c in arr.EnumerateArray())
-                {
-                    var kind = JsonUi.Str(c, "kind", "local");
-                    var label = JsonUi.Str(c, "label");
-                    var path = JsonUi.Str(c, "path");
-                    if (string.IsNullOrEmpty(path) || path is "—" or "?") continue;
-                    _storageCandidates.Add((kind, label, path));
+                    var info = await api.GetSetupStorageAsync();
+                    if (gen != _storageRenderGen) return;
+                    if (info.TryGetProperty("candidates", out var arr) && arr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var c in arr.EnumerateArray())
+                        {
+                            var kind = JsonUi.Str(c, "kind", "local");
+                            var label = JsonUi.Str(c, "label");
+                            var path = JsonUi.Str(c, "path");
+                            if (string.IsNullOrEmpty(path) || path is "—" or "?") continue;
+                            if (_storageCandidates.Any(x =>
+                                    string.Equals(x.Path, path, StringComparison.OrdinalIgnoreCase)))
+                                continue;
+                            _storageCandidates.Add((kind, label, path));
+                        }
+                    }
                 }
             }
             if (_storageCandidates.Count == 0)
@@ -1316,8 +1367,14 @@ public sealed partial class FirstRunPage : Page
                 };
                 if (string.Equals(_storagePath, path, StringComparison.OrdinalIgnoreCase))
                     btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-                // Do NOT full re-render (that raced with Back and felt frozen). Update selection in place.
-                btn.Click += (_, _) => SelectStoragePath(kind, path, refreshChrome: true);
+                btn.Click += async (_, _) =>
+                {
+                    SelectStoragePath(kind, path, refreshChrome: true);
+                    if (_loading) return;
+                    SetWizardBusy(true);
+                    try { await SaveStorageAndAdvanceAsync(); }
+                    finally { SetWizardBusy(false); }
+                };
                 Fields.Children.Add(btn);
             }
 
@@ -1506,18 +1563,13 @@ public sealed partial class FirstRunPage : Page
         }
 
         Status("Saving books folder…");
+        NextBtn.IsEnabled = false;
+        NextBtn.Content = "Starting engine…";
         var previous = string.IsNullOrWhiteSpace(AppConfig.DataDir)
             ? StorageLocationService.DefaultLocalPath()
             : AppConfig.DataDir!.Trim();
         StorageLocationService.PersistDataDir(_storagePath);
 
-        // Paint the next question immediately — engine can catch up
-        _phase = "security";
-        _phaseTitle = "App lock";
-        StorageLocationService.PersistSetupPhase("security");
-        Render();
-
-        // Only restart engine when the folder actually changes (Back → re-Next was hanging here)
         var sameFolder = false;
         try
         {
@@ -1528,16 +1580,31 @@ public sealed partial class FirstRunPage : Page
         }
         catch { /* treat as different */ }
 
-        _ = SyncStorageWithEngineAsync(sameFolder);
+        var ready = await SyncStorageWithEngineAsync(sameFolder);
+        if (!ready)
+        {
+            NextBtn.IsEnabled = true;
+            NextBtn.Content = "Retry — start engine";
+            ErrorBar.Message = "The engine is still starting. Wait a moment, then tap Retry.";
+            ErrorBar.IsOpen = true;
+            return;
+        }
+
+        _phase = "security";
+        _phaseTitle = "App lock";
+        StorageLocationService.PersistSetupPhase("security");
+        Render();
     }
 
-    private async Task SyncStorageWithEngineAsync(bool sameFolder)
+    private async Task<bool> SyncStorageWithEngineAsync(bool sameFolder)
     {
         try
         {
+            SetEngineChip(
+                sameFolder ? "Starting the engine for this books folder…" : "Moving books folder and restarting the engine…",
+                false);
             if (!sameFolder)
             {
-                SetEngineChip("Moving books folder and starting the engine…", false);
                 var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                 await StorageLocationService.ApplyAndRestartEngineAsync(
                     _storagePath,
@@ -1549,9 +1616,29 @@ public sealed partial class FirstRunPage : Page
                     });
             }
             using var api = new LedgerApiClient();
-            await api.EnsureBackendAsync();
-            if (!await api.HealthAsync())
-                return;
+            Exception? last = null;
+            for (var i = 0; i < 20; i++)
+            {
+                try
+                {
+                    await api.EnsureBackendAsync();
+                    if (await api.HealthAsync() && await api.BooksReadyAsync())
+                    {
+                        last = null;
+                        break;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                }
+                await Task.Delay(400);
+            }
+            if (last is not null || !await api.HealthAsync())
+            {
+                SetEngineChip("Engine still starting — Continue stays off until it’s ready.", false);
+                return false;
+            }
             try
             {
                 await api.PostSetupStorageAsync(_storageKind, _storagePath, advance: true);
@@ -1565,11 +1652,13 @@ public sealed partial class FirstRunPage : Page
                     storage_chosen = true,
                 });
             }
-            SetEngineChip("Engine ready. Books folder saved.", true);
+            SetEngineChip("Engine ready. Continue to import is available.", true);
+            return true;
         }
         catch
         {
-            SetEngineChip("Engine still starting — folder is saved on this PC.", false);
+            SetEngineChip("Engine still starting — Continue stays off until it’s ready.", false);
+            return false;
         }
         finally
         {
@@ -1623,10 +1712,26 @@ public sealed partial class FirstRunPage : Page
             };
             if (_securityMode == id)
                 btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-            btn.Click += (_, _) =>
+            btn.Click += async (_, _) =>
             {
                 _securityMode = id;
-                _ = RenderSecurityAsync();
+                // PIN / password still need the secret — show the fields.
+                if (id is "pin" or "password")
+                {
+                    _ = RenderSecurityAsync();
+                    return;
+                }
+                if (_loading) return;
+                ErrorBar.IsOpen = false;
+                SetWizardBusy(true);
+                try { await SaveSecurityAndAdvanceAsync(); }
+                catch (Exception ex)
+                {
+                    ErrorBar.Message = ex.Message;
+                    ErrorBar.IsOpen = true;
+                    _ = RenderSecurityAsync();
+                }
+                finally { SetWizardBusy(false); }
             };
             Fields.Children.Add(btn);
         }
@@ -1854,6 +1959,13 @@ public sealed partial class FirstRunPage : Page
     private async Task ChoosePathAsync(string path)
     {
         if (_loading) return;
+        if (!AppState.EngineReady)
+        {
+            SetEngineChip("Waiting for the engine to finish starting…", false);
+            NextBtn.IsEnabled = false;
+            NextBtn.Content = "Waiting for engine…";
+            return;
+        }
         try
         {
             _loading = true;
@@ -1894,6 +2006,13 @@ public sealed partial class FirstRunPage : Page
         try
         {
             SetWizardBusy(true, "Going back…");
+
+            if (_phase == "budgets" && _budgetPlanStep is "bills" or "envelopes")
+            {
+                _budgetPlanStep = _budgetPlanStep == "envelopes" ? "bills" : "income";
+                Render();
+                return;
+            }
 
             if (_phase == "manual" && _manualStep > 0)
             {
@@ -2569,13 +2688,96 @@ public sealed partial class FirstRunPage : Page
         Render();
     }
 
+    private void AddBookTabs(JsonElement st)
+    {
+        if (!st.TryGetProperty("books", out var books) || books.ValueKind != JsonValueKind.Array
+            || books.GetArrayLength() == 0)
+            return;
+
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "Books",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+        };
+        var wrap = new StackPanel { Spacing = 8 };
+        var cur = _catBookId ?? JsonUi.Int(st, "profile_id", 0);
+        var col = 0;
+        foreach (var b in books.EnumerateArray())
+        {
+            var id = JsonUi.Int(b, "id", 0);
+            if (id <= 0) continue;
+            var name = JsonUi.Str(b, "display_name", "Books");
+            var kind = JsonUi.Str(b, "entity_type", "personal");
+            var left = JsonUi.Int(b, "uncategorized_count", 0);
+            var label = left > 0 ? $"{name} · {left} left" : name;
+            var btn = new Button
+            {
+                Content = new StackPanel
+                {
+                    Spacing = 0,
+                    Children =
+                    {
+                        new TextBlock { Text = label, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold },
+                        new TextBlock
+                        {
+                            Text = kind == "business" ? "Business" : "Personal",
+                            FontSize = 11,
+                            Opacity = 0.7,
+                        },
+                    },
+                },
+                Tag = id,
+                Padding = new Thickness(12, 8, 12, 8),
+            };
+            if (id == cur)
+                btn.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            btn.Click += (_, _) =>
+            {
+                _catBookId = id;
+                _pendingCatStatus = null;
+                _pendingPayeeKey = null;
+                Render();
+            };
+            row.Children.Add(btn);
+            col++;
+            if (col >= 3)
+            {
+                wrap.Children.Add(row);
+                row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                col = 0;
+            }
+        }
+        if (row.Children.Count > 0)
+            wrap.Children.Add(row);
+        Fields.Children.Add(wrap);
+        Fields.Children.Add(new Border { Height = 8 });
+    }
+
     private async Task RenderCategorizeAsync()
     {
         QuestionText.Text = "Categorize spending";
         HintText.Text =
-            "We’ll auto-apply high-confidence rules, then ask about your top remaining payees. " +
-            "Tap a category chip — creates a rule for next time.";
-        NextBtn.Content = "Done categorizing — continue";
+            "Each book is the name from Import. Only charges on that book’s accounts appear here, " +
+            "and only that book’s categories (personal vs business).";
+        var continueLabel = AppState.PostImportGuide
+            ? "Continue to budgets"
+            : "Done categorizing — continue";
+        NextBtn.Content = continueLabel;
+        var topContinue = new Button
+        {
+            Content = continueLabel,
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"],
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        topContinue.Click += Next_Click;
+        Fields.Children.Add(topContinue);
 
         try
         {
@@ -2613,14 +2815,24 @@ public sealed partial class FirstRunPage : Page
                 {
                     _pendingCatStatus = autoSt.Clone();
                     AbsorbSessionRecent(autoSt);
+                    var picked = JsonUi.Int(autoSt, "profile_id", 0);
+                    if (picked > 0)
+                        _catBookId = picked;
                 }
             }
 
             JsonElement st;
-            if (_pendingCatStatus is JsonElement cached)
+            if (_pendingCatStatus is JsonElement cached
+                && (!_catBookId.HasValue || JsonUi.Int(cached, "profile_id", 0) == _catBookId.Value))
                 st = cached;
             else
-                st = await api.GetSetupCategorizeAsync();
+                st = await api.GetSetupCategorizeAsync(profileId: _catBookId);
+
+            AddBookTabs(st);
+            var bookName = JsonUi.Str(st, "book_name", "This book");
+            var bookType = JsonUi.Str(st, "book_entity_type", "personal");
+            _catBookId = JsonUi.Int(st, "profile_id", _catBookId ?? 0);
+            if (_catBookId == 0) _catBookId = null;
             Fields.Children.Add(new TextBlock
             {
                 Text = JsonUi.Str(st, "message") + $" ({JsonUi.Str(st, "categorized_pct")}%)",
@@ -2647,7 +2859,8 @@ public sealed partial class FirstRunPage : Page
                 foreach (var item in q.EnumerateArray())
                 {
                     var key = JsonUi.Str(item, "payee_key");
-                    if (!string.IsNullOrEmpty(key) && _skippedPayees.Contains(key))
+                    var skipKey = _catBookId is int bid ? $"{bid}:{key}" : key;
+                    if (!string.IsNullOrEmpty(key) && _skippedPayees.Contains(skipKey))
                         continue;
                     first = item;
                     break;
@@ -2671,7 +2884,7 @@ public sealed partial class FirstRunPage : Page
             {
                 Fields.Children.Add(new TextBlock
                 {
-                    Text = "Nothing left to confirm — continue to budgets.",
+                    Text = $"{bookName} is caught up. Pick another book above, or continue to budgets.",
                     TextWrapping = TextWrapping.Wrap,
                 });
                 _pendingPayeeKey = null;
@@ -2702,15 +2915,19 @@ public sealed partial class FirstRunPage : Page
                 }
             }
             var toName = JsonUi.Str(f, "to_account");
-            var fromLine = fromBits.Count > 0 ? string.Join(", ", fromBits) : "this account";
-            var toLine = string.IsNullOrWhiteSpace(toName) ? _pendingPayeeLabel : toName;
+            var toMissing = string.IsNullOrWhiteSpace(toName) || toName == "—";
+            var fromLine = fromBits.Count > 0
+                ? string.Join(", ", fromBits)
+                : (toMissing ? "this account" : "cash (set Pay from on the card)");
+            var toLine = toMissing ? "—" : toName;
             Fields.Children.Add(new TextBlock
             {
                 Text =
+                    $"{bookName} · {(bookType == "business" ? "Business categories" : "Personal categories")}\n" +
                     $"Payee: {_pendingPayeeLabel}\n" +
                     $"From: {fromLine}\n" +
                     $"To: {toLine}\n" +
-                    $"{JsonUi.Int(f, "count", 0)} transactions · ${JsonUi.Str(f, "total_abs")} total",
+                    $"{JsonUi.Int(f, "count", 0)} transactions · {MoneyUi.FormatLoose(JsonUi.Str(f, "total_abs"))} total",
                 FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 8),
@@ -2753,35 +2970,7 @@ public sealed partial class FirstRunPage : Page
             }
             Fields.Children.Add(grid);
 
-            if (usable.Count + moreCats.Count > 0)
-            {
-                var moreBox = new ComboBox
-                {
-                    Header = "All categories",
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    Margin = new Thickness(0, 8, 0, 0),
-                    PlaceholderText = "Scroll the full list…",
-                    MaxDropDownHeight = 320,
-                    IsEditable = false,
-                };
-                foreach (var (cid, cname) in allCats)
-                {
-                    if (cid <= 0) continue;
-                    moreBox.Items.Add(new ComboBoxItem { Content = cname, Tag = cid });
-                }
-                moreBox.SelectionChanged += async (_, _) =>
-                {
-                    if (moreBox.SelectedItem is not ComboBoxItem { Tag: int cid } || cid <= 0)
-                        return;
-                    try { await ConfirmPayeeCategoryAsync(cid); }
-                    catch (Exception ex)
-                    {
-                        ErrorBar.Message = ex.Message;
-                        ErrorBar.IsOpen = true;
-                    }
-                };
-                Fields.Children.Add(moreBox);
-            }
+            AddCategorySearchBox(allCats);
 
             var skipPayee = new Button
             {
@@ -2791,7 +2980,7 @@ public sealed partial class FirstRunPage : Page
             skipPayee.Click += (_, _) =>
             {
                 if (!string.IsNullOrEmpty(_pendingPayeeKey))
-                    _skippedPayees.Add(_pendingPayeeKey);
+                    _skippedPayees.Add(_catBookId is int bid ? $"{bid}:{_pendingPayeeKey}" : _pendingPayeeKey);
                 Render();
             };
             Fields.Children.Add(skipPayee);
@@ -2801,6 +2990,157 @@ public sealed partial class FirstRunPage : Page
         {
             Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
         }
+    }
+
+    private static int ScoreCategoryName(string query, string name)
+    {
+        var n = (name ?? "").Trim();
+        if (n.Length == 0) return 0;
+        var q = query.Trim();
+        if (q.Length == 0) return 1;
+        if (n.Equals(q, StringComparison.OrdinalIgnoreCase)) return 100;
+        if (n.StartsWith(q, StringComparison.OrdinalIgnoreCase)) return 80;
+        if (n.Contains(q, StringComparison.OrdinalIgnoreCase)) return 50;
+        var nl = n.ToLowerInvariant();
+        var ql = q.ToLowerInvariant();
+        var i = 0;
+        foreach (var ch in nl)
+        {
+            if (i < ql.Length && ch == ql[i]) i++;
+        }
+        return i == ql.Length ? 20 : 0;
+    }
+
+    private static List<(int Id, string Name)> RankCategoryMatches(
+        string query,
+        List<(int Id, string Name)> cats)
+    {
+        return cats
+            .Where(c => c.Id > 0 && !string.IsNullOrWhiteSpace(c.Name))
+            .Select(c => (c, score: ScoreCategoryName(query, c.Name)))
+            .Where(x => x.score > 0)
+            .OrderByDescending(x => x.score)
+            .ThenBy(x => x.c.Name, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .Select(x => x.c)
+            .ToList();
+    }
+
+    private void AddCategorySearchBox(List<(int Id, string Name)> allCats)
+    {
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "Search categories — or add your own",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 12, 0, 4),
+        });
+        var search = new AutoSuggestBox
+        {
+            PlaceholderText = "Start typing a category…",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            QueryIcon = new SymbolIcon(Symbol.Find),
+        };
+        var addBtn = new Button
+        {
+            Content = "+",
+            MinWidth = 44,
+            Padding = new Thickness(10, 6, 10, 6),
+            IsEnabled = false,
+        };
+        ToolTipService.SetToolTip(addBtn, "Add a custom category for this book");
+
+        void FillSuggestions(string q)
+        {
+            var hits = RankCategoryMatches(q, allCats);
+            search.ItemsSource = hits.Select(h => h.Name).ToList();
+            var typed = (q ?? "").Trim();
+            var exact = allCats.Any(c => c.Name.Equals(typed, StringComparison.OrdinalIgnoreCase));
+            addBtn.IsEnabled = typed.Length >= 2;
+            addBtn.Content = exact ? "Use" : "+";
+            ToolTipService.SetToolTip(addBtn, exact
+                ? "Use this existing category"
+                : "Create a custom category and assign it");
+        }
+
+        search.TextChanged += (_, args) =>
+        {
+            if (args.Reason == AutoSuggestionBoxTextChangeReason.UserInput)
+                FillSuggestions(search.Text ?? "");
+        };
+        search.SuggestionChosen += async (_, args) =>
+        {
+            var name = args.SelectedItem as string;
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var hit = allCats.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (hit.Id <= 0) return;
+            try { await ConfirmPayeeCategoryAsync(hit.Id); }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = ex.Message;
+                ErrorBar.IsOpen = true;
+            }
+        };
+        search.QuerySubmitted += async (_, args) =>
+        {
+            var typed = (args.ChosenSuggestion as string ?? args.QueryText ?? "").Trim();
+            if (typed.Length < 2) return;
+            try { await AssignOrCreateCategoryAsync(typed, allCats); }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = ex.Message;
+                ErrorBar.IsOpen = true;
+            }
+        };
+        addBtn.Click += async (_, _) =>
+        {
+            var typed = (search.Text ?? "").Trim();
+            if (typed.Length < 2) return;
+            try { await AssignOrCreateCategoryAsync(typed, allCats); }
+            catch (Exception ex)
+            {
+                ErrorBar.Message = ex.Message;
+                ErrorBar.IsOpen = true;
+            }
+        };
+
+        var row = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 0, 0, 4) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(search);
+        Grid.SetColumn(addBtn, 1);
+        row.Children.Add(addBtn);
+        Fields.Children.Add(row);
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "Close matches appear as you type. + creates a custom category on this book.",
+            Opacity = 0.7,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 8),
+        });
+    }
+
+    private async Task AssignOrCreateCategoryAsync(string name, List<(int Id, string Name)> allCats)
+    {
+        var hit = allCats.FirstOrDefault(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (hit.Id > 0)
+        {
+            await ConfirmPayeeCategoryAsync(hit.Id);
+            return;
+        }
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var created = await api.CreateSetupCategoryAsync(name, _catBookId);
+        var id = JsonUi.Int(created, "id", 0);
+        if (id <= 0)
+            throw new InvalidOperationException("Could not create that category.");
+        var existed = created.TryGetProperty("existed", out var ex) && ex.ValueKind == JsonValueKind.True;
+        InfoBar.Title = existed ? "Existing category" : "Custom category";
+        InfoBar.Message = existed
+            ? $"Using “{JsonUi.Str(created, "name")}”."
+            : $"Added “{JsonUi.Str(created, "name")}” to this book.";
+        InfoBar.IsOpen = true;
+        await ConfirmPayeeCategoryAsync(id);
     }
 
     private static List<int> RecentIdsOf(JsonElement item)
@@ -2993,6 +3333,7 @@ public sealed partial class FirstRunPage : Page
             transaction_ids = ids,
             create_rule = true,
             reassign,
+            profile_id = _catBookId,
         });
         InfoBar.Title = "Categorized";
         InfoBar.Message =
@@ -3020,6 +3361,7 @@ public sealed partial class FirstRunPage : Page
             transaction_ids = txnIds,
             payee_key = payeeKey,
             rule_id = ruleId,
+            profile_id = _catBookId,
         });
         InfoBar.Title = "Undone";
         InfoBar.Message = $"Cleared {JsonUi.Int(res, "cleared", 0)} match(es). That payee is back in the queue.";
@@ -3035,10 +3377,19 @@ public sealed partial class FirstRunPage : Page
 
     private async Task RenderBudgetsAsync()
     {
-        QuestionText.Text = "Budgets from your history";
-        HintText.Text =
-            "Plans seeded from categorized spend (food→daily, gas→weekly, etc.). " +
-            "Edit amounts or leave as-is. Remaining budget reserves out of Safe to spend.";
+        if (_budgetPlanStep == "income")
+        {
+            await RenderBudgetIncomeAsync();
+            return;
+        }
+        if (_budgetPlanStep == "bills")
+        {
+            await RenderBudgetBillsAsync();
+            return;
+        }
+
+        QuestionText.Text = "Variable budgets — step 3 of 3";
+        HintText.Text = "Groceries, dining, fuel, shopping."
         NextBtn.Content = AppState.PostImportGuide ? "Save budgets & keep going" : "Save budgets & continue";
         _budgetAmountBoxes.Clear();
 
@@ -3046,45 +3397,22 @@ public sealed partial class FirstRunPage : Page
         {
             using var api = new LedgerApiClient();
             await api.EnsureBackendAsync();
-            await api.SeedSetupBudgetsAsync();
-            var rev = await api.GetSetupBudgetsAsync(seedIfEmpty: false);
-            Fields.Children.Add(new TextBlock
+            var rev = await api.GetBudgetPlanAsync("envelopes", profileId: _catBookId);
+            _budgetProfileId = JsonUi.Int(rev, "profile_id", 0);
+            if (_budgetProfileId == 0) _budgetProfileId = null;
+            if (_budgetProfileId is > 0)
+                _catBookId = _budgetProfileId;
+
+            AddBookTabs(rev);
+            LoadBudgetLookups(rev);
+
+            if (rev.TryGetProperty("rules", out var rules) && rules.ValueKind == JsonValueKind.Array)
             {
-                Text = JsonUi.Str(rev, "message"),
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 8),
-            });
-            if (rev.TryGetProperty("seed", out var seed) && seed.ValueKind == JsonValueKind.Object)
-            {
-                var msg = JsonUi.Str(seed, "message");
-                if (!string.IsNullOrEmpty(msg) && msg != "—")
-                    Fields.Children.Add(new TextBlock { Text = msg, Opacity = 0.8, TextWrapping = TextWrapping.Wrap });
+                foreach (var r in rules.EnumerateArray())
+                    Fields.Children.Add(BuildBudgetRow(r));
             }
 
-            if (!rev.TryGetProperty("rules", out var rules) || rules.ValueKind != JsonValueKind.Array
-                || rules.GetArrayLength() == 0)
-            {
-                Fields.Children.Add(new TextBlock
-                {
-                    Text = "No budget rules yet — continue and seed later from Budgets.",
-                    TextWrapping = TextWrapping.Wrap,
-                });
-                return;
-            }
-
-            foreach (var r in rules.EnumerateArray())
-            {
-                var id = JsonUi.Int(r, "id", 0);
-                var nb = new NumberBox
-                {
-                    Header = $"{JsonUi.Str(r, "name")} · {JsonUi.Str(r, "period")}",
-                    Value = double.TryParse(JsonUi.Str(r, "amount", "0"), out var v) ? v : 0,
-                    Minimum = 0,
-                    SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
-                };
-                if (id > 0) _budgetAmountBoxes[id] = nb;
-                Fields.Children.Add(nb);
-            }
+            AddBudgetComposer(rev);
         }
         catch (Exception ex)
         {
@@ -3092,11 +3420,649 @@ public sealed partial class FirstRunPage : Page
         }
     }
 
-    private async Task SaveBudgetsAndAdvanceAsync()
+    private static NumberBox CurrencyAmountBox(string header, double value)
+    {
+        var nb = new NumberBox
+        {
+            Header = header,
+            Value = value,
+            Minimum = 0,
+            SmallChange = 1,
+            LargeChange = 10,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            MinWidth = 168,
+        };
+        try
+        {
+            nb.NumberFormatter = new CurrencyFormatter(CurrencyIdentifiers.USD)
+            {
+                FractionDigits = 2,
+                IsGrouped = true,
+            };
+        }
+        catch
+        {
+            /* formatter is optional — $ prefix still reads as money */
+        }
+        return nb;
+    }
+
+    private UIElement BuildBudgetRow(JsonElement r)
+    {
+        var id = JsonUi.Int(r, "id", 0);
+        var name = JsonUi.Str(r, "name", "Budget");
+        var periodLabel = JsonUi.Str(r, "period_label");
+        if (string.IsNullOrWhiteSpace(periodLabel) || periodLabel == "—")
+            periodLabel = JsonUi.Str(r, "period", "monthly");
+        var amtStr = JsonUi.Str(r, "amount", "0");
+        double.TryParse(amtStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var v);
+        var money = JsonUi.Str(r, "amount_display");
+        if (string.IsNullOrWhiteSpace(money) || money == "—")
+            money = MoneyUi.FormatLoose(amtStr);
+
+        var nb = CurrencyAmountBox("Amount", v);
+        if (id > 0) _budgetAmountBoxes[id] = nb;
+
+        var del = new Button { Content = "Delete", VerticalAlignment = VerticalAlignment.Bottom };
+        if (id > 0)
+        {
+            del.Click += async (_, _) =>
+            {
+                try { await ApplyBudgetUpdatesAsync(new object[] { new { id, delete = true } }); Render(); }
+                catch (Exception ex) { ErrorBar.Message = ex.Message; ErrorBar.IsOpen = true; }
+            };
+        }
+        else
+            del.IsEnabled = false;
+
+        var row = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 12) };
+        var titleLine = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        titleLine.Children.Add(new TextBlock
+        {
+            Text = name,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        var activity = BuildBudgetActivity(r, id);
+        var whyPanel = BuildBudgetWhyPanel(r, id, activity);
+        if (whyPanel is not null)
+            titleLine.Children.Add(whyPanel.Button);
+        row.Children.Add(titleLine);
+        row.Children.Add(new TextBlock
+        {
+            Text = $"{periodLabel} · typical {money}",
+            Opacity = 0.8,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        if (whyPanel is not null)
+            row.Children.Add(whyPanel.Detail);
+        row.Children.Add(BuildBudgetCategoryMovers(r, id));
+        var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        line.Children.Add(nb);
+        line.Children.Add(del);
+        row.Children.Add(line);
+        return row;
+    }
+
+    private void LoadBudgetLookups(JsonElement rev)
+    {
+        _budgetReassignCats.Clear();
+        _budgetBooks.Clear();
+        var catSrc = rev.TryGetProperty("reassign_categories", out var rc) && rc.ValueKind == JsonValueKind.Array
+            ? rc
+            : rev.TryGetProperty("categories", out var c2) && c2.ValueKind == JsonValueKind.Array ? c2 : default;
+        if (catSrc.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in catSrc.EnumerateArray())
+            {
+                var cid = JsonUi.Int(c, "id", 0);
+                var name = JsonUi.Str(c, "name");
+                if (cid > 0 && !string.IsNullOrWhiteSpace(name) && name != "—")
+                    _budgetReassignCats.Add((cid, name));
+            }
+        }
+        if (rev.TryGetProperty("books", out var books) && books.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var b in books.EnumerateArray())
+            {
+                var bid = JsonUi.Int(b, "id", 0);
+                var name = JsonUi.Str(b, "display_name");
+                if (bid > 0 && !string.IsNullOrWhiteSpace(name) && name != "—")
+                    _budgetBooks.Add((bid, name));
+            }
+        }
+    }
+
+    private UIElement? BuildBudgetActivity(JsonElement r, int ruleId)
+    {
+        if (!r.TryGetProperty("activity", out var act) || act.ValueKind != JsonValueKind.Object)
+            return null;
+        if (act.TryGetProperty("show", out var showEl) && showEl.ValueKind == JsonValueKind.False)
+            return null;
+        if (!act.TryGetProperty("transactions", out var txns) || txns.ValueKind != JsonValueKind.Array)
+            return null;
+        if (txns.GetArrayLength() == 0)
+        {
+            var empty = new TextBlock
+            {
+                Text = "No charges in the last months for this line — Recalculate after you recategorize older spend, or delete the line.",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.7,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            return empty;
+        }
+
+        var months = JsonUi.Int(act, "months", 3);
+        var shown = JsonUi.Int(act, "shown_count", 0);
+        var total = JsonUi.Int(act, "total_count", shown);
+        var fromL = JsonUi.Str(act, "window_start_label");
+        var toL = JsonUi.Str(act, "window_end_label");
+        var sum = JsonUi.Str(act, "total_abs_display");
+        if (string.IsNullOrWhiteSpace(sum) || sum == "—")
+            sum = MoneyUi.FormatLoose(JsonUi.Str(act, "total_abs"));
+        var panel = new StackPanel { Spacing = 6, Margin = new Thickness(0, 8, 0, 0) };
+        var actHead = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        actHead.Children.Add(new TextBlock
+        {
+            Text = $"Last {months} months in this math ({fromL} – {toL}) · {total} charges · {sum}"
+                + (shown < total ? $" · showing {shown}" : ""),
+            TextWrapping = TextWrapping.Wrap,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+        });
+        if (ruleId > 0)
+        {
+            var recalc = new Button { Content = "Recalculate", VerticalAlignment = VerticalAlignment.Center };
+            var rid = ruleId;
+            recalc.Click += async (_, _) =>
+            {
+                try { await RecalculateBudgetLineAsync(rid); }
+                catch (Exception ex) { ErrorBar.Message = ex.Message; ErrorBar.IsOpen = true; }
+            };
+            actHead.Children.Add(recalc);
+        }
+        panel.Children.Add(actHead);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Recategorize a charge or move it to another book, then Recalculate this line.",
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.75,
+            FontSize = 12,
+        });
+
+        foreach (var t in txns.EnumerateArray())
+        {
+            var tid = JsonUi.Int(t, "id", 0);
+            if (tid <= 0) continue;
+            var dateL = JsonUi.Str(t, "date_label");
+            if (string.IsNullOrWhiteSpace(dateL) || dateL == "—")
+                dateL = JsonUi.Str(t, "date");
+            var payee = JsonUi.Str(t, "payee", "Charge");
+            var amtDisp = JsonUi.Str(t, "amount_display");
+            if (string.IsNullOrWhiteSpace(amtDisp) || amtDisp == "—")
+                amtDisp = MoneyUi.FormatLoose(JsonUi.Str(t, "amount"));
+            var acct = JsonUi.Str(t, "account_name");
+            var curCat = JsonUi.Int(t, "category_id", 0);
+            var curBook = JsonUi.Int(t, "profile_id", 0);
+            var sameN = JsonUi.Int(t, "same_payee_count", 1);
+            var payeeLabel = payee;
+
+            var block = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 8) };
+            var head = new TextBlock { TextWrapping = TextWrapping.Wrap };
+            head.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = dateL + "  " });
+            head.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+            {
+                Text = payee,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            });
+            if (!string.IsNullOrWhiteSpace(acct) && acct != "—")
+                head.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = " · " + acct });
+            var isBill = t.TryGetProperty("is_bill", out var ib) && ib.ValueKind == JsonValueKind.True;
+            if (isBill)
+                head.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = "  · bill" });
+            head.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = "  " });
+            if (MoneyUi.TryParse(JsonUi.Str(t, "amount"), out var decAmt) && decAmt < 0)
+            {
+                var run = MoneyUi.Run(decAmt);
+                head.Inlines.Add(run);
+            }
+            else
+                head.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = amtDisp });
+            block.Children.Add(head);
+
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var catBox = new ComboBox
+            {
+                Header = "Category",
+                MinWidth = 180,
+                PlaceholderText = "Recategorize",
+            };
+            ComboBoxItem? catSel = null;
+            foreach (var c in _budgetReassignCats)
+            {
+                var item = new ComboBoxItem { Content = c.Name, Tag = c.Id };
+                catBox.Items.Add(item);
+                if (c.Id == curCat) catSel = item;
+            }
+            if (catSel is not null) catBox.SelectedItem = catSel;
+            var txnId = tid;
+            var lineId = ruleId;
+            catBox.SelectionChanged += async (_, _) =>
+            {
+                if (_budgetReassignBusy) return;
+                if (catBox.SelectedItem is not ComboBoxItem item || item.Tag is not int cid || cid <= 0)
+                    return;
+                if (cid == curCat) return;
+                try
+                {
+                    var all = false;
+                    if (sameN > 1)
+                    {
+                        var choice = await AskVendorRecategorizeAsync(payeeLabel, sameN);
+                        if (choice is null)
+                        {
+                            _budgetReassignBusy = true;
+                            catBox.SelectedItem = catSel;
+                            _budgetReassignBusy = false;
+                            return;
+                        }
+                        all = choice.Value;
+                    }
+                    await ReassignBudgetTxnAsync(lineId, txnId, categoryId: cid, profileId: null, allSamePayee: all);
+                }
+                catch (Exception ex) { ErrorBar.Message = ex.Message; ErrorBar.IsOpen = true; }
+            };
+            actions.Children.Add(catBox);
+
+            if (_budgetBooks.Count > 1)
+            {
+                var bookBox = new ComboBox
+                {
+                    Header = "Book",
+                    MinWidth = 140,
+                    PlaceholderText = "Move book",
+                };
+                ComboBoxItem? bookSel = null;
+                foreach (var b in _budgetBooks)
+                {
+                    var item = new ComboBoxItem { Content = b.Name, Tag = b.Id };
+                    bookBox.Items.Add(item);
+                    if (b.Id == curBook) bookSel = item;
+                }
+                if (bookSel is not null) bookBox.SelectedItem = bookSel;
+                bookBox.SelectionChanged += async (_, _) =>
+                {
+                    if (bookBox.SelectedItem is not ComboBoxItem item || item.Tag is not int bid || bid <= 0)
+                        return;
+                    if (bid == curBook) return;
+                    try { await ReassignBudgetTxnAsync(lineId, txnId, categoryId: null, profileId: bid); }
+                    catch (Exception ex) { ErrorBar.Message = ex.Message; ErrorBar.IsOpen = true; }
+                };
+                actions.Children.Add(bookBox);
+            }
+            block.Children.Add(actions);
+            panel.Children.Add(block);
+        }
+        return panel;
+    }
+
+    private bool _budgetReassignBusy;
+
+    private async Task<bool?> AskVendorRecategorizeAsync(string payee, int count)
+    {
+        if (count <= 1)
+            return false;
+        if (XamlRoot is null)
+            return false;
+        var dlg = new ContentDialog
+        {
+            Title = "Recategorize this vendor?",
+            Content = $"Apply to all {count} charges from {payee} on this book (every date), or just this one?",
+            PrimaryButtonText = $"All {count}",
+            SecondaryButtonText = "Just this one",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = XamlRoot,
+        };
+        var result = await dlg.ShowAsync();
+        if (result == ContentDialogResult.Primary) return true;
+        if (result == ContentDialogResult.Secondary) return false;
+        return null;
+    }
+
+    private async Task RecalculateBudgetLineAsync(int id)
     {
         using var api = new LedgerApiClient();
         await api.EnsureBackendAsync();
-        var updates = new List<object>();
+        var res = await api.ApplySetupBudgetsAsync(new { updates = new object[] { new { id, recalculate = true } } });
+        string? pending = null;
+        if (res.TryGetProperty("changed", out var ch) && ch.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in ch.EnumerateArray())
+            {
+                var msg = JsonUi.Str(c, "message");
+                if (!string.IsNullOrWhiteSpace(msg) && msg != "—")
+                    pending = msg;
+            }
+        }
+        Render();
+        if (!string.IsNullOrWhiteSpace(pending))
+        {
+            InfoBar.Title = "Budgets";
+            InfoBar.Message = pending;
+            InfoBar.IsOpen = true;
+        }
+    }
+
+    private async Task ReassignBudgetTxnAsync(int ruleId, int txnId, int? categoryId, int? profileId, bool allSamePayee = false)
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        await api.ApplySetupBudgetsAsync(new
+        {
+            updates = new object[]
+            {
+                new
+                {
+                    id = ruleId,
+                    transaction_id = txnId,
+                    category_id = categoryId,
+                    profile_id = profileId,
+                    all_same_payee = allSamePayee,
+                },
+            },
+        });
+        Render();
+    }
+
+    private UIElement BuildBudgetCategoryMovers(JsonElement r, int ruleId)
+    {
+        var wrap = new StackPanel { Spacing = 4, Margin = new Thickness(0, 2, 0, 2) };
+        wrap.Children.Add(new TextBlock
+        {
+            Text = "Categories on this line",
+            Opacity = 0.7,
+            FontSize = 12,
+        });
+        var members = new List<(int Id, string Name)>();
+        if (r.TryGetProperty("member_categories", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in arr.EnumerateArray())
+            {
+                var cid = JsonUi.Int(c, "id", 0);
+                var cname = JsonUi.Str(c, "name");
+                if (cid > 0 && !string.IsNullOrWhiteSpace(cname) && cname != "—")
+                    members.Add((cid, cname));
+            }
+        }
+        if (members.Count == 0)
+        {
+            var fallback = JsonUi.Int(r, "category_id", 0);
+            var fallbackName = JsonUi.Str(r, "name", "Category");
+            if (fallback > 0)
+                members.Add((fallback, fallbackName));
+        }
+
+        var targets = new List<(int Id, string Label)>();
+        if (r.TryGetProperty("move_targets", out var tarr) && tarr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var t in tarr.EnumerateArray())
+            {
+                var tid = JsonUi.Int(t, "id", 0);
+                if (tid <= 0) continue;
+                var tname = JsonUi.Str(t, "name", "Budget");
+                var tper = JsonUi.Str(t, "period_label");
+                var label = (!string.IsNullOrWhiteSpace(tper) && tper != "—")
+                    ? $"{tname} · {tper}"
+                    : tname;
+                targets.Add((tid, label));
+            }
+        }
+
+        foreach (var mem in members)
+        {
+            var catRow = new Grid { ColumnSpacing = 8 };
+            catRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            catRow.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var nameTb = new TextBlock
+            {
+                Text = mem.Name,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(nameTb, 0);
+            catRow.Children.Add(nameTb);
+
+            var move = new ComboBox
+            {
+                PlaceholderText = "Move to…",
+                MinWidth = 180,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            if (members.Count > 1)
+                move.Items.Add(new ComboBoxItem { Content = "New budget line", Tag = "new" });
+            foreach (var t in targets)
+                move.Items.Add(new ComboBoxItem { Content = t.Label, Tag = $"rule:{t.Id}" });
+            if (move.Items.Count == 0)
+            {
+                move.Items.Add(new ComboBoxItem { Content = "No other lines yet", IsEnabled = false });
+                move.IsEnabled = false;
+            }
+            var fromId = ruleId;
+            var catId = mem.Id;
+            move.SelectionChanged += async (_, _) =>
+            {
+                if (move.SelectedItem is not ComboBoxItem item || item.Tag is not string tag)
+                    return;
+                try
+                {
+                    if (tag == "new")
+                        await ApplyBudgetMoveAsync(fromId, catId, null, toNew: true);
+                    else if (tag.StartsWith("rule:", StringComparison.Ordinal) &&
+                             int.TryParse(tag[5..], out var destId) && destId > 0)
+                        await ApplyBudgetMoveAsync(fromId, catId, destId, toNew: false);
+                }
+                catch (Exception ex)
+                {
+                    ErrorBar.Message = ex.Message;
+                    ErrorBar.IsOpen = true;
+                }
+            };
+            Grid.SetColumn(move, 1);
+            catRow.Children.Add(move);
+            wrap.Children.Add(catRow);
+        }
+        return wrap;
+    }
+
+    private async Task ApplyBudgetMoveAsync(int fromId, int categoryId, int? toRuleId, bool toNew)
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        await api.ApplySetupBudgetsAsync(new
+        {
+            updates = new object[]
+            {
+                new
+                {
+                    id = fromId,
+                    move_category_id = categoryId,
+                    to_rule_id = toRuleId,
+                    to_new = toNew,
+                },
+            },
+        });
+        Render();
+    }
+
+    private sealed class BudgetWhyBits
+    {
+        public required Button Button { get; init; }
+        public required UIElement Detail { get; init; }
+    }
+
+    private BudgetWhyBits? BuildBudgetWhyPanel(JsonElement r, int ruleId, UIElement? extra)
+    {
+        var title = "How we got this number";
+        var lines = new List<string>();
+        if (r.TryGetProperty("why", out var why) && why.ValueKind == JsonValueKind.Object)
+        {
+            title = JsonUi.Str(why, "title", title);
+            if (string.IsNullOrWhiteSpace(title) || title == "—")
+                title = "How we got this number";
+            if (why.TryGetProperty("lines", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in arr.EnumerateArray())
+                {
+                    var s = item.ValueKind == JsonValueKind.String ? item.GetString() : null;
+                    if (!string.IsNullOrWhiteSpace(s))
+                        lines.Add(s);
+                }
+            }
+        }
+        if (lines.Count == 0 && extra is null)
+            return null;
+
+        var open = ruleId > 0 && _budgetWhyOpen.Contains(ruleId);
+        var detail = new StackPanel
+        {
+            Spacing = 4,
+            Visibility = open ? Visibility.Visible : Visibility.Collapsed,
+            Margin = new Thickness(0, 4, 0, 4),
+        };
+        if (lines.Count > 0)
+        {
+            detail.Children.Add(new TextBlock
+            {
+                Text = title,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            foreach (var line in lines)
+            {
+                detail.Children.Add(new TextBlock
+                {
+                    Text = "• " + line,
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.8,
+                });
+            }
+        }
+        if (extra is not null)
+            detail.Children.Add(extra);
+
+        var whyBtn = new Button
+        {
+            Content = "?",
+            Width = 28,
+            Height = 28,
+            MinWidth = 28,
+            Padding = new Thickness(0),
+            FontSize = 14,
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            CornerRadius = new CornerRadius(14),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        ToolTipService.SetToolTip(whyBtn, extra is not null
+            ? "How we got this number and the charges behind it"
+            : "How we got this number");
+        whyBtn.Click += (_, _) =>
+        {
+            var nowOpen = detail.Visibility != Visibility.Visible;
+            detail.Visibility = nowOpen ? Visibility.Visible : Visibility.Collapsed;
+            if (ruleId <= 0) return;
+            if (nowOpen) _budgetWhyOpen.Add(ruleId);
+            else _budgetWhyOpen.Remove(ruleId);
+        };
+        return new BudgetWhyBits { Button = whyBtn, Detail = detail };
+    }
+
+    private void AddBudgetComposer(JsonElement rev)
+    {
+        Fields.Children.Add(new TextBlock
+        {
+            Text = "Add a budget",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 8, 0, 0),
+        });
+        _budgetAddCat = new ComboBox
+        {
+            Header = "Category",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            PlaceholderText = "Pick a category",
+        };
+        if (rev.TryGetProperty("categories", out var cats) && cats.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var c in cats.EnumerateArray())
+            {
+                var id = JsonUi.Int(c, "id", 0);
+                var name = JsonUi.Str(c, "name");
+                if (id <= 0 || string.IsNullOrWhiteSpace(name) || name == "—") continue;
+                _budgetAddCat.Items.Add(new ComboBoxItem { Content = name, Tag = id });
+            }
+        }
+        if (_budgetAddCat.Items.Count > 0)
+            _budgetAddCat.SelectedIndex = 0;
+
+        _budgetAddPeriod = new ComboBox
+        {
+            Header = "How often",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        _budgetAddPeriod.Items.Add(new ComboBoxItem { Content = "Per workday", Tag = "daily_workday" });
+        _budgetAddPeriod.Items.Add(new ComboBoxItem { Content = "Per day", Tag = "daily" });
+        _budgetAddPeriod.Items.Add(new ComboBoxItem { Content = "Weekly", Tag = "weekly" });
+        _budgetAddPeriod.Items.Add(new ComboBoxItem { Content = "Bi-weekly", Tag = "biweekly" });
+        _budgetAddPeriod.Items.Add(new ComboBoxItem { Content = "Monthly", Tag = "monthly", IsSelected = true });
+        _budgetAddPeriod.Items.Add(new ComboBoxItem { Content = "Annual", Tag = "yearly" });
+        _budgetAddPeriod.SelectedIndex = 4;
+
+        _budgetAddAmt = CurrencyAmountBox("Amount", 0);
+        var addBtn = new Button { Content = "Add budget line", HorizontalAlignment = HorizontalAlignment.Left };
+        addBtn.Click += async (_, _) =>
+        {
+            try { await AddBudgetLineAsync(); }
+            catch (Exception ex) { ErrorBar.Message = ex.Message; ErrorBar.IsOpen = true; }
+        };
+        Fields.Children.Add(_budgetAddCat);
+        Fields.Children.Add(_budgetAddPeriod);
+        Fields.Children.Add(_budgetAddAmt);
+        Fields.Children.Add(addBtn);
+    }
+
+    private async Task AddBudgetLineAsync()
+    {
+        if (_budgetProfileId is null or 0)
+            throw new InvalidOperationException("No book to add a budget on.");
+        if (_budgetAddCat?.SelectedItem is not ComboBoxItem catItem || catItem.Tag is not int catId || catId <= 0)
+            throw new InvalidOperationException("Pick a category.");
+        var period = "monthly";
+        if (_budgetAddPeriod?.SelectedItem is ComboBoxItem pItem && pItem.Tag is string tag && !string.IsNullOrWhiteSpace(tag))
+            period = tag;
+        var amt = _budgetAddAmt is { Value: var v } && !double.IsNaN(v) ? (decimal)v : 0m;
+        var name = catItem.Content?.ToString();
+        await ApplyBudgetUpdatesAsync(new object[]
+        {
+            new
+            {
+                create = true,
+                profile_id = _budgetProfileId.Value,
+                category_id = catId,
+                period,
+                amount = amt,
+                name,
+            },
+        });
+        Render();
+    }
+
+    private async Task ApplyBudgetUpdatesAsync(IEnumerable<object> extra)
+    {
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        var updates = new List<object>(extra);
         foreach (var kv in _budgetAmountBoxes)
         {
             var val = kv.Value.Value;
@@ -3105,6 +4071,197 @@ public sealed partial class FirstRunPage : Page
         }
         if (updates.Count > 0)
             await api.ApplySetupBudgetsAsync(new { updates });
+    }
+
+    private sealed class BudgetPlanDraft
+    {
+        public int? Id;
+        public string Name = "";
+        public NumberBox? Amt;
+        public CheckBox? Confirm;
+        public string Cadence = "monthly";
+        public string? NextDate;
+        public int? AccountId;
+        public bool Existing;
+        public Button? MoveBtn;
+        public bool MoveToBudget;
+    }
+
+    private async Task RenderBudgetIncomeAsync()
+    {
+        QuestionText.Text = "Income — step 1 of 3";
+        HintText.Text = "Paychecks and other deposits."
+        NextBtn.Content = "Save income & continue";
+        _budgetPlanDraft.Clear();
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var rev = await api.GetBudgetPlanAsync("income", profileId: _catBookId);
+            _budgetProfileId = JsonUi.Int(rev, "profile_id", 0);
+            if (_budgetProfileId == 0) _budgetProfileId = null;
+            AddBudgetPlanRows(rev, "existing", confirmable: false);
+            AddBudgetPlanRows(rev, "detected", confirmable: true);
+            if (_budgetPlanDraft.Count == 0)
+            {
+                Fields.Children.Add(new TextBlock
+                {
+                    Text = "No repeating deposits yet.",
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.75,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private async Task RenderBudgetBillsAsync()
+    {
+        QuestionText.Text = "Recurring bills — step 2 of 3";
+        HintText.Text = "Mortgage, rent, cell, internet, utilities, insurance, loans.";
+        NextBtn.Content = "Save bills & continue";
+        _budgetPlanDraft.Clear();
+        try
+        {
+            using var api = new LedgerApiClient();
+            await api.EnsureBackendAsync();
+            var rev = await api.GetBudgetPlanAsync("bills", profileId: _catBookId);
+            _budgetProfileId = JsonUi.Int(rev, "profile_id", 0);
+            if (_budgetProfileId == 0) _budgetProfileId = null;
+            AddBudgetPlanRows(rev, "existing", confirmable: false, allowMove: true);
+            AddBudgetPlanRows(rev, "detected", confirmable: true, allowMove: true);
+        }
+        catch (Exception ex)
+        {
+            Fields.Children.Add(new TextBlock { Text = ex.Message, TextWrapping = TextWrapping.Wrap });
+        }
+    }
+
+    private void AddBudgetPlanRows(JsonElement rev, string prop, bool confirmable, bool allowMove = false)
+    {
+        if (!rev.TryGetProperty(prop, out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return;
+        if (arr.GetArrayLength() == 0) return;
+        Fields.Children.Add(new TextBlock
+        {
+            Text = prop == "existing" ? "Already on the books" : "From your history",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 8, 0, 4),
+        });
+        foreach (var row in arr.EnumerateArray())
+        {
+            var name = JsonUi.Str(row, "name", "Line");
+            var cadence = JsonUi.Str(row, "cadence", "monthly");
+            var kind = JsonUi.Str(row, "kind_label");
+            double.TryParse(JsonUi.Str(row, "amount", "0"), NumberStyles.Any, CultureInfo.InvariantCulture, out var v);
+            var nb = CurrencyAmountBox("Amount", v);
+            var draft = new BudgetPlanDraft
+            {
+                Id = JsonUi.Int(row, "id", 0) is int i && i > 0 ? i : null,
+                Name = name,
+                Amt = nb,
+                Cadence = cadence == "—" ? "monthly" : cadence,
+                NextDate = JsonUi.Str(row, "next_date"),
+                AccountId = JsonUi.Int(row, "account_id", 0) is int a && a > 0 ? a : null,
+                Existing = prop == "existing",
+            };
+            if (draft.NextDate == "—") draft.NextDate = null;
+            var head = new TextBlock { TextWrapping = TextWrapping.Wrap };
+            var label = name;
+            if (!string.IsNullOrWhiteSpace(kind) && kind != "—")
+                label += " · " + kind;
+            label += " · " + cadence;
+            head.Text = label;
+            Fields.Children.Add(head);
+            var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 10) };
+            if (confirmable)
+            {
+                var on = new CheckBox
+                {
+                    Content = "Confirm",
+                    IsChecked = !row.TryGetProperty("selected", out var sel) || sel.ValueKind != JsonValueKind.False,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                };
+                draft.Confirm = on;
+                line.Children.Add(on);
+            }
+            line.Children.Add(nb);
+            if (allowMove)
+            {
+                var mv = new Button { Content = "Move to variable budget", VerticalAlignment = VerticalAlignment.Bottom };
+                var d = draft;
+                mv.Click += (_, _) =>
+                {
+                    d.MoveToBudget = true;
+                    if (d.Confirm is not null) d.Confirm.IsChecked = false;
+                    mv.IsEnabled = false;
+                    mv.Content = "Will move";
+                };
+                draft.MoveBtn = mv;
+                line.Children.Add(mv);
+            }
+            Fields.Children.Add(line);
+            _budgetPlanDraft.Add(draft);
+        }
+    }
+
+    private async Task SaveBudgetPlanStepAsync(string step)
+    {
+        var updates = new List<object>();
+        foreach (var d in _budgetPlanDraft)
+        {
+            var amt = d.Amt is { Value: var v } && !double.IsNaN(v) ? (decimal)v : 0m;
+            if (d.MoveToBudget)
+            {
+                updates.Add(new { id = d.Id, name = d.Name, move_to_budget = true, amount = amt });
+                continue;
+            }
+            if (d.Existing && d.Id is > 0)
+            {
+                updates.Add(new { id = d.Id, amount = amt, cadence = d.Cadence, next_date = d.NextDate, name = d.Name });
+                continue;
+            }
+            var on = d.Confirm?.IsChecked != false;
+            if (!on) continue;
+            updates.Add(new
+            {
+                create = true,
+                selected = true,
+                name = d.Name,
+                amount = amt,
+                cadence = d.Cadence,
+                next_date = d.NextDate,
+                account_id = d.AccountId,
+                profile_id = _budgetProfileId,
+            });
+        }
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
+        await api.ApplyBudgetPlanAsync(new { step, updates, profile_id = _budgetProfileId });
+    }
+
+    private async Task SaveBudgetsAndAdvanceAsync()
+    {
+        if (_budgetPlanStep == "income")
+        {
+            await SaveBudgetPlanStepAsync("income");
+            _budgetPlanStep = "bills";
+            Render();
+            return;
+        }
+        if (_budgetPlanStep == "bills")
+        {
+            await SaveBudgetPlanStepAsync("bills");
+            _budgetPlanStep = "envelopes";
+            Render();
+            return;
+        }
+        await ApplyBudgetUpdatesAsync(Array.Empty<object>());
+        using var api = new LedgerApiClient();
+        await api.EnsureBackendAsync();
         var st = await api.SetupAdvanceAsync("next");
         ApplyState(st);
         Render();

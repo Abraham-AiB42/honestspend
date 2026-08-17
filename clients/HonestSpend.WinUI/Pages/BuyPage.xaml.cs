@@ -148,6 +148,12 @@ public sealed partial class BuyPage : Page
         PromoBox.IsEnabled = !busy;
         PlanMonthsBox.IsEnabled = !busy;
         PlanMonthlyBox.IsEnabled = !busy;
+        BnplProviderBox.IsEnabled = !busy;
+        BnplPlanBox.IsEnabled = !busy;
+        BnplPaymentsBox.IsEnabled = !busy;
+        BnplAprBox.IsEnabled = !busy;
+        BnplOrigBox.IsEnabled = !busy;
+        BnplServiceBox.IsEnabled = !busy;
         if (busy)
             ScenarioMsg.Text = "Checking purchase…";
     }
@@ -187,9 +193,42 @@ public sealed partial class BuyPage : Page
     {
         var mode = SelectedPromoMode();
         PlanPanel.Visibility = mode == "purchase_plan" ? Visibility.Visible : Visibility.Collapsed;
+        BnplPanel.Visibility = mode == "bnpl" ? Visibility.Visible : Visibility.Collapsed;
+        if (mode == "bnpl")
+            ApplyBnplProviderDefaults();
         if (_suppressPromoNav || _busy) return;
         if (mode == "new_offer")
             OpenOffersDesk();
+    }
+
+    private void BnplProvider_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressPromoNav) return;
+        ApplyBnplProviderDefaults();
+    }
+
+    private void ApplyBnplProviderDefaults()
+    {
+        var provider = SelectedBnplProvider();
+        if (BnplPlanBox.Items.Count < 2) return;
+        if (provider == "affirm")
+            BnplPlanBox.SelectedIndex = 1;
+        else
+            BnplPlanBox.SelectedIndex = 0;
+    }
+
+    private string SelectedBnplProvider()
+    {
+        if (BnplProviderBox.SelectedItem is ComboBoxItem item && item.Tag is string t)
+            return t;
+        return "klarna";
+    }
+
+    private string SelectedBnplPlan()
+    {
+        if (BnplPlanBox.SelectedItem is ComboBoxItem item && item.Tag is string t)
+            return t;
+        return "pay_in_4";
     }
 
     private void OpenOffersDesk()
@@ -240,6 +279,27 @@ public sealed partial class BuyPage : Page
             return null;
         if (mode == "card_intro")
             return new { mode = "card_intro" };
+        if (mode == "bnpl")
+        {
+            int? payments = null;
+            if (!double.IsNaN(BnplPaymentsBox.Value) && BnplPaymentsBox.Value >= 2)
+                payments = (int)BnplPaymentsBox.Value;
+            string? apr = null;
+            if (!double.IsNaN(BnplAprBox.Value) && BnplAprBox.Value > 0)
+                apr = ((decimal)BnplAprBox.Value).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+            string? orig = FeeOrNull(BnplOrigBox);
+            string? svc = FeeOrNull(BnplServiceBox);
+            return new
+            {
+                mode = "bnpl",
+                provider = SelectedBnplProvider(),
+                plan = SelectedBnplPlan(),
+                payments,
+                apr,
+                origination_fee = orig,
+                service_fee = svc,
+            };
+        }
 
         int? months = null;
         if (!double.IsNaN(PlanMonthsBox.Value) && PlanMonthsBox.Value >= 1)
@@ -248,6 +308,13 @@ public sealed partial class BuyPage : Page
         if (!double.IsNaN(PlanMonthlyBox.Value) && PlanMonthlyBox.Value > 0)
             monthly = ((decimal)PlanMonthlyBox.Value).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
         return new { mode = "purchase_plan", months, monthly };
+    }
+
+    private static string? FeeOrNull(NumberBox box)
+    {
+        if (double.IsNaN(box.Value) || box.Value <= 0)
+            return null;
+        return ((decimal)box.Value).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private async void Check_Click(object sender, RoutedEventArgs e)
@@ -338,6 +405,25 @@ public sealed partial class BuyPage : Page
             ReasonText.Text = string.Join("\n", reasonBits);
             if (rec.TryGetProperty("remaining_after", out var rem) && rem.ValueKind != JsonValueKind.Null)
                 ReasonText.Text += $"\nSafe to spend after: {JsonUi.Money(rec, "remaining_after")}";
+
+            if (res.TryGetProperty("bnpl_quote", out var bq) && bq.ValueKind == JsonValueKind.Object)
+            {
+                reasonBits.Add(
+                    $"BNPL {JsonUi.Str(bq, "provider_name")}: ${JsonUi.Str(bq, "first_due")} today, " +
+                    $"then {JsonUi.Int(bq, "remaining_count", 0)}×${JsonUi.Str(bq, "installment")} {JsonUi.Str(bq, "cadence")}. " +
+                    $"Total ${JsonUi.Str(bq, "total_cost")} (fees ${JsonUi.Str(bq, "fees")}). " +
+                    JsonUi.Str(bq, "note"));
+                var late = JsonUi.Str(bq, "late_fee_typical", "0");
+                if (late is not ("0" or "0.00" or "—" or ""))
+                    reasonBits.Add($"Typical late fee if you miss: ${late} (not included in this quote).");
+            }
+            if (res.TryGetProperty("existing_bnpl", out var exb) && exb.ValueKind == JsonValueKind.Object
+                && JsonUi.Int(exb, "count", 0) > 0)
+            {
+                reasonBits.Add(
+                    $"Already on the books: {JsonUi.Int(exb, "count", 0)} BNPL plan(s), " +
+                    $"${JsonUi.Str(exb, "remaining_total")} still coming due.");
+            }
 
             if (res.TryGetProperty("ifpp_snapshot", out var snap) && snap.ValueKind == JsonValueKind.Object)
             {
@@ -437,7 +523,19 @@ public sealed partial class BuyPage : Page
         var name = JsonUi.Str(rec, "account_name");
         if (string.IsNullOrEmpty(name) || name == "—")
             return "No recommended account.";
-        var bits = new List<string> { $"Charge {name}" };
+        var bits = new List<string>();
+        if (string.Equals(JsonUi.Str(rec, "method"), "bnpl", StringComparison.OrdinalIgnoreCase))
+        {
+            bits.Add($"Pay with {name}");
+            var first = JsonUi.Str(rec, "first_due", "");
+            if (!string.IsNullOrEmpty(first) && first != "—")
+                bits.Add($"${first} due today");
+            var extra = JsonUi.Str(rec, "extra_cost", "");
+            if (!string.IsNullOrEmpty(extra) && extra is not ("0" or "0.00" or "—"))
+                bits.Add($"${extra} in fees vs paying now");
+            return string.Join(" — ", bits);
+        }
+        bits.Add($"Charge {name}");
         var floatDays = JsonUi.Int(rec, "float_days", -1);
         if (floatDays >= 0)
             bits.Add($"{floatDays} day{(floatDays == 1 ? "" : "s")} interest-free");

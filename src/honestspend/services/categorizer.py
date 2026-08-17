@@ -52,8 +52,12 @@ def match_rule(rule: CategoryRule, text: str) -> bool:
 def suggest_from_rules(
     session: Session,
     txn: Transaction,
+    *,
+    sources: set[str] | None = None,
 ) -> Suggestion | None:
     q = session.query(CategoryRule).filter(CategoryRule.active.is_(True))
+    if sources:
+        q = q.filter(CategoryRule.source.in_(tuple(sources)))
     # Profile-specific first via priority; null profile_id = global
     rules = q.order_by(CategoryRule.priority.desc(), CategoryRule.id.asc()).all()
     text = _haystack(txn)
@@ -284,6 +288,23 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
+def _suggestion_from_catalog(session: Session, txn: Transaction, hit) -> Suggestion | None:
+    from honestspend.services.merchant_catalog import resolve_category
+
+    cat = resolve_category(session, hit.code, profile_id=txn.profile_id)
+    if not cat:
+        return None
+    return Suggestion(
+        category_id=cat.id,
+        category_code=cat.code,
+        category_name=cat.display_name,
+        confidence=hit.confidence,
+        source="catalog",
+        reason=hit.reason,
+        is_transfer=hit.is_transfer,
+    )
+
+
 def suggest_category(
     session: Session,
     txn: Transaction,
@@ -291,6 +312,24 @@ def suggest_category(
     use_grok: bool = True,
     use_llm: bool | None = None,
 ) -> Suggestion:
+    # User corrections beat every built-in map.
+    hit = suggest_from_rules(session, txn, sources={"learned"})
+    if hit:
+        return hit
+
+    from honestspend.services.merchant_catalog import suggest_catalog
+
+    catalog = suggest_catalog(
+        session,
+        payee=txn.payee or "",
+        memo=txn.memo or "",
+        profile_id=txn.profile_id,
+    )
+    if catalog:
+        mapped = _suggestion_from_catalog(session, txn, catalog)
+        if mapped:
+            return mapped
+
     hit = suggest_from_rules(session, txn)
     if hit:
         return hit
@@ -474,8 +513,22 @@ DEFAULT_RULE_SEEDS: list[tuple[str, str, str, int]] = [
     ("state farm", "contains", "PER_INSURANCE", 100),
     ("progressive", "contains", "PER_INSURANCE", 100),
     ("payment thank you", "contains", "SYS_CC_PAYMENT", 200),
+    ("automatic payment", "contains", "SYS_CC_PAYMENT", 210),
+    ("auto payment", "contains", "SYS_CC_PAYMENT", 200),
+    ("web payment", "contains", "SYS_CC_PAYMENT", 210),
+    ("directpay", "contains", "SYS_CC_PAYMENT", 210),
+    ("direct pay", "contains", "SYS_CC_PAYMENT", 210),
+    ("full balance", "contains", "SYS_CC_PAYMENT", 200),
     ("autopay", "contains", "SYS_CC_PAYMENT", 180),
     ("credit card payment", "contains", "SYS_CC_PAYMENT", 200),
+    ("from share", "contains", "SYS_TRANSFER", 200),
+    ("to share", "contains", "SYS_TRANSFER", 200),
+    ("interest charge", "contains", "PER_CC_INTEREST", 200),
+    ("finance charge", "contains", "PER_CC_INTEREST", 200),
+    ("statement credit", "contains", "SYS_TRANSFER", 190),
+    ("cash back reward", "contains", "SYS_TRANSFER", 190),
+    ("balance transfer fee", "contains", "PER_FEES", 210),
+    ("assoc pmt", "contains", "PER_HOA", 190),
     ("transfer", "contains", "SYS_TRANSFER", 90),
     ("venmo", "contains", "SYS_TRANSFER", 80),
     ("zelle", "contains", "SYS_TRANSFER", 80),

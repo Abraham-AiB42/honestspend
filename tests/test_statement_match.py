@@ -118,6 +118,190 @@ def test_cluster_attaches_statement_to_same_last4():
     assert sources[0]["accounts"][0].get("attachments")
 
 
+def test_cluster_last4_attaches_card_statement_to_misguessed_checking():
+    """Unique last-4 + same bank family beats a checking guess on the activity file."""
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "Chase4411_Activity_20260813.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:chase4411",
+                    "file_format": "csv",
+                    "kind": "checking",
+                    "last4": "4411",
+                    "bank_label": "Chase",
+                    "human_title": "Chase · Checking · …4411",
+                    "transactions_found": 40,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "20260813-statements-4411-.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:4411",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "last4": "4411",
+                    "brand": "Prime Visa",
+                    "bank_label": "Prime Visa",
+                    "is_statement": True,
+                    "human_title": "Prime Visa · …4411",
+                    "transactions_found": 22,
+                    "action": "create",
+                }
+            ],
+        },
+    ]
+    cluster_batch_sources(sources)
+    assert sources[1]["accounts"][0]["action"] == "attach"
+    assert sources[1]["accounts"][0]["attach_to_source_key"] == "csv:chase4411"
+
+
+def test_cluster_last4_attaches_when_kind_missing_or_qif_is_thin():
+    """Unique last-4 still folds a statement onto the download (kind/QIF count)."""
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "download.qif",
+            "accounts": [
+                {
+                    "source_key": "qif:card",
+                    "file_format": "qif",
+                    "kind": "",
+                    "last4": "8857",
+                    "human_title": "Card · …8857",
+                    "transactions_found": 3,
+                    "action": "create",
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "Statement_072026_8857.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:8857",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "last4": "8857",
+                    "is_statement": True,
+                    "human_title": "Card statement · …8857",
+                    "transactions_found": 2,
+                    "action": "create",
+                    "statement_fields": {"new_balance": "100.00"},
+                }
+            ],
+        },
+    ]
+    cluster_batch_sources(sources)
+    assert sources[1]["accounts"][0]["action"] == "attach"
+    assert sources[1]["accounts"][0]["attach_to_source_key"] == "qif:card"
+
+
+def test_last4_matches_existing_account_even_if_kind_wrong(tmp_path, monkeypatch):
+    from honestspend.db import Account, Profile
+    from honestspend.services.smart_import import _match_account
+
+    data = tmp_path / "data"
+    data.mkdir()
+    monkeypatch.setattr(settings, "data_dir", data)
+    engine = create_engine(f"sqlite:///{(data / 't.db').as_posix()}")
+    init_db(engine)
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    seed_all(s)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Apple Card · …8857",
+        institution="Apple Card",
+    )
+    s.add(card)
+    s.commit()
+    hit = _match_account(
+        s,
+        external_key=None,
+        acctid="8857",
+        nickname_hint="Apple Card",
+        kind="checking",
+        bank_label="Apple Card",
+        last4="8857",
+    )
+    assert hit is not None
+    assert hit.id == card.id
+    s.close()
+
+
+def test_attach_adopts_target_book(tmp_path):
+    """CSV folded onto a business statement keeps that book, not Personal."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from honestspend.db import init_db
+    from honestspend.seed import seed_all
+    from honestspend.services.smart_import import assign_plan_entities
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 't.db').as_posix()}")
+    init_db(engine)
+    Session = sessionmaker(bind=engine)
+    sources = [
+        {
+            "file_index": 0,
+            "filename": "card-statement.pdf",
+            "accounts": [
+                {
+                    "source_key": "pdf:biz",
+                    "file_format": "pdf",
+                    "kind": "credit",
+                    "suggested_entity_type": "business",
+                    "owner_name": "North Studio LLC",
+                    "suggested_nickname": "Ink Business · …4411",
+                    "action": "create",
+                    "confidence": 0.9,
+                }
+            ],
+        },
+        {
+            "file_index": 1,
+            "filename": "activity.csv",
+            "accounts": [
+                {
+                    "source_key": "csv:biz",
+                    "file_format": "csv",
+                    "kind": "credit",
+                    "suggested_entity_type": "personal",
+                    "suggested_nickname": "Chase · …4411",
+                    "action": "attach",
+                    "attach_to_file_index": 0,
+                    "attach_to_source_key": "pdf:biz",
+                    "confidence": 0.7,
+                }
+            ],
+        },
+    ]
+    with Session() as session:
+        seed_all(session)
+        assign_plan_entities(session, sources)
+        assert sources[0]["accounts"][0]["entity_key"].startswith("business:")
+        assert sources[1]["accounts"][0]["entity_key"] == sources[0]["accounts"][0]["entity_key"]
+        assert sources[1]["accounts"][0]["suggested_entity_type"] == "business"
+
+
+def test_commit_uses_entity_key_not_stale_profile():
+    from honestspend.services.smart_import import _profile_id_for_decision
+
+    keys = {"personal": 1, "business": 9}
+    dec = {"entity_key": "business", "profile_id": 1}
+    assert _profile_id_for_decision(dec, keys) == 9
+    dec2 = {"entity_key": "personal", "profile_id": 9}
+    assert _profile_id_for_decision(dec2, keys) == 1
+
+
 def test_cluster_does_not_merge_two_ofx_shares_via_member_number():
     sources = [
         {

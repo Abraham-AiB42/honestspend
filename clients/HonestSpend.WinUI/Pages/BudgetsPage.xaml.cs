@@ -103,7 +103,18 @@ public sealed partial class BudgetsPage : Page
             var rem = JsonUi.Str(it, "remaining");
             var status = JsonUi.Str(it, "status");
             var win = JsonUi.Str(it, "window_label");
-            list.Add($"{name}: plan ${plan} · spent ${actual} · left ${rem} · {status} ({win})");
+            var included = new List<string>();
+            if (it.TryGetProperty("member_categories", out var mems) && mems.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var c in mems.EnumerateArray())
+                {
+                    var cn = JsonUi.Str(c, "name");
+                    if (!string.IsNullOrWhiteSpace(cn) && cn != "—")
+                        included.Add(cn);
+                }
+            }
+            var catBit = included.Count > 0 ? " · " + string.Join(" + ", included) : "";
+            list.Add($"{name}{catBit}: plan ${plan} · spent ${actual} · left ${rem} · {status} ({win})");
         }
         if (list.Count == 0)
             list.Add($"No {period} budgets yet.");

@@ -826,11 +826,21 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> ApplySetupRecurringAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/setup/recurring/apply", body, ct);
 
-    public Task<JsonElement> GetSetupCategorizeAsync(int confirmCap = 20, CancellationToken ct = default)
-        => GetJsonAsync($"api/setup/categorize?confirm_cap={confirmCap}", ct);
+    public Task<JsonElement> GetSetupCategorizeAsync(int confirmCap = 20, int? profileId = null, CancellationToken ct = default)
+    {
+        var q = $"api/setup/categorize?confirm_cap={confirmCap}";
+        if (profileId is int pid && pid > 0)
+            q += $"&profile_id={pid}";
+        return GetJsonAsync(q, ct);
+    }
 
-    public Task<JsonElement> SetupCategorizeAutoAsync(bool useGrok = false, CancellationToken ct = default)
-        => PostJsonAsync("api/setup/categorize/auto", new { use_grok = useGrok, min_confidence = 0.85 }, ct);
+    public Task<JsonElement> SetupCategorizeAutoAsync(bool useGrok = false, int? profileId = null, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/categorize/auto", new
+        {
+            use_grok = useGrok,
+            min_confidence = 0.85,
+            profile_id = profileId,
+        }, ct);
 
     public Task<JsonElement> SetupCategorizeConfirmAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/setup/categorize/confirm", body, ct);
@@ -838,14 +848,34 @@ public sealed class LedgerApiClient : IDisposable
     public Task<JsonElement> SetupCategorizeUndoAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/setup/categorize/undo", body, ct);
 
-    public Task<JsonElement> GetSetupBudgetsAsync(bool seedIfEmpty = false, CancellationToken ct = default)
-        => GetJsonAsync($"api/setup/budgets?seed_if_empty={seedIfEmpty.ToString().ToLowerInvariant()}", ct);
+    public Task<JsonElement> CreateSetupCategoryAsync(string name, int? profileId = null, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/categorize/custom", new { name, profile_id = profileId }, ct);
 
-    public Task<JsonElement> SeedSetupBudgetsAsync(CancellationToken ct = default)
-        => PostJsonAsync("api/setup/budgets/seed", new { }, ct);
+    public Task<JsonElement> GetSetupBudgetsAsync(bool seedIfEmpty = false, int? profileId = null, CancellationToken ct = default)
+    {
+        var q = $"api/setup/budgets?seed_if_empty={seedIfEmpty.ToString().ToLowerInvariant()}";
+        if (profileId is > 0) q += $"&profile_id={profileId}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> SeedSetupBudgetsAsync(int? profileId = null, CancellationToken ct = default)
+        => PostJsonAsync(
+            profileId is > 0 ? $"api/setup/budgets/seed?profile_id={profileId}" : "api/setup/budgets/seed",
+            new { },
+            ct);
 
     public Task<JsonElement> ApplySetupBudgetsAsync(object body, CancellationToken ct = default)
         => PostJsonAsync("api/setup/budgets/apply", body, ct);
+
+    public Task<JsonElement> GetBudgetPlanAsync(string step, int? profileId = null, CancellationToken ct = default)
+    {
+        var q = $"api/setup/budget-plan?step={Uri.EscapeDataString(step)}";
+        if (profileId is > 0) q += $"&profile_id={profileId}";
+        return GetJsonAsync(q, ct);
+    }
+
+    public Task<JsonElement> ApplyBudgetPlanAsync(object body, CancellationToken ct = default)
+        => PostJsonAsync("api/setup/budget-plan/apply", body, ct);
 
     public Task<JsonElement> GetSetupBuffersAsync(CancellationToken ct = default)
         => GetJsonAsync("api/setup/buffers", ct);

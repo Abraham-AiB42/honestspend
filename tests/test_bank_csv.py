@@ -6,7 +6,7 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from honestspend.db import Account, Profile, ScheduledItem, Transaction, init_db
+from honestspend.db import Account, Profile, PromoInstallmentLine, ScheduledItem, Transaction, init_db
 from honestspend.seed import seed_all
 from honestspend.services.bank_csv import import_bank_csv
 
@@ -65,6 +65,91 @@ def test_import_simple_csv(tmp_path: Path):
     assert result2.transactions_created == 0
     assert result2.skipped_existing == 3
     assert result2.next_steps  # still guides user (duplicates / hold)
+    s.close()
+
+
+def test_csv_keeps_issuer_category_and_maps_it(tmp_path: Path):
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Card",
+        current_balance=Decimal("0"),
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Transaction Date,Posted Date,Description,Category,Type,Amount
+2026-08-01,2026-08-01,LOCAL MARKET,Groceries,Sale,-54.20
+2026-08-02,2026-08-02,CARD AUTOPAY PYMT,Payment/Credit,Payment,120.00
+"""
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        filename="card.csv",
+        auto_categorize=True,
+    )
+    assert result.transactions_created == 2
+    txns = s.query(Transaction).order_by(Transaction.txn_date).all()
+    assert "cat:Groceries" in (txns[0].memo or "")
+    assert "type:Payment" in (txns[1].memo or "")
+    codes = set()
+    from honestspend.db import Category
+
+    for t in txns:
+        cat = s.get(Category, t.category_id) if t.category_id else None
+        codes.add(cat.code if cat else None)
+    assert "PER_GROCERIES" in codes
+    assert "SYS_CC_PAYMENT" in codes
+    s.close()
+
+
+def test_apple_card_monthly_installments_csv_become_plans(tmp_path: Path):
+    """Apple activity CSV: Type=Installment N-of-M rows → purchase_plan, not spend."""
+    s = _session(tmp_path)
+    personal = s.query(Profile).filter(Profile.slug == "personal").one()
+    acct = Account(
+        profile_id=personal.id,
+        kind="credit",
+        nickname="Apple Card",
+        current_balance=Decimal("0"),
+    )
+    s.add(acct)
+    s.flush()
+    csv_text = """Transaction Date,Clearing Date,Description,Merchant,Category,Type,Amount (USD)
+07/31/2026,07/31/2026,MONTHLY INSTALLMENTS (11 OF 24),Monthly Installments (11 Of 24),Installment,Installment,41.62
+07/31/2026,07/31/2026,MONTHLY INSTALLMENTS (4 OF 6),Monthly Installments (4 Of 6),Installment,Installment,24.83
+07/31/2026,07/31/2026,MONTHLY INSTALLMENTS (4 OF 6),Monthly Installments (4 Of 6),Installment,Installment,24.83
+06/30/2026,06/30/2026,MONTHLY INSTALLMENTS (10 OF 24),Monthly Installments (10 Of 24),Installment,Installment,41.62
+08/14/2026,08/15/2026,COFFEE SHOP DOWNTOWN,Coffee Shop,Other,Purchase,4.50
+"""
+    result = import_bank_csv(
+        s,
+        account_id=acct.id,
+        file_obj=StringIO(csv_text),
+        filename="apple-card.csv",
+        auto_categorize=False,
+    )
+    assert result.transactions_created + result.skipped_existing == 5
+    assert result.promos_found >= 2
+    lines = s.query(PromoInstallmentLine).filter(PromoInstallmentLine.account_id == acct.id).all()
+    by_name_monthly = {(ln.name, ln.monthly_payment) for ln in lines}
+    assert ("Monthly installments · 24 mo", Decimal("41.62")) in by_name_monthly
+    # Two same-day $24.83 6-mo rows are one combined plan (file text still sees both)
+    assert ("Monthly installments · 6 mo", Decimal("49.66")) in by_name_monthly
+    from honestspend.services.setup_categorize import prepare_categorize
+
+    prepare_categorize(s, profile_id=personal.id)
+    s.flush()
+    inst = [
+        t
+        for t in s.query(Transaction).all()
+        if t.payee and "MONTHLY INSTALLMENTS" in t.payee
+    ]
+    coffee = [t for t in s.query(Transaction).all() if t.payee == "COFFEE SHOP DOWNTOWN"]
+    assert inst and all(t.status == "void" for t in inst)
+    assert coffee and coffee[0].status != "void"
     s.close()
 
 

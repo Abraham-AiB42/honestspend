@@ -194,7 +194,8 @@ public partial class App : Application
         // So tray / scripts can re-open this native client (not Glance/PWA)
         try { WinUiPaths.PublishExePathForTray(); } catch { /* ignore */ }
 
-        if (Backend is not null)
+        // First run: wait until they pick a books folder. Later launches start immediately.
+        if (Backend is not null && StorageLocationService.ShouldStartEngineOnLaunch())
         {
             _ = Task.Run(async () =>
             {

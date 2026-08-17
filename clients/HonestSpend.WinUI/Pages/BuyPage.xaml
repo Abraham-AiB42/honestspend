@@ -38,6 +38,7 @@
                 <ComboBoxItem Content="None" Tag="none" IsSelected="True" />
                 <ComboBoxItem Content="This card's intro 0%" Tag="card_intro" />
                 <ComboBoxItem Content="Purchase plan (months / monthly)" Tag="purchase_plan" />
+                <ComboBoxItem Content="Buy now, pay later (Klarna, Affirm, Afterpay…)" Tag="bnpl" />
                 <ComboBoxItem Content="I have a new offer" Tag="new_offer" />
             </ComboBox>
             <StackPanel x:Name="PlanPanel" Spacing="8" Visibility="Collapsed">
@@ -45,6 +46,32 @@
                            SpinButtonPlacementMode="Compact" PlaceholderText="Optional" />
                 <NumberBox x:Name="PlanMonthlyBox" Header="Monthly ($)" Minimum="0"
                            SpinButtonPlacementMode="Compact" PlaceholderText="Optional" />
+            </StackPanel>
+            <StackPanel x:Name="BnplPanel" Spacing="8" Visibility="Collapsed">
+                <ComboBox x:Name="BnplProviderBox" Header="Provider" SelectedIndex="0"
+                          HorizontalAlignment="Stretch" SelectionChanged="BnplProvider_SelectionChanged">
+                    <ComboBoxItem Content="Klarna" Tag="klarna" IsSelected="True" />
+                    <ComboBoxItem Content="Afterpay" Tag="afterpay" />
+                    <ComboBoxItem Content="Affirm" Tag="affirm" />
+                    <ComboBoxItem Content="PayPal Pay in 4" Tag="paypal_pay_in_4" />
+                    <ComboBoxItem Content="Zip" Tag="zip" />
+                    <ComboBoxItem Content="Sezzle" Tag="sezzle" />
+                </ComboBox>
+                <ComboBox x:Name="BnplPlanBox" Header="Plan" SelectedIndex="0"
+                          HorizontalAlignment="Stretch">
+                    <ComboBoxItem Content="Pay in 4 (every 2 weeks)" Tag="pay_in_4" IsSelected="True" />
+                    <ComboBoxItem Content="Monthly installments" Tag="monthly" />
+                </ComboBox>
+                <NumberBox x:Name="BnplPaymentsBox" Header="Payments (monthly plans)" Minimum="2" Maximum="36"
+                           SpinButtonPlacementMode="Compact" Value="12" />
+                <NumberBox x:Name="BnplAprBox" Header="APR % (from checkout)" Minimum="0" Maximum="40"
+                           SpinButtonPlacementMode="Compact" Value="0" />
+                <NumberBox x:Name="BnplOrigBox" Header="Origination / checkout fee ($)" Minimum="0"
+                           SpinButtonPlacementMode="Compact" Value="0" />
+                <NumberBox x:Name="BnplServiceBox" Header="Service fee ($)" Minimum="0"
+                           SpinButtonPlacementMode="Compact" Value="0" />
+                <TextBlock Opacity="0.7" TextWrapping="Wrap"
+                    Text="Fees you enter are split into the installments. Typical late fees are shown in the result and are not added unless you miss a payment." />
             </StackPanel>
             <ComboBox x:Name="CategoryBox" Header="Budget category (optional)" MaxDropDownHeight="320"
                       PlaceholderText="Any / uncategorized"

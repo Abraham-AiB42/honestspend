@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -224,6 +225,87 @@ def test_home_safe_to_spend_subtracts_reserve(db):
     assert reserve == Decimal("100.00")
     assert after == before - reserve
     assert "budgets" in home
+
+
+def test_combined_rule_sums_member_categories(db):
+    p = db.query(Profile).first()
+    food = db.query(Category).filter(Category.code == "TEST_FOOD").one()
+    gas = db.query(Category).filter(Category.code == "TEST_GAS").one()
+    acct = db.query(Account).first()
+    as_of = date(2026, 8, 10)
+    rule = bs.create_rule(
+        db,
+        profile_id=p.id,
+        category_id=food.id,
+        period="monthly",
+        amount=Decimal("200"),
+        name="Food + Gas",
+    )
+    bs.set_rule_members(db, rule, [food.id, gas.id])
+    db.add(
+        Transaction(
+            profile_id=p.id,
+            account_id=acct.id,
+            category_id=food.id,
+            txn_date=as_of,
+            amount=Decimal("-30"),
+            payee="Food",
+        )
+    )
+    db.add(
+        Transaction(
+            profile_id=p.id,
+            account_id=acct.id,
+            category_id=gas.id,
+            txn_date=as_of,
+            amount=Decimal("-20"),
+            payee="Gas",
+        )
+    )
+    db.commit()
+    st = bs.rule_status(db, rule, as_of=as_of)
+    assert st is not None
+    assert st["actual"] == "50.00"
+    assert {c["name"] for c in st["member_categories"]} == {"Food", "Gas"}
+
+
+def test_vendor_budget_key_is_us_generic():
+    from honestspend.services.recurring_detect import vendor_budget_key
+
+    assert vendor_budget_key("Payment to T-Mobile") == vendor_budget_key("T-MOBILE")
+    assert vendor_budget_key("XCEL EZ-PAY WEB MINNEAPOLIS MN") == vendor_budget_key(
+        "Payment to Xcel Energy"
+    )
+    assert vendor_budget_key("CITY OF SPRINGFIELD UTILITY") == "city of springfield"
+    assert vendor_budget_key("CITY OF AUSTIN WATER") == "city of austin"
+    assert vendor_budget_key("COMCAST CABLE") == vendor_budget_key("Comcast EZ-PAY WEB")
+
+
+def test_ceil_budget_never_under():
+    assert bs.ceil_budget_amount(Decimal("230.64"), "monthly") == Decimal("235")
+    assert bs.ceil_budget_amount(Decimal("99.95"), "daily") == Decimal("100")
+    assert bs.ceil_budget_amount(Decimal("130.69"), "weekly") == Decimal("131")
+    assert bs.ceil_budget_amount(Decimal("100"), "monthly") == Decimal("100")
+    assert bs.ceil_budget_amount(Decimal("101"), "monthly") == Decimal("105")
+
+
+def test_habit_why_explains_rounding():
+    why = bs.build_habit_why(
+        plan_amount=Decimal("45"),
+        period_label_text="Weekly",
+        cadence_reason="about one charge a week",
+        suggestion={"window": "6 weeks", "stats": {"avg": "47.12", "median": "40.00"}, "trend": "flat"},
+        charge_count=6,
+        history_start=date(2026, 7, 1),
+        as_of=date(2026, 8, 10),
+        raw_average=Decimal("47.12"),
+    )
+    blob = " ".join(why["lines"])
+    assert "weekly" in blob.lower()
+    assert "$47.12" in blob
+    assert "$45.00" in blob
+    parsed = bs.parse_habit_why(json.dumps(why))
+    assert parsed and parsed["recommended"] is True
 
 
 def test_seed_from_history_creates_rules(db):

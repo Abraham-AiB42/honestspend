@@ -1401,6 +1401,21 @@ def setup_categorize_confirm(body: SetupCategorizeConfirmIn, db: Session = Depen
         raise HTTPException(400, str(e)) from e
 
 
+class SetupCategorizeCustomIn(BaseModel):
+    name: str
+    profile_id: int | None = None
+
+
+@app.post("/api/setup/categorize/custom")
+def setup_categorize_custom(body: SetupCategorizeCustomIn, db: Session = Depends(get_db)):
+    from honestspend.services.setup_categorize import create_custom_category
+
+    try:
+        return create_custom_category(db, name=body.name, profile_id=body.profile_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+
+
 @app.post("/api/setup/categorize/undo")
 def setup_categorize_undo(body: SetupCategorizeUndoIn, db: Session = Depends(get_db)):
     from honestspend.services.setup_categorize import undo_payee_category
@@ -1435,6 +1450,35 @@ def setup_budgets_seed(profile_id: int | None = None, db: Session = Depends(get_
 
 class SetupBudgetEditsIn(BaseModel):
     updates: list[dict] = []
+
+
+@app.get("/api/setup/budget-plan")
+def setup_budget_plan_get(
+    step: str = "income",
+    profile_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    from honestspend.services.setup_budget_plan import bills_review, envelopes_review, income_review
+
+    s = (step or "income").strip().lower()
+    if s == "bills":
+        return bills_review(db, profile_id=profile_id)
+    if s == "envelopes":
+        return envelopes_review(db, profile_id=profile_id)
+    return income_review(db, profile_id=profile_id)
+
+
+class SetupBudgetPlanIn(BaseModel):
+    step: str = "income"
+    updates: list[dict] = []
+    profile_id: int | None = None
+
+
+@app.post("/api/setup/budget-plan/apply")
+def setup_budget_plan_apply(body: SetupBudgetPlanIn, db: Session = Depends(get_db)):
+    from honestspend.services.setup_budget_plan import apply_plan
+
+    return apply_plan(db, step=body.step, updates=body.updates or [], profile_id=body.profile_id)
 
 
 @app.post("/api/setup/budgets/apply")

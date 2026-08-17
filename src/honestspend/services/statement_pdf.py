@@ -263,8 +263,13 @@ _PROMO_PAYEE = re.compile(
     r"rate expires|"
     r"promotional balance|"
     r"to avoid paying deferred|"
-    r"equal pay promo",
+    r"equal pay promo|"
+    r"monthly\s+installments?\s*\(\s*\d+\s+of\s+\d+|"
+    r"installment\s+\d+\s+of\s+\d+",
     re.I,
+)
+_PROMO_AMOUNT_TABLE = re.compile(
+    r"\$[\d,]+\.\d{2}.+\$[\d,]+\.\d{2}",
 )
 
 
@@ -276,6 +281,10 @@ def is_promo_disclosure_line(text: str, *, payee: str | None = None) -> bool:
         return True
     if pay and _PROMO_PAYEE.search(pay):
         return True
+    if pay and _PROMO_AMOUNT_TABLE.search(pay):
+        letters = re.sub(r"[^A-Za-z]", "", pay)
+        if len(letters) < 4:
+            return True
     return False
 
 

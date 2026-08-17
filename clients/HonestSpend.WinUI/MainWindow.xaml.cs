@@ -106,7 +106,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        // First launch: show Get started now. Engine can catch up during steps 1–3.
+        // First launch: show Get started now. Engine stays off until they pick a books folder.
         if (StorageLocationService.LooksLikeFirstRun() && !AppLockService.NeedsUnlock)
         {
             AppLockService.MarkUnlocked();
@@ -160,7 +160,8 @@ public sealed partial class MainWindow : Window
 
     private async Task ContinueAfterUnlockAsync()
     {
-        await LoadShellEntitiesAsync();
+        if (!StorageLocationService.LooksLikeFirstRun())
+            await LoadShellEntitiesAsync();
         ApplySimpleChrome();
 
         if (StorageLocationService.LooksLikeFirstRun())

@@ -124,6 +124,9 @@ def _ranked_option_public(o: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     rem = o.get("remaining_spendable")
     rate = o.get("rewards_rate")
+    def _s(key: str) -> str | None:
+        v = o.get(key)
+        return str(v) if v is not None else None
     return {
         "method": o.get("method"),
         "account_id": o.get("account_id"),
@@ -138,6 +141,15 @@ def _ranked_option_public(o: dict[str, Any] | None) -> dict[str, Any] | None:
         ),
         "promo_used": o.get("promo_used"),
         "card_plan_summary": None,
+        "first_due": _s("first_due"),
+        "installment": _s("installment"),
+        "finance_charge": _s("finance_charge"),
+        "total_cost": _s("total_cost"),
+        "extra_cost": _s("extra_cost"),
+        "payments": o.get("payments"),
+        "cadence": o.get("cadence"),
+        "late_fee_typical": _s("late_fee_typical"),
+        "bnpl_provider": o.get("bnpl_provider"),
     }
 
 
@@ -261,6 +273,8 @@ def check_purchase(
             "why": ranked.get("why"),
             "proposed": _ranked_option_public(ranked.get("proposed")),
             "principles": principles,
+            "bnpl_quote": ranked.get("bnpl_quote"),
+            "existing_bnpl": ranked.get("existing_bnpl"),
         }
 
     options: list[PurchaseOption] = []

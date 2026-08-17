@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from honestspend.db import Account, Transaction
 from honestspend.services.categorizer import categorize_uncategorized
+from honestspend.services.merchant_catalog import format_import_memo
 
 DATE_KEYS = (
     "date",
@@ -67,6 +68,16 @@ TXN_ID_KEYS = (
     "bank reference",
     "confirmation",
     "confirmation number",
+)
+CATEGORY_KEYS = (
+    "transaction category",
+    "spend category",
+    "merchant category",
+    "category",
+)
+TYPE_KEYS = (
+    "type",
+    "transaction type",
 )
 
 
@@ -315,6 +326,8 @@ def preview_bank_csv(
     credit_i = _find_col(headers, CREDIT_KEYS)
     bal_i = _find_col(headers, BALANCE_KEYS)
     id_i = _find_col(headers, TXN_ID_KEYS)
+    cat_i = _find_col(headers, CATEGORY_KEYS)
+    type_i = _find_col(headers, TYPE_KEYS)
     # Avoid treating a lone "id" column as date-adjacent noise when it's the only id-like header
     if id_i is None:
         for i, h in enumerate(headers):
@@ -337,6 +350,10 @@ def preview_bank_csv(
         "balance_index": bal_i,
         "txn_id_col": headers[id_i] if id_i is not None else None,
         "txn_id_index": id_i,
+        "category_col": headers[cat_i] if cat_i is not None else None,
+        "category_index": cat_i,
+        "type_col": headers[type_i] if type_i is not None else None,
+        "type_index": type_i,
     }
     errors: list[str] = []
     if date_i is None:
@@ -371,12 +388,16 @@ def preview_bank_csv(
                 bal_pairs.append((d, bal))
                 bal_amounts.append(amount)
         if len(sample) < max_rows:
+            cat = (row[cat_i] if cat_i is not None and cat_i < len(row) else "") or ""
+            typ = (row[type_i] if type_i is not None and type_i < len(row) else "") or ""
             sample.append(
                 {
                     "date": d.isoformat() if d else None,
                     "payee": payee.strip()[:80],
                     "amount": str(amount) if amount is not None else None,
                     "balance": str(bal) if bal is not None else None,
+                    "category": str(cat).strip()[:80] or None,
+                    "type": str(typ).strip()[:40] or None,
                     "raw": [c[:40] for c in row[:8]],
                 }
             )
@@ -486,6 +507,8 @@ def import_bank_csv(
     credit_i = _find_col(headers, CREDIT_KEYS)
     bal_i = _find_col(headers, BALANCE_KEYS)
     id_i = _find_col(headers, TXN_ID_KEYS)
+    cat_i = _find_col(headers, CATEGORY_KEYS)
+    type_i = _find_col(headers, TYPE_KEYS)
     if id_i is None:
         for i, h in enumerate(headers):
             if _norm(h) in ("id", "transactionid", "transid"):
@@ -600,6 +623,12 @@ def import_bank_csv(
                 result.skipped_existing += 1
                 continue
 
+            bank_cat = ""
+            if cat_i is not None and cat_i < len(row):
+                bank_cat = (row[cat_i] or "").strip()
+            bank_type = ""
+            if type_i is not None and type_i < len(row):
+                bank_type = (row[type_i] or "").strip()
             session.add(
                 Transaction(
                     profile_id=acct.profile_id,
@@ -607,7 +636,12 @@ def import_bank_csv(
                     txn_date=d,
                     amount=amount,
                     payee=payee or None,
-                    memo=f"CSV:{filename}",
+                    memo=format_import_memo(
+                        "CSV",
+                        filename,
+                        category=bank_cat,
+                        txn_type=bank_type,
+                    ),
                     status="cleared",
                     external_id=external_id,
                 )

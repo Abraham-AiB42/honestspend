@@ -326,8 +326,13 @@ def build_coming_up(
 
     rows: list[dict[str, Any]] = []
     for s in sched_q.all():
+        # Card bills stay off Coming up (cash Card payment covers them).
+        # BNPL remaining installments are extra future charges — keep those.
         if _is_credit_account_schedule(s, credit_ids):
-            continue
+            from honestspend.services.bnpl import is_bnpl_schedule
+
+            if not is_bnpl_schedule(s):
+                continue
         amt = _d(s.amount)
         cert = s.certainty or "fixed"
         kind_raw = (s.kind or "").lower()

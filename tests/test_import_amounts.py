@@ -15,6 +15,7 @@ def test_payment_keywords():
     assert looks_like_credit_payment("Online Payment")
     assert looks_like_credit_payment("PAYMENT")
     assert looks_like_credit_payment("PYMT RCVD")
+    assert looks_like_credit_payment("DIRECTPAY FULL BALANCE")
     assert not looks_like_credit_payment("AMAZON.COM")
     assert not looks_like_credit_payment("LATE PAYMENT FEE")
     assert not looks_like_credit_payment("LATE PAYMENT")

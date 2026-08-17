@@ -11,7 +11,7 @@ from sqlalchemy.engine import Engine
 log = logging.getLogger("honestspend.migrations")
 
 # Target schema version after all migrations below.
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 # Legacy best-effort ALTERs for installs that predate schema_meta.
 _LEGACY_COLUMN_SQL = [
@@ -522,6 +522,11 @@ def _mig_24_account_merges(conn) -> None:
     )
 
 
+def _mig_25_budget_extra_categories(conn) -> None:
+    """A budget line can include more than one category."""
+    _exec_ignore(conn, "ALTER TABLE budget_rules ADD COLUMN extra_category_ids TEXT")
+
+
 # version -> migration callable (applies that version step)
 MIGRATIONS: dict[int, Callable] = {
     1: _mig_1_legacy_columns,
@@ -548,6 +553,7 @@ MIGRATIONS: dict[int, Callable] = {
     22: _mig_22_schedule_agency_steals,
     23: _mig_23_promo_terms,
     24: _mig_24_account_merges,
+    25: _mig_25_budget_extra_categories,
 }
 
 

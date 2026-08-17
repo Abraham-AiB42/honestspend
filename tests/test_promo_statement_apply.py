@@ -80,6 +80,48 @@ def test_apply_statement_promos_amazon_increases_next_payment_by_monthly(
     s.close()
 
 
+APPLE_ONE_PLAN = """
+07/31/2026 MONTHLY INSTALLMENTS (11 OF 24) $41.62
+06/30/2026 MONTHLY INSTALLMENTS (10 OF 24) $41.62
+"""
+
+
+def test_apply_apple_monthly_installments_like_amazon_isb(tmp_path: Path, monkeypatch):
+    """Apple N-of-M activity is a purchase plan: carve-out remaining + add monthly."""
+    s = _session(tmp_path, monkeypatch)
+    p = s.query(Profile).filter(Profile.slug == "personal").one()
+    as_of = date(2026, 8, 12)
+    bal = Decimal("1000.00")
+    card = Account(
+        profile_id=p.id,
+        kind="credit",
+        nickname="Apple Card",
+        current_balance=bal,
+        credit_limit=Decimal("5000"),
+        payment_due_day=15,
+        statement_close_day=1,
+        autopay_policy="statement",
+    )
+    s.add(card)
+    s.flush()
+
+    out = apply_statement_promos(s, card.id, APPLE_ONE_PLAN, as_of=as_of)
+    s.commit()
+    assert out["created"] >= 1
+    lines = s.query(PromoInstallmentLine).filter(PromoInstallmentLine.account_id == card.id).all()
+    assert any(
+        ln.name == "Monthly installments · 24 mo"
+        and ln.monthly_payment == Decimal("41.62")
+        and ln.principal_remaining == Decimal("41.62") * 14
+        for ln in lines
+    )
+    after = project_card_payment(s, card.id, as_of=as_of)
+    remaining = Decimal("41.62") * 14
+    expected = (bal - remaining + Decimal("41.62")).quantize(Decimal("0.01"))
+    assert Decimal(str(after["next_payment"])) == expected
+    s.close()
+
+
 def test_apply_statement_promos_empty_text_no_op(tmp_path: Path, monkeypatch):
     s = _session(tmp_path, monkeypatch)
     p = s.query(Profile).filter(Profile.slug == "personal").one()

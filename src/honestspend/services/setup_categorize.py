@@ -52,6 +52,7 @@ def _infer_counterparty(
 
 def _void_promo_disclosure_txns(session: Session, *, profile_id: int | None) -> int:
     """Drop imported promo APR / deferred-interest table rows from spend."""
+    from honestspend.services.promo_statement_parse import is_monthly_installment_payee
     from honestspend.services.statement_pdf import is_promo_disclosure_line
     from honestspend.services.txn_void import void_transaction
 
@@ -70,8 +71,32 @@ def _void_promo_disclosure_txns(session: Session, *, profile_id: int | None) -> 
         if not is_promo_disclosure_line(pay, payee=pay):
             continue
         try:
-            void_transaction(session, t.id, reason="promo APR line, not a charge")
+            reason = (
+                "purchase plan installment, not spend"
+                if is_monthly_installment_payee(pay)
+                else "promo APR line, not a charge"
+            )
+            void_transaction(session, t.id, reason=reason)
             n += 1
+        except Exception:
+            continue
+    return n
+
+
+def _apply_monthly_installment_plans(session: Session, *, profile_id: int | None) -> int:
+    """Turn MONTHLY INSTALLMENTS (n of m) activity into purchase_plan lines (ISB-class)."""
+    from honestspend.services.import_bootstrap import apply_statement_promos
+
+    q = session.query(Account).filter(Account.kind == "credit")
+    if profile_id is not None:
+        q = q.filter(Account.profile_id == int(profile_id))
+    if hasattr(Account, "archived_at"):
+        q = q.filter(Account.archived_at.is_(None))
+    n = 0
+    for acct in q.all():
+        try:
+            out = apply_statement_promos(session, int(acct.id), "")
+            n += int(out.get("promos_found") or 0)
         except Exception:
             continue
     return n
@@ -87,6 +112,112 @@ def _profile_id(session: Session, profile_id: int | None) -> int | None:
     return int(p.id) if p else None
 
 
+def _is_business_entity(p: Profile) -> bool:
+    et = (p.entity_type or "").strip().lower()
+    if et in ("business", "s_corp", "llc", "partnership", "c_corp"):
+        return True
+    form = (p.tax_form_primary or "").upper()
+    return form in ("1120S", "1065", "SCHC", "1120")
+
+
+def _account_ids_for_book(session: Session, profile_id: int) -> list[int]:
+    q = session.query(Account.id).filter(Account.profile_id == profile_id)
+    if hasattr(Account, "archived_at"):
+        q = q.filter(Account.archived_at.is_(None))
+    return [int(i) for (i,) in q.all()]
+
+
+def list_categorize_books(session: Session) -> list[dict[str, Any]]:
+    """Books that have accounts — names from import (Personal, AP Agency, …)."""
+    books: list[dict[str, Any]] = []
+    profiles = (
+        session.query(Profile)
+        .filter(Profile.archived_at.is_(None))
+        .order_by(Profile.id.asc())
+        .all()
+    )
+    for p in profiles:
+        acct_ids = _account_ids_for_book(session, int(p.id))
+        if not acct_ids:
+            continue
+        uncat = (
+            session.query(func.count(Transaction.id))
+            .filter(
+                Transaction.account_id.in_(acct_ids),
+                Transaction.category_id.is_(None),
+                Transaction.is_transfer.is_(False),
+                Transaction.status != "void",
+                Transaction.amount < 0,
+            )
+            .scalar()
+            or 0
+        )
+        expenses = (
+            session.query(func.count(Transaction.id))
+            .filter(
+                Transaction.account_id.in_(acct_ids),
+                Transaction.is_transfer.is_(False),
+                Transaction.status != "void",
+                Transaction.amount < 0,
+            )
+            .scalar()
+            or 0
+        )
+        books.append(
+            {
+                "id": int(p.id),
+                "display_name": p.display_name or p.slug or "Books",
+                "entity_type": "business" if _is_business_entity(p) else "personal",
+                "is_default": bool(p.is_default),
+                "account_count": len(acct_ids),
+                "uncategorized_count": int(uncat),
+                "expense_count": int(expenses),
+            }
+        )
+    books.sort(
+        key=lambda b: (
+            0 if b.get("is_default") or b.get("entity_type") == "personal" else 1,
+            (b.get("display_name") or "").casefold(),
+        )
+    )
+    return books
+
+
+def _align_txn_profiles_to_accounts(session: Session) -> int:
+    """If a merge imported onto a book, keep txn.profile_id on that book."""
+    accts = {
+        int(i): int(p)
+        for i, p in session.query(Account.id, Account.profile_id).all()
+        if p is not None
+    }
+    n = 0
+    for t in (
+        session.query(Transaction)
+        .filter(Transaction.status != "void")
+        .order_by(Transaction.id.desc())
+        .limit(4000)
+        .all()
+    ):
+        want = accts.get(int(t.account_id or 0))
+        if want is None or t.profile_id == want:
+            continue
+        t.profile_id = want
+        n += 1
+    if n:
+        session.flush()
+    return n
+
+
+def _scope_expense_query(session: Session, q, profile_id: int | None):
+    """Limit to accounts that belong to this book."""
+    if profile_id is None:
+        return q
+    acct_ids = _account_ids_for_book(session, int(profile_id))
+    if acct_ids:
+        return q.filter(Transaction.account_id.in_(acct_ids))
+    return q.filter(Transaction.profile_id == int(profile_id))
+
+
 def auto_apply_high_confidence(
     session: Session,
     *,
@@ -96,17 +227,28 @@ def auto_apply_high_confidence(
     use_grok: bool = False,
 ) -> dict[str, Any]:
     """Apply rule-based (and optional Grok) suggestions above confidence floor."""
-    pid = _profile_id(session, profile_id)
-    prep = prepare_categorize(session, profile_id=pid)
+    books = list_categorize_books(session)
+    if profile_id is not None:
+        pids = [int(profile_id)]
+    elif books:
+        pids = [int(b["id"]) for b in books]
+    else:
+        one = _profile_id(session, None)
+        pids = [one] if one is not None else []
+    prep = prepare_categorize(session, profile_id=pids[0] if pids else None)
     pay_linked = int(prep.get("payments_linked") or 0)
-    results = categorize_uncategorized(
-        session,
-        profile_id=pid,
-        limit=limit,
-        apply=True,
-        use_grok=use_grok,
-        min_confidence=min_confidence,
-    )
+    results: list[dict[str, Any]] = []
+    for pid in pids:
+        results.extend(
+            categorize_uncategorized(
+                session,
+                profile_id=pid,
+                limit=limit,
+                apply=True,
+                use_grok=use_grok,
+                min_confidence=min_confidence,
+            )
+        )
     applied = sum(1 for r in results if r.get("applied"))
     applied_ids = [int(r["transaction_id"]) for r in results if r.get("applied") and r.get("transaction_id")]
     pair_ids: list[int] = []
@@ -114,6 +256,10 @@ def auto_apply_high_confidence(
         for k in ("out_txn_id", "in_txn_id"):
             if p.get(k):
                 pair_ids.append(int(p[k]))
+    status_pid = pids[0] if pids else None
+    leftover = next((b for b in list_categorize_books(session) if b["uncategorized_count"] > 0), None)
+    if leftover:
+        status_pid = int(leftover["id"])
     return {
         "scanned": len(results),
         "applied": applied,
@@ -127,7 +273,7 @@ def auto_apply_high_confidence(
         ),
         "status": categorize_status(
             session,
-            profile_id=pid,
+            profile_id=status_pid,
             recent_txn_ids=applied_ids + pair_ids,
             recent_pairs=list(prep.get("pairs") or []),
         ),
@@ -144,11 +290,54 @@ def prepare_categorize(session: Session, *, profile_id: int | None = None) -> di
 
     ensure_coa_categories(session)
     ensure_seed_rules(session)
+    _align_txn_profiles_to_accounts(session)
     linked = auto_link_account_payments(session)
     pairs = list(linked.get("pairs") or [])
+    _apply_monthly_installment_plans(session, profile_id=pid)
+    try:
+        from honestspend.services.bnpl import apply_bnpl_for_profile
+
+        apply_bnpl_for_profile(session, profile_id=pid)
+    except Exception:
+        pass
     _void_promo_disclosure_txns(session, profile_id=pid)
+    _auto_apply_system_payees(session, profile_id=pid)
+    try:
+        from honestspend.services.cycle_config import learn_statement_autopay_from_payees
+
+        learn_statement_autopay_from_payees(session)
+    except Exception:
+        pass
     session.flush()
     return {"payments_linked": int(linked.get("linked") or 0), "pairs": pairs}
+
+
+def _auto_apply_system_payees(session: Session, *, profile_id: int | None) -> int:
+    """Payments, installments, transfers — don't put them on the categorize queue."""
+    from honestspend.services.merchant_catalog import (
+        resolve_category,
+        suggest_from_payee_heuristics,
+    )
+
+    q = session.query(Transaction).filter(
+        Transaction.category_id.is_(None),
+        Transaction.status != "void",
+    )
+    if profile_id is not None:
+        q = q.filter(Transaction.profile_id == profile_id)
+    n = 0
+    for t in q.order_by(Transaction.id.desc()).limit(2000).all():
+        hit = suggest_from_payee_heuristics(t.payee or "", t.memo or "")
+        if not hit or not str(hit.code).startswith("SYS_"):
+            continue
+        cat = resolve_category(session, hit.code, profile_id=t.profile_id)
+        if not cat:
+            continue
+        t.category_id = cat.id
+        if hit.is_transfer:
+            t.is_transfer = True
+        n += 1
+    return n
 
 
 def categorize_status(
@@ -161,28 +350,31 @@ def categorize_status(
     recent_rule_id: int | None = None,
 ) -> dict[str, Any]:
     """Uncategorized counts + top payee groups for user confirm. Read-only."""
-    pid = _profile_id(session, profile_id)
+    books = list_categorize_books(session)
+    if profile_id is None and books:
+        leftover = next((b for b in books if b["uncategorized_count"] > 0), books[0])
+        pid = int(leftover["id"])
+    else:
+        pid = _profile_id(session, profile_id)
+    prof = session.get(Profile, pid) if pid is not None else None
+    book_is_biz = bool(prof and _is_business_entity(prof))
+
     q = session.query(Transaction).filter(
         Transaction.category_id.is_(None),
         Transaction.is_transfer.is_(False),
         Transaction.status != "void",
         Transaction.amount < 0,
     )
-    if pid is not None:
-        q = q.filter(Transaction.profile_id == pid)
+    q = _scope_expense_query(session, q, pid)
 
     total_uncat = q.count()
-    total_exp = (
-        session.query(func.count(Transaction.id))
-        .filter(
-            Transaction.is_transfer.is_(False),
-            Transaction.status != "void",
-            Transaction.amount < 0,
-            *([Transaction.profile_id == pid] if pid is not None else []),
-        )
-        .scalar()
-        or 0
+    exp_q = session.query(func.count(Transaction.id)).filter(
+        Transaction.is_transfer.is_(False),
+        Transaction.status != "void",
+        Transaction.amount < 0,
     )
+    exp_q = _scope_expense_query(session, exp_q, pid)
+    total_exp = exp_q.scalar() or 0
     categorized = max(0, int(total_exp) - int(total_uncat))
 
     by_payee: dict[str, list[Transaction]] = defaultdict(list)
@@ -200,16 +392,29 @@ def categorize_status(
         pid_votes: dict[int | None, int] = defaultdict(int)
         from_names: list[str] = []
         seen_from: set[int] = set()
+        card_side: Account | None = None
         for t in txns:
-            pid_votes[t.profile_id] += 1
+            acct = t.account or (session.get(Account, t.account_id) if t.account_id else None)
+            vote_pid = int(acct.profile_id) if acct and acct.profile_id is not None else t.profile_id
+            pid_votes[vote_pid] += 1
             if t.account_id and t.account_id not in seen_from:
                 seen_from.add(t.account_id)
-                acct = t.account or session.get(Account, t.account_id)
                 if acct:
                     from_names.append(acct.nickname)
+                    if (acct.kind or "").lower() in ("credit", "loan"):
+                        card_side = acct
         group_pid = max(pid_votes, key=pid_votes.get) if pid_votes else pid
+        from honestspend.services.merchant_catalog import is_issuer_payment_payee
+
         to_name = _infer_counterparty(session, display, exclude_ids=seen_from)
-        if not to_name:
+        if card_side is not None and is_issuer_payment_payee(display):
+            # DIRECTPAY etc. live ON the card. To is the card; From is cash that paid it.
+            to_name = card_side.nickname
+            fund = None
+            if card_side.payment_funding_account_id:
+                fund = session.get(Account, int(card_side.payment_funding_account_id))
+            from_names = [fund.nickname] if fund and fund.nickname else []
+        elif not to_name:
             pair_id = txns[0].transfer_pair_id
             if pair_id:
                 pair = session.get(Transaction, pair_id)
@@ -234,17 +439,11 @@ def categorize_status(
     groups.sort(key=lambda g: (-float(g["total_abs"]), -int(g["count"])))
     queue = groups[: max(1, min(confirm_cap, 25))]
 
-    chip_pid = queue[0].get("profile_id") if queue else pid
-    biz_ids = [
-        int(p.id)
-        for p in session.query(Profile).all()
-        if (p.entity_type or "").lower() in ("business", "s_corp", "llc")
-        or (p.tax_form_primary or "").upper() in ("1120S", "1065", "SCHC", "1120")
-    ]
+    chip_pid = pid
     cq = session.query(Category)
-    allowed = set(biz_ids)
-    if chip_pid is not None:
-        allowed.add(int(chip_pid))
+    allowed: set[int] = set()
+    if pid is not None:
+        allowed.add(int(pid))
     if allowed:
         cq = cq.filter((Category.profile_id.in_(allowed)) | (Category.profile_id.is_(None)))
     cats = cq.order_by(Category.display_name).all()
@@ -280,6 +479,14 @@ def categorize_status(
         ),
     )
     for c in ordered:
+        scope = (c.scope or "").lower()
+        # Personal books: household + system. Business books: business + system.
+        if book_is_biz:
+            if scope == "personal":
+                continue
+        else:
+            if scope == "business":
+                continue
         bg = (c.budget_group or "").lower()
         name = (c.display_name or "").strip()
         item = {
@@ -291,7 +498,7 @@ def categorize_status(
         if name.lower() in hide_name:
             continue
         key = name.casefold()
-        to_more = bg in hide_groups or (c.scope or "") == "business"
+        to_more = bg in hide_groups
         if to_more:
             if key in seen_more:
                 continue
@@ -316,8 +523,13 @@ def categorize_status(
     )
 
     pct = 100.0 if total_exp == 0 else round(100.0 * categorized / total_exp, 1)
+    active = next((b for b in books if b["id"] == pid), None)
+    book_name = (active or {}).get("display_name") or ("Business" if book_is_biz else "Personal")
     return {
         "profile_id": pid,
+        "book_name": book_name,
+        "book_entity_type": "business" if book_is_biz else "personal",
+        "books": books,
         "expense_count": int(total_exp),
         "uncategorized_count": int(total_uncat),
         "categorized_count": categorized,
@@ -329,11 +541,71 @@ def categorize_status(
         "recent_assignments": recent,
         "done_enough": int(total_uncat) == 0 or len(queue) == 0 or pct >= 70,
         "message": (
-            f"{categorized} categorized · {total_uncat} left. "
+            f"{book_name}: {categorized} categorized · {total_uncat} left. "
             f"Confirm up to {len(queue)} top payees (or skip)."
             if total_uncat
-            else "All expenses categorized — nice."
+            else f"{book_name}: all expenses categorized."
         ),
+    }
+
+
+def create_custom_category(
+    session: Session,
+    *,
+    name: str,
+    profile_id: int | None = None,
+) -> dict[str, Any]:
+    """Find or create a book-scoped custom category (personal or business)."""
+    label = " ".join((name or "").split()).strip()[:80]
+    if len(label) < 2:
+        raise ValueError("Name the category (at least 2 letters).")
+    pid = _profile_id(session, profile_id)
+    prof = session.get(Profile, pid) if pid is not None else None
+    scope = "business" if (prof and _is_business_entity(prof)) else "personal"
+
+    q = session.query(Category).filter(func.lower(Category.display_name) == label.lower())
+    if pid is not None:
+        q = q.filter((Category.profile_id == pid) | (Category.profile_id.is_(None)))
+    else:
+        q = q.filter(Category.profile_id.is_(None))
+    hit = q.order_by(Category.profile_id.desc()).first()
+    if hit:
+        return {
+            "id": int(hit.id),
+            "name": hit.display_name,
+            "existed": True,
+            "scope": hit.scope,
+            "code": hit.code,
+        }
+
+    slug = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:24] or "custom"
+    base = f"CUST_{slug}"
+    if pid is not None:
+        base = f"{base}__p{pid}"
+    code = base[:64]
+    n = 2
+    while session.query(Category.id).filter(Category.code == code).first():
+        code = f"{base[:56]}_{n}"[:64]
+        n += 1
+    cat = Category(
+        code=code,
+        display_name=label,
+        profile_id=pid,
+        scope=scope,
+        tax_form="none",
+        deductibility="none",
+        budget_group="other",
+        is_system=False,
+        notes="Custom category",
+    )
+    session.add(cat)
+    session.flush()
+    return {
+        "id": int(cat.id),
+        "name": cat.display_name,
+        "existed": False,
+        "scope": scope,
+        "code": cat.code,
     }
 
 
@@ -377,8 +649,7 @@ def confirm_payee_category(
         q = session.query(Transaction).filter(Transaction.status != "void")
         if not reassign:
             q = q.filter(Transaction.category_id.is_(None))
-        if pid is not None:
-            q = q.filter(Transaction.profile_id == pid)
+        q = _scope_expense_query(session, q, pid)
         for t in q.limit(500).all():
             nk = categorize_payee_key(t.payee) or (t.payee or "").strip().lower()
             if nk != key:

@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from honestspend.db import Account, Transaction
+from honestspend.services.merchant_catalog import format_import_memo
 
 
 def _as_date(val: Any) -> date | None:
@@ -471,7 +472,11 @@ def import_activity_xlsx(
                 txn_date=d,
                 amount=amount,
                 payee=payee or None,
-                memo=f"XLSX:{filename}",
+                memo=format_import_memo(
+                    "XLSX",
+                    filename,
+                    category=str(row.get("category") or ""),
+                ),
                 status="cleared",
                 external_id=external_id,
             )

@@ -59,6 +59,14 @@ def period_window(
     if p == "weekly":
         s, e = week_bounds(as_of, week_starts_on)
         return PeriodWindow("weekly", s, e, f"{s.isoformat()}…{e.isoformat()}")
+    if p in ("biweekly", "bi-weekly", "fortnight"):
+        s, e = week_bounds(as_of, week_starts_on)
+        s = s - timedelta(days=7)
+        return PeriodWindow("biweekly", s, e, f"{s.isoformat()}…{e.isoformat()}")
+    if p in ("yearly", "annual", "annually"):
+        s = date(as_of.year, 1, 1)
+        e = date(as_of.year, 12, 31)
+        return PeriodWindow("yearly", s, e, str(as_of.year))
     # monthly
     s, e = month_bounds(as_of)
     return PeriodWindow("monthly", s, e, s.strftime("%Y-%m"))

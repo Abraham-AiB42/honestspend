@@ -162,7 +162,8 @@ def commit_purchase(
     """post_account_id must be recommended or proposed.
 
     Re-run rank_charge; if post is unsafe and not confirm_unsafe → raise UnsafePurchase.
-    Write Transaction (−amount). If promo.mode==purchase_plan: create_promo_line.
+    Write Transaction (−amount, or first BNPL installment). If promo.mode==purchase_plan:
+    create_promo_line. If promo.mode==bnpl: post first due and schedule the rest.
     recompute_card_payment_schedule if credit.
     Idempotent on commit_key via external_id/memo `commit:{key}`.
     Returns {transaction, promo_line, recommended, posted}.
@@ -209,15 +210,19 @@ def commit_purchase(
         budget_category_id=category_id,
     )
 
-    post_opt = next(
-        (
-            o
-            for o in (ranked.get("options") or [])
-            if o.get("account_id") is not None
-            and int(o["account_id"]) == int(post_account_id)
-        ),
-        None,
-    )
+    opts = list(ranked.get("options") or [])
+    if _promo_mode(promo) == "bnpl":
+        post_opt = next((o for o in opts if o.get("method") == "bnpl"), None)
+    else:
+        post_opt = next(
+            (
+                o
+                for o in opts
+                if o.get("account_id") is not None
+                and int(o["account_id"]) == int(post_account_id)
+            ),
+            None,
+        )
     if post_opt is None:
         # Proposed may be missing from options if archived; still refuse unsafe
         post_opt = {
@@ -248,7 +253,28 @@ def commit_purchase(
         )
 
     pid = profile_id if profile_id is not None else post_acct.profile_id
-    signed = -_q(amount)
+    bnpl_quote = None
+    post_amount = amount
+    bnpl_payee = payee
+    if _promo_mode(promo) == "bnpl":
+        from honestspend.services.bnpl import quote_bnpl
+
+        bnpl_quote = (ranked or {}).get("bnpl_quote") or quote_bnpl(
+            amount,
+            provider=(promo or {}).get("provider"),
+            plan=(promo or {}).get("plan"),
+            payments=(promo or {}).get("payments"),
+            apr=(promo or {}).get("apr"),
+            origination_fee=(promo or {}).get("origination_fee"),
+            service_fee=(promo or {}).get("service_fee"),
+            as_of=as_of,
+        )
+        post_amount = _d(bnpl_quote.get("first_due"))
+        brand = str(bnpl_quote.get("provider_name") or "BNPL")
+        n = int(bnpl_quote.get("payments") or 4)
+        if not (bnpl_payee or "").strip():
+            bnpl_payee = f"{brand.upper()} (1 OF {n})"
+    signed = -_q(post_amount)
     memo = None
     external_id = None
     if key:
@@ -275,7 +301,7 @@ def commit_purchase(
         category_id=category_id,
         txn_date=as_of,
         amount=signed,
-        payee=payee,
+        payee=bnpl_payee,
         memo=memo,
         status="cleared",
         is_transfer=False,
@@ -319,6 +345,18 @@ def commit_purchase(
             linked_txn_id=txn.id,
         )
 
+    bnpl_schedule = None
+    if bnpl_quote is not None:
+        from honestspend.services.bnpl import schedule_bnpl_quote
+
+        bnpl_schedule = schedule_bnpl_quote(
+            session,
+            account_id=post_acct.id,
+            quote=bnpl_quote,
+            as_of=as_of,
+            payee=bnpl_payee,
+        )
+
     if (post_acct.kind or "").lower() == "credit":
         from honestspend.services.autopay import recompute_card_payment_schedule
 
@@ -327,17 +365,32 @@ def commit_purchase(
     session.flush()
     session.refresh(txn)
 
+    posted_method = "bnpl" if bnpl_quote is not None else (
+        "card" if (post_acct.kind or "").lower() == "credit" else "cash"
+    )
     posted = {
         "account_id": post_acct.id,
         "account_name": post_acct.nickname,
-        "method": "card" if (post_acct.kind or "").lower() == "credit" else "cash",
+        "method": posted_method,
         "amount": str(signed),
         "safe": bool(post_opt.get("safe")),
         "reason": post_opt.get("reason"),
     }
+    sched_out = None
+    if bnpl_schedule is not None:
+        sched_out = {
+            "id": bnpl_schedule.id,
+            "name": bnpl_schedule.name,
+            "amount": str(bnpl_schedule.amount),
+            "next_date": bnpl_schedule.next_date.isoformat() if bnpl_schedule.next_date else None,
+            "end_date": bnpl_schedule.end_date.isoformat() if bnpl_schedule.end_date else None,
+            "cadence": bnpl_schedule.cadence,
+        }
     return {
         "transaction": _txn_to_dict(txn),
         "promo_line": line_to_dict(promo_line) if promo_line else None,
+        "bnpl_schedule": sched_out,
+        "bnpl_quote": bnpl_quote,
         "recommended": _option_dict(ranked.get("recommended")),
         "posted": posted,
     }

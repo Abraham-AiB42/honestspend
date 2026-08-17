@@ -51,6 +51,8 @@ class QifImportResult:
     schedules_advanced_names: list[str] = field(default_factory=list)
     schedule_advance_hint: str | None = None
     schedule_advance_error: str | None = None
+    promos_found: int = 0
+    promo_conflicts: int = 0
 
 
 def _read_text(file_obj: BinaryIO | TextIO | bytes | str | Path) -> str:
@@ -416,6 +418,15 @@ def import_qif(
 
     session.flush()
     result.books_balance = str(acct.current_balance or 0)
+
+    try:
+        from honestspend.services.import_bootstrap import apply_statement_promos
+
+        promo_out = apply_statement_promos(session, account_id, text)
+        result.promos_found = int(promo_out.get("promos_found") or 0)
+        result.promo_conflicts = int(promo_out.get("promo_conflicts") or 0)
+    except Exception:
+        pass
 
     if result.transactions_created or result.skipped_existing:
         try:
